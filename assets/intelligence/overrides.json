@@ -1,0 +1,43 @@
+{
+  "tag": "associationMap",
+  "attributes": {},
+  "text": "\n\t\t\n\n\n\t\t\n\t\t\n\n\t\t\n\t\t\t\n\t\t\t",
+  "children": [
+    {
+      "tag": "association",
+      "attributes": {
+        "id": "krl.xml",
+        "userDefinedLangName": "KRL"
+      },
+      "text": "",
+      "children": []
+    },
+    {
+      "tag": "association",
+      "attributes": {
+        "id": "nppexec.xml",
+        "userDefinedLangName": "NppExec"
+      },
+      "text": "",
+      "children": []
+    },
+    {
+      "tag": "association",
+      "attributes": {
+        "id": "sinumerik.xml",
+        "userDefinedLangName": "Sinumerik"
+      },
+      "text": "",
+      "children": []
+    },
+    {
+      "tag": "association",
+      "attributes": {
+        "id": "universe_basic.xml",
+        "userDefinedLangName": "UniVerse BASIC"
+      },
+      "text": "",
+      "children": []
+    }
+  ]
+}

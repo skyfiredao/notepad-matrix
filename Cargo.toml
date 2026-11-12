@@ -1,0 +1,36 @@
+[package]
+name = "notepad-matrix"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+default = ["native-ui"]
+native-ui = ["dep:gpui", "dep:gpui-platform", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:raw-window-handle"]
+native-input-tests = ["native-ui", "gpui/test-support", "gpui-platform/test-support"]
+
+[[bin]]
+name = "notepad-matrix"
+path = "src/main.rs"
+required-features = ["native-ui"]
+
+[dependencies]
+serde_json = { version = "=1.0.154", features = ["preserve_order"] }
+tempfile = "=3.27.0"
+ropey = { version = "=2.0.0-beta.1", features = ["metric_utf16", "metric_chars"] }
+md-5 = "=0.10.6"
+sha1_smol = "=1.0.1"
+sha2 = "=0.10.9"
+fancy-regex = "=0.20.1"
+chrono = "=0.4.45"
+encoding_rs = "=0.8.44"
+pulldown-cmark = { version = "=0.13.6", default-features = false }
+url = "=2.5.8"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui = { package = "gpui-pre", version = "=0.3.11", default-features = false, optional = true }
+gpui-platform = { package = "gpui-pre-platform", version = "=0.3.11", default-features = false, features = ["font-kit", "runtime_shaders"], optional = true }
+objc2 = { version = "=0.6.5", optional = true }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSWindow", "NSView", "NSButton", "NSControl", "NSResponder", "NSTextInputContext", "NSApplication", "NSPasteboard", "NSPasteboardItem", "NSGraphics"], optional = true }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSObject", "NSNotification", "NSArray", "NSData", "NSString", "NSDate", "NSDateFormatter", "NSLocale", "NSRange", "NSObjCRuntime"], optional = true }
+raw-window-handle = { version = "=0.6.2", optional = true }
