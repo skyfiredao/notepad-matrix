@@ -10,6 +10,7 @@ pub(super) enum ToolbarIcon {
     SaveAll,
     Close,
     CloseAll,
+    Print,
     Cut,
     Copy,
     Paste,
@@ -35,8 +36,17 @@ pub(super) enum ToolbarIcon {
     Playback,
     RunMacroMultiple,
     SaveMacro,
+    MarkdownPreview,
     SavedDocument,
     ModifiedDocument,
+    SavedDocumentDark,
+    ModifiedDocumentDark,
+    ReadOnlyDocument,
+    ReadOnlyDocumentDark,
+    SystemReadOnlyDocument,
+    SystemReadOnlyDocumentDark,
+    MonitoringDocument,
+    MonitoringDocumentDark,
     PinTab,
     PinnedTab,
     PinTabDark,
@@ -75,6 +85,7 @@ impl ToolbarIcon {
             Self::SaveAll => embedded_image!("standard/saveAll.png"),
             Self::Close => embedded_image!("standard/closeFile.png"),
             Self::CloseAll => embedded_image!("standard/closeAll.png"),
+            Self::Print => embedded_image!("standard/print.png"),
             Self::Cut => embedded_image!("standard/cut.png"),
             Self::Copy => embedded_image!("standard/copy.png"),
             Self::Paste => embedded_image!("standard/paste.png"),
@@ -100,8 +111,27 @@ impl ToolbarIcon {
             Self::Playback => embedded_image!("standard/playRecord.png"),
             Self::RunMacroMultiple => embedded_image!("standard/playRecord_m.png"),
             Self::SaveMacro => embedded_image!("standard/saveRecord.png"),
+            Self::MarkdownPreview => {
+                static IMAGE: OnceLock<Arc<Image>> = OnceLock::new();
+                IMAGE
+                    .get_or_init(|| {
+                        Arc::new(Image::from_bytes(
+                            ImageFormat::Svg,
+                            include_bytes!("../../assets/markdown-preview.svg").to_vec(),
+                        ))
+                    })
+                    .clone()
+            }
             Self::SavedDocument => embedded_image!("saved.png"),
             Self::ModifiedDocument => embedded_image!("unsaved.png"),
+            Self::SavedDocumentDark => embedded_image!("saved-dark.png"),
+            Self::ModifiedDocumentDark => embedded_image!("unsaved-dark.png"),
+            Self::ReadOnlyDocument => embedded_image!("readonly.png"),
+            Self::ReadOnlyDocumentDark => embedded_image!("readonly-dark.png"),
+            Self::SystemReadOnlyDocument => embedded_image!("readonly-system.png"),
+            Self::SystemReadOnlyDocumentDark => embedded_image!("readonly-system-dark.png"),
+            Self::MonitoringDocument => embedded_image!("monitoring-tab.png"),
+            Self::MonitoringDocumentDark => embedded_image!("monitoring-tab-dark.png"),
             Self::PinTab => embedded_image!("tab-pin.png"),
             Self::PinnedTab => embedded_image!("tab-pinned.png"),
             Self::PinTabDark => embedded_image!("tab-pin-dark.png"),
@@ -159,6 +189,13 @@ mod tests {
             ToolbarIcon::SaveMacro,
             ToolbarIcon::SavedDocument,
             ToolbarIcon::ModifiedDocument,
+            ToolbarIcon::ModifiedDocumentDark,
+            ToolbarIcon::ReadOnlyDocument,
+            ToolbarIcon::ReadOnlyDocumentDark,
+            ToolbarIcon::SystemReadOnlyDocument,
+            ToolbarIcon::SystemReadOnlyDocumentDark,
+            ToolbarIcon::MonitoringDocument,
+            ToolbarIcon::MonitoringDocumentDark,
             ToolbarIcon::PinTab,
             ToolbarIcon::PinnedTab,
             ToolbarIcon::PinTabDark,
@@ -177,6 +214,23 @@ mod tests {
                     gpui::size(gpui::DevicePixels(16), gpui::DevicePixels(16))
                 );
             }
+            let empty = ToolbarIcon::SavedDocumentDark
+                .image()
+                .to_image_data(cx.svg_renderer())
+                .expect("source transparent dark saved artwork");
+            assert_eq!(
+                empty.size(0),
+                gpui::size(gpui::DevicePixels(13), gpui::DevicePixels(13))
+            );
+            assert!(
+                empty
+                    .as_bytes(0)
+                    .expect("source dark saved pixels")
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .all(|pixel| pixel[3] == 0)
+            );
         });
     }
 }

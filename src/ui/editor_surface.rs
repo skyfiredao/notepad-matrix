@@ -17,6 +17,7 @@ mod drag;
 pub(super) mod layout;
 mod selection_geometry;
 mod shaped;
+pub(super) use chrome::EditorSymbols;
 use chrome::{DisplayRow, EditorDisplay, ScrollAxis};
 use layout::VisualRows;
 use shaped::EditorShapedLine;
@@ -168,6 +169,7 @@ struct EditorLayoutKey {
     revision: crate::input::DisplayRevision,
     language: crate::syntax::Language,
     display: EditorDisplay,
+    symbols: EditorSymbols,
     width: Pixels,
 }
 
@@ -404,9 +406,7 @@ fn shape_editor_row(
 ) -> (usize, EditorShapedLine) {
     let start = text.line_to_byte_idx(row, LineType::LF_CR);
     let raw = text.line(row, LineType::LF_CR).to_string();
-    let display = view.editor_chrome.display;
-    let projection =
-        DisplayRow::with_controls(&raw, display.all_characters, display.control_characters);
+    let projection = DisplayRow::with_symbols(&raw, view.editor_symbols);
     let end = projection.content_len();
     let run = TextRun {
         len: end,
@@ -451,6 +451,7 @@ fn shape_editor_row(
             projected_runs,
             space_width,
             baseline,
+            (view.editor_font_size() - px(6.)).max(px(1.)),
             window,
         ),
     )
@@ -673,6 +674,7 @@ impl MatrixWindow {
             revision: self.editor().display_revision(),
             language: self.workspace.active().language(),
             display: self.editor_chrome.display,
+            symbols: self.editor_symbols,
             width: if self.editor_word_wrap_enabled() {
                 width
             } else {
@@ -721,13 +723,24 @@ impl MatrixWindow {
             if indent > width - space_width * 15. {
                 indent = px(0.);
             }
-            let ranges = if self.editor_word_wrap_enabled() {
+            let mut ranges = if self.editor_word_wrap_enabled() {
                 layout::wrap_ranges(content, f32::from(width), f32::from(indent), |byte| {
                     f32::from(shape.x_for_index(byte))
                 })
             } else {
                 std::iter::once(0..content.len()).collect()
             };
+            if self.editor_word_wrap_enabled()
+                && self.editor_symbols.eol
+                && raw.len() > content.len()
+                && let Some(last) = ranges.last()
+                && !last.is_empty()
+                && shape.width() - shape.x_for_index(last.start)
+                    + if ranges.len() > 1 { indent } else { px(0.) }
+                    > width
+            {
+                ranges.push(content.len()..content.len());
+            }
             rows.push_line(logical, start, &ranges, f32::from(indent));
             starts.push(start);
             shapes.push(Arc::new(shape));
@@ -983,7 +996,8 @@ impl MatrixWindow {
         self.editor_chrome.display.zoom()
     }
     pub(super) fn editor_text_origin(&self) -> Pixels {
-        px(chrome::TEXT_LEFT) + self.editor_line_number_width() - px(32.)
+        px(chrome::TEXT_LEFT) + self.editor_line_number_width() - px(32.) - px(14.)
+            + self.editor_fold_margin_width()
     }
     pub(super) fn reveal_editor_selection(&mut self) {
         self.editor_chrome.pending_viewport = None;
@@ -992,13 +1006,38 @@ impl MatrixWindow {
         self.editor_scroll_remainder = 0.;
     }
     fn editor_text_inset(&self) -> Pixels {
-        px(chrome::TEXT_INSET) + self.editor_line_number_width() - px(32.)
+        px(chrome::TEXT_INSET) + self.editor_line_number_width() - px(32.) - px(14.)
+            + self.editor_fold_margin_width()
     }
     pub(super) fn editor_line_number_width(&self) -> Pixels {
         self.editor_chrome.line_number_width.unwrap_or(px(32.))
     }
     pub(super) fn editor_gutter_width(&self) -> Pixels {
-        px(chrome::GUTTER_WIDTH) + self.editor_line_number_width() - px(32.)
+        px(chrome::GUTTER_WIDTH) + self.editor_line_number_width() - px(32.) - px(14.)
+            + self.editor_fold_margin_width()
+    }
+    pub(super) fn editor_fold_margin_width(&self) -> Pixels {
+        let hidden = match self.workspace.active().language() {
+            crate::syntax::Language::NormalText => true,
+            crate::syntax::Language::Builtin(id) => crate::languages::catalog()
+                .ok()
+                .and_then(|catalog| catalog.by_id(id))
+                .is_some_and(|profile| {
+                    matches!(
+                        profile.source_symbol.as_str(),
+                        "L_TEXT"
+                            | "L_ASCII"
+                            | "L_BATCH"
+                            | "L_MAKEFILE"
+                            | "L_HASKELL"
+                            | "L_SMALLTALK"
+                            | "L_KIX"
+                            | "L_ADA"
+                    )
+                }),
+            _ => false,
+        };
+        px(if hidden { 0. } else { 14. })
     }
     pub(super) fn editor_line_number_font(&self) -> (&'static str, Pixels) {
         let theme = crate::languages::catalog()
@@ -1006,21 +1045,20 @@ impl MatrixWindow {
             .map(|catalog| catalog.themes().theme(self.dark));
         let margin =
             theme.and_then(|theme| theme.global_styles.iter().find(|style| style.id == 33));
-        let default =
-            theme.and_then(|theme| theme.global_styles.iter().find(|style| style.id == 32));
         let attribute = |name| {
             margin
                 .and_then(|style| style.attributes.get(name))
                 .filter(|value| !value.is_empty())
-                .or_else(|| default.and_then(|style| style.attributes.get(name)))
         };
-        let family = attribute("fontName").map_or("Courier New", String::as_str);
+        let family = attribute("fontName").map_or(self.editor_font_family(), String::as_str);
         let points = attribute("fontSize")
             .and_then(|value| value.parse::<f32>().ok())
-            .unwrap_or(10.);
+            .filter(|points| *points > 0.);
         (
             family,
-            px((points + self.editor_zoom_delta() as f32).max(1.) * 96. / 72.),
+            points.map_or(self.editor_font_size(), |points| {
+                px((points + self.editor_zoom_delta() as f32).max(1.) * 96. / 72.)
+            }),
         )
     }
     fn refresh_editor_gutter(&mut self, cx: &Context<Self>) {
@@ -1058,7 +1096,64 @@ impl MatrixWindow {
         })
     }
     pub(super) fn editor_all_characters_shown(&self) -> bool {
-        self.editor_chrome.display.all_characters
+        self.editor_symbols.all()
+    }
+    pub(super) fn editor_symbol_shown(&self, command: ViewCommand) -> Option<bool> {
+        match command {
+            ViewCommand::Whitespace => Some(self.editor_symbols.whitespace),
+            ViewCommand::EndOfLine => Some(self.editor_symbols.eol),
+            ViewCommand::Nonprinting => Some(self.editor_symbols.nonprinting),
+            ViewCommand::ControlCharacters => Some(self.editor_symbols.controls),
+            ViewCommand::AllCharacters => Some(self.editor_symbols.all()),
+            _ => None,
+        }
+    }
+    pub(super) fn configure_editor_symbols(&mut self, settings: &serde_json::Value) {
+        self.editor_symbols = EditorSymbols {
+            whitespace: settings["whiteSpaceShow"].as_bool().unwrap_or(false),
+            eol: settings["eolShow"].as_bool().unwrap_or(false),
+            nonprinting: settings["npcShow"].as_bool().unwrap_or(false),
+            controls: settings["ccShow"].as_bool().unwrap_or(true),
+        };
+    }
+    pub(super) fn toggle_editor_symbol(
+        &mut self,
+        command: ViewCommand,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(shown) = self.editor_symbol_shown(command) else {
+            return;
+        };
+        let shown = !shown;
+        match command {
+            ViewCommand::Whitespace => self.editor_symbols.whitespace = shown,
+            ViewCommand::EndOfLine => self.editor_symbols.eol = shown,
+            ViewCommand::Nonprinting => self.editor_symbols.nonprinting = shown,
+            ViewCommand::ControlCharacters => self.editor_symbols.controls = shown,
+            ViewCommand::AllCharacters => {
+                self.editor_symbols = EditorSymbols {
+                    whitespace: shown,
+                    eol: shown,
+                    nonprinting: shown,
+                    controls: shown,
+                }
+            }
+            _ => return,
+        }
+        self.editor_display_changed(window, cx);
+        if let Some(store) = &self.settings_store {
+            let symbols = self.editor_symbols;
+            if let Err(error) = store.update_settings(|settings| {
+                settings["whiteSpaceShow"] = symbols.whitespace.into();
+                settings["eolShow"] = symbols.eol.into();
+                settings["npcShow"] = symbols.nonprinting.into();
+                settings["ccShow"] = symbols.controls.into();
+                Ok(())
+            }) {
+                self.notify_editor_error(format!("Could not save symbol settings: {error}"), cx);
+            }
+        }
     }
     pub(super) fn editor_indent_guides_shown(&self) -> bool {
         self.editor_chrome.display.indent_guides
@@ -1093,10 +1188,8 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        self.editor_chrome.display.all_characters = !self.editor_chrome.display.all_characters;
-        self.editor_chrome.display.control_characters = self.editor_chrome.display.all_characters;
-        self.editor_display_changed(window, cx);
-        self.editor_chrome.display.all_characters
+        self.toggle_editor_symbol(ViewCommand::AllCharacters, window, cx);
+        self.editor_all_characters_shown()
     }
     pub(super) fn toggle_editor_indent_guides(
         &mut self,
@@ -2963,6 +3056,7 @@ mod tests {
                 ..Default::default()
             },
         );
+        let before = view.read_with(cx, |view, _| view.editor().selections());
         cx.simulate_input("X");
         assert_eq!(
             view.read_with(cx, |view, _| view.editor().committed_text()),
@@ -2977,6 +3071,114 @@ mod tests {
             view.read_with(cx, |view, _| view.editor().selections().ranges().len()),
             2
         );
+        cx.dispatch_action(EditorUndo);
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "Xab\r\nXcd");
+            assert_eq!(
+                view.editor()
+                    .selections()
+                    .ranges()
+                    .iter()
+                    .map(|range| range.selection.head.0)
+                    .collect::<Vec<_>>(),
+                [1, 6]
+            );
+        });
+        cx.dispatch_action(EditorUndo);
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "ab\r\ncd");
+            assert_eq!(view.editor().selections(), before);
+        });
+        let fixture = tempfile::tempdir().expect("saved deletion boundaries");
+        let path = fixture.path().join("boundaries.txt");
+        std::fs::write(&path, "A中😀\r\nZ").expect("source deletion baseline");
+        cx.dispatch_action(OpenFile);
+        cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+        cx.run_until_parked();
+        for (caret, backward, expected, after, restored) in [
+            (1, false, "A😀\r\nZ", 1, 1),
+            (4, false, "A中😀Z", 8, 8),
+            (1, true, "中😀\r\nZ", 0, 1),
+            (0, false, "中😀\r\nZ", 0, 0),
+        ] {
+            view.update_in(cx, |view, window, cx| {
+                EntityInputHandler::set_selected_text_range(view, caret..caret, window, cx)
+            });
+            if backward {
+                cx.dispatch_action(EditorBackspace);
+            } else {
+                cx.dispatch_action(EditorDelete);
+            }
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), expected);
+                assert_eq!(
+                    view.editor().selection(),
+                    Selection {
+                        anchor: ByteOffset(after),
+                        head: ByteOffset(after)
+                    }
+                );
+                assert!(view.workspace.active().is_modified());
+            });
+            cx.dispatch_action(EditorUndo);
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), "A中😀\r\nZ");
+                assert_eq!(
+                    view.editor().selection(),
+                    Selection {
+                        anchor: ByteOffset(restored),
+                        head: ByteOffset(restored)
+                    }
+                );
+                assert!(!view.workspace.active().is_modified());
+            });
+        }
+        for end in [false, true] {
+            if end {
+                cx.dispatch_action(EditorDocumentEnd);
+            } else {
+                cx.dispatch_action(EditorDocumentStart);
+            }
+            let before = view.read_with(cx, |view, _| {
+                (
+                    view.editor().selections(),
+                    view.editor().document().can_undo(),
+                    view.editor().document().can_redo(),
+                )
+            });
+            if end {
+                cx.dispatch_action(EditorDelete);
+            } else {
+                cx.dispatch_action(EditorBackspace);
+            }
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), "A中😀\r\nZ");
+                assert_eq!(
+                    (
+                        view.editor().selections(),
+                        view.editor().document().can_undo(),
+                        view.editor().document().can_redo()
+                    ),
+                    before
+                );
+                assert!(!view.workspace.active().is_modified());
+            });
+        }
+        cx.dispatch_action(NewFile);
+        cx.dispatch_action(EditorBackspace);
+        cx.dispatch_action(EditorDelete);
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "");
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(0),
+                    head: ByteOffset(0)
+                }
+            );
+            assert!(!view.workspace.active().is_modified());
+            assert!(!view.editor().document().can_undo() && !view.editor().document().can_redo());
+        });
     }
 
     #[gpui::test]
@@ -3261,6 +3463,10 @@ mod tests {
                 EntityInputHandler::marked_text_range(view, window, cx),
                 Some(9..10)
             );
+            let selected = EntityInputHandler::selected_text_range(view, false, window, cx)
+                .expect("updated preedit selection");
+            assert_eq!(selected.range, 10..10);
+            assert!(!selected.reversed);
             EntityInputHandler::unmark_text(view, window, cx);
             assert_eq!(view.editor().committed_text(), "拼文A😀B\nC拼文D");
         });
@@ -3358,11 +3564,29 @@ mod tests {
             view.read_with(cx, |view, _| view.editor().committed_text()),
             " cdab"
         );
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(3),
+                    head: ByteOffset(5)
+                }
+            )
+        });
         cx.dispatch_action(EditorUndo);
         assert_eq!(
             view.read_with(cx, |view, _| view.editor().committed_text()),
             "ab cd"
         );
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(0),
+                    head: ByteOffset(2)
+                }
+            )
+        });
         redraw_editor(cx);
         cx.simulate_event(gpui::MouseDownEvent {
             position: start,
@@ -3388,11 +3612,29 @@ mod tests {
             view.read_with(cx, |view, _| view.editor().committed_text()),
             "ab cdab"
         );
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(5),
+                    head: ByteOffset(7)
+                }
+            )
+        });
         cx.dispatch_action(EditorUndo);
         assert_eq!(
             view.read_with(cx, |view, _| view.editor().committed_text()),
             "ab cd"
         );
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(0),
+                    head: ByteOffset(2)
+                }
+            )
+        });
     }
 
     #[gpui::test]
@@ -3480,6 +3722,39 @@ mod tests {
             })
             .expect("Control-wheel geometry");
         assert!(after.size.height > before.size.height);
+        let (caret, selection) = view.update_in(cx, |view, window, cx| {
+            let caret =
+                EntityInputHandler::bounds_for_range(view, 1..1, Bounds::default(), window, cx)
+                    .expect("zoomed native caret");
+            let selection =
+                EntityInputHandler::bounds_for_range(view, 0..1, Bounds::default(), window, cx)
+                    .expect("zoomed native selection");
+            assert_eq!(
+                EntityInputHandler::character_index_for_point(view, caret.center(), window, cx),
+                Some(1)
+            );
+            (caret, selection)
+        });
+        cx.update(|window, _| {
+            let scale = window.scale_factor();
+            let quads = window.painted_quads();
+            let caret_colour: gpui::Background = rgb(0x8000ff).into();
+            let selection_colour: gpui::Background = rgb(0xc0c0c0).into();
+            assert!(
+                quads.iter().any(
+                    |quad| quad.bounds == window.pixel_snap_bounds(caret).scale(scale) && quad.background == caret_colour
+                ),
+                "zoomed painted caret matches native input geometry: native={caret:?}, painted={:?}",
+                quads.iter().filter(|quad| quad.background == caret_colour).map(|quad| quad.bounds).collect::<Vec<_>>()
+            );
+            assert!(
+                quads
+                    .iter()
+                    .any(|quad| quad.bounds == window.pixel_snap_bounds(selection).scale(scale)
+                        && quad.background == selection_colour),
+                "zoomed painted selection matches native input geometry"
+            );
+        });
         assert_eq!(view.read_with(cx, |view, _| view.editor_top_line), 0);
         cx.simulate_event(gpui::ScrollEvent {
             position,
@@ -3522,6 +3797,25 @@ mod tests {
             })
             .expect("wheel preserves source selection");
         assert_eq!(selection.range, 0..1);
+        cx.dispatch_action(EditorRight);
+        redraw_editor(cx);
+        view.update_in(cx, |view, window, cx| {
+            let selection = EntityInputHandler::selected_text_range(view, false, window, cx)
+                .expect("ordinary motion collapses selection");
+            assert_eq!(selection.range, 1..1);
+            let caret =
+                EntityInputHandler::bounds_for_range(view, 1..1, Bounds::default(), window, cx)
+                    .expect("revealed native caret");
+            assert!(
+                caret.left() >= editor.left() + view.editor_text_origin()
+                    && caret.right() <= editor.right() - px(16.)
+            );
+            assert!(caret.top() >= editor.top() && caret.bottom() <= editor.bottom() - px(16.));
+            assert_eq!(
+                EntityInputHandler::character_index_for_point(view, caret.center(), window, cx),
+                Some(1)
+            );
+        });
         cx.dispatch_action(EditorUndo);
         assert_eq!(
             view.update_in(cx, |view, window, cx| {
@@ -3904,9 +4198,19 @@ mod tests {
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
         cx.simulate_input("abcd");
         cx.dispatch_action(EditorDocumentStart);
+        let mode = cx
+            .debug_bounds("status-insert-mode")
+            .expect("INS/OVR status");
+        cx.simulate_click(mode.center(), gpui::Modifiers::default());
+        view.read_with(cx, |view, _| {
+            assert!(
+                view.editor().overwrite(),
+                "status mode toggles on single click"
+            );
+            assert_eq!(view.editor().committed_text(), "abcd");
+        });
+        cx.simulate_input("X");
         view.update_in(cx, |view, window, cx| {
-            view.editor_mut().toggle_overwrite();
-            EntityInputHandler::replace_text_in_range(view, None, "X", window, cx);
             EntityInputHandler::replace_text_in_range(view, Some(1..1), "Y", window, cx);
         });
         let mut actual = None;
@@ -3919,6 +4223,12 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..4, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("Xbcd"));
+        cx.simulate_click(mode.center(), gpui::Modifiers::default());
+        view.read_with(cx, |view, _| assert!(!view.editor().overwrite()));
+        cx.simulate_input("Z");
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "XZbcd")
+        });
     }
 
     #[gpui::test]
@@ -3931,15 +4241,31 @@ mod tests {
             EntityInputHandler::replace_text_in_range(view, None, source, window, cx);
         });
         cx.dispatch_action(EditorDocumentStart);
+        let selection = view.read_with(cx, |view, _| view.editor().selections());
+        let wrap = view.read_with(cx, |view, _| view.editor_word_wrap_enabled());
         let before = view
             .update_in(cx, |view, window, cx| {
                 EntityInputHandler::bounds_for_range(view, 0..0, Bounds::default(), window, cx)
             })
             .expect("original native geometry");
-        view.update_in(cx, |view, window, cx| {
-            assert_eq!(view.set_zoom_delta(3, window, cx), 3);
-            assert!(view.toggle_editor_all_characters(window, cx));
-            assert!(!view.toggle_editor_indent_guides(window, cx));
+        for _ in 0..3 {
+            let button = cx.debug_bounds("toolbar-zoom-in").expect("Zoom In toolbar");
+            cx.simulate_click(button.center(), gpui::Modifiers::default());
+        }
+        for selector in [
+            "toolbar-all-characters",
+            "toolbar-indent-guides",
+            "toolbar-word-wrap",
+        ] {
+            let button = cx.debug_bounds(selector).expect("display toolbar");
+            cx.simulate_click(button.center(), gpui::Modifiers::default());
+        }
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor_zoom_delta(), 3);
+            assert!(view.editor_all_characters_shown());
+            assert!(!view.editor_indent_guides_shown());
+            assert_eq!(view.editor_word_wrap_enabled(), !wrap);
+            assert_eq!(view.editor().selections(), selection);
         });
         redraw_editor(cx);
         let after = view
@@ -3959,7 +4285,16 @@ mod tests {
             )
         });
         assert_eq!(observed.as_deref(), Some(source));
-        view.update_in(cx, |view, window, cx| view.reset_editor_zoom(window, cx));
+        for _ in 0..3 {
+            let button = cx
+                .debug_bounds("toolbar-zoom-out")
+                .expect("Zoom Out toolbar");
+            cx.simulate_click(button.center(), gpui::Modifiers::default());
+        }
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor_zoom_delta(), 0);
+            assert_eq!(view.editor().selections(), selection);
+        });
         redraw_editor(cx);
         let reset = view
             .update_in(cx, |view, window, cx| {
@@ -4167,26 +4502,192 @@ mod tests {
 
     #[test]
     fn editor_current_line_source_colour_reaches_offscreen_renderer() {
-        let mut app = gpui::HeadlessAppContext::with_platform(
-            std::sync::Arc::new(gpui::NoopTextSystem),
-            std::sync::Arc::new(()),
-            gpui_platform::current_headless_renderer,
-        );
-        let handle = app
-            .open_window(size(px(640.), px(480.)), |window, cx| {
-                cx.new(|cx| MatrixWindow::new(false, window, cx))
+        for dark in [false, true] {
+            let mut app = gpui::HeadlessAppContext::with_platform(
+                std::sync::Arc::new(gpui::NoopTextSystem),
+                std::sync::Arc::new(()),
+                gpui_platform::current_headless_renderer,
+            );
+            let handle = app
+                .open_window(size(px(640.), px(480.)), |window, cx| {
+                    cx.new(|cx| {
+                        let mut view = MatrixWindow::new(dark, window, cx);
+                        *view.editor_mut() = EditorSession::new("        one\n        two");
+                        view
+                    })
+                })
+                .expect("offscreen editor");
+            let draw = |app: &mut gpui::HeadlessAppContext| {
+                for _ in 0..3 {
+                    app.update_window(handle.into(), |_, window, cx| window.draw(cx).clear(cx))
+                        .expect("draw source chrome");
+                    app.run_until_parked();
+                }
+            };
+            let count = |app: &mut gpui::HeadlessAppContext, colour, height: f32, wide: bool| {
+                app.update_window(handle.into(), |_, window, _| {
+                    let unit = Bounds::new(point(px(72.), px(104.)), size(px(1.), px(height)))
+                        .scale(window.scale_factor());
+                    let background: gpui::Background = rgb(colour).into();
+                    window
+                        .painted_quads()
+                        .iter()
+                        .filter(|quad| {
+                            quad.background == background
+                                && quad.bounds.origin.x >= unit.origin.x
+                                && quad.bounds.origin.y >= unit.origin.y
+                                && quad.bounds.right() <= px(624.).scale(window.scale_factor())
+                                && quad.bounds.bottom() < px(440.).scale(window.scale_factor())
+                                && quad.bounds.size.height == unit.size.height
+                                && (if wide {
+                                    quad.bounds.size.width > unit.size.width
+                                } else {
+                                    quad.bounds.size.width == unit.size.width
+                                })
+                                && quad.content_mask.bounds.contains(&quad.bounds.center())
+                        })
+                        .count()
+                })
+                .expect("observe actual editor chrome quads")
+            };
+            draw(&mut app);
+            assert!(
+                count(&mut app, if dark { 0x8faf9f } else { 0x8000ff }, 26., false) > 0,
+                "source primary caret, dark={dark}"
+            );
+            assert!(
+                count(&mut app, if dark { 0x4f5f5f } else { 0xc0c0c0 }, 1., false) > 0,
+                "source indent guides, dark={dark}"
+            );
+            assert!(
+                count(&mut app, if dark { 0x101010 } else { 0xe8e8ff }, 26., true) > 0,
+                "source current line, dark={dark}"
+            );
+            if !dark {
+                app.update_window(handle.into(), |_, window, cx| {
+                    window.draw(cx).clear(cx);
+                })
+                .expect("draw current line");
+                let image = app.capture_screenshot(handle.into()).expect("own scene");
+                assert!(
+                    image
+                        .pixels()
+                        .any(|pixel| pixel.0[..3] == [0xe8, 0xe8, 0xff])
+                );
+            }
+            app.update_window(handle.into(), |_, window, cx| {
+                for _ in 0..8 {
+                    window.dispatch_action(Box::new(EditorSelectRight), cx);
+                }
             })
-            .expect("offscreen editor");
-        app.update_window(handle.into(), |_, window, cx| {
-            window.draw(cx).clear(cx);
-        })
-        .expect("draw current line");
-        let image = app.capture_screenshot(handle.into()).expect("own scene");
-        assert!(
-            image
-                .pixels()
-                .any(|pixel| pixel.0[..3] == [0xe8, 0xe8, 0xff])
-        );
+            .expect("select eight spaces through normal actions");
+            draw(&mut app);
+            assert!(
+                count(&mut app, if dark { 0x585858 } else { 0xc0c0c0 }, 26., true) > 0,
+                "source opaque primary selection, dark={dark}"
+            );
+            app.update_window(handle.into(), |_, window, cx| {
+                window.dispatch_action(Box::new(MultiSelectNextMatchCase), cx)
+            })
+            .expect("add matching indent selection");
+            draw(&mut app);
+            assert!(count(&mut app, if dark { 0x8faf9f } else { 0x8000ff }, 26., false) > 0);
+            assert!(
+                count(&mut app, if dark { 0x808040 } else { 0x404040 }, 26., false) > 0,
+                "source additional caret, dark={dark}"
+            );
+            assert!(
+                count(&mut app, 0xc0c0c0, 26., true) >= if dark { 1 } else { 2 },
+                "source additional selection, dark={dark}"
+            );
+            handle
+                .read_with(&app, |view, _| {
+                    assert_eq!(view.editor().committed_text(), "        one\n        two");
+                    assert_eq!(view.editor().selections().ranges().len(), 2);
+                    assert!(
+                        !view.editor().document().can_undo()
+                            && !view.workspace.active().is_modified()
+                    );
+                })
+                .expect("chrome input changes selections only");
+            let (geometry, guide) = handle
+                .update(&mut app, |view, window, cx| {
+                    assert_eq!(view.editor().selections().primary_index(), 1);
+                    assert_eq!(
+                        view.editor()
+                            .selections()
+                            .ranges()
+                            .iter()
+                            .map(|range| (range.selection.anchor.0, range.selection.head.0))
+                            .collect::<Vec<_>>(),
+                        [(0, 8), (12, 20)]
+                    );
+                    let mut geometry = Vec::new();
+                    for (range, colour) in [
+                        (20..20, if dark { 0x8faf9f } else { 0x8000ff }),
+                        (8..8, if dark { 0x808040 } else { 0x404040 }),
+                        (12..20, if dark { 0x585858 } else { 0xc0c0c0 }),
+                        (0..8, 0xc0c0c0),
+                    ] {
+                        let bounds = EntityInputHandler::bounds_for_range(
+                            view,
+                            range.clone(),
+                            Bounds::default(),
+                            window,
+                            cx,
+                        )
+                        .expect("source native selection geometry");
+                        if range.is_empty() {
+                            assert_eq!(
+                                EntityInputHandler::character_index_for_point(
+                                    view,
+                                    bounds.center(),
+                                    window,
+                                    cx
+                                ),
+                                Some(range.start)
+                            );
+                        }
+                        geometry.push((bounds, colour));
+                    }
+                    let guide = EntityInputHandler::bounds_for_range(
+                        view,
+                        4..4,
+                        Bounds::default(),
+                        window,
+                        cx,
+                    )
+                    .expect("column four source guide");
+                    (geometry, guide)
+                })
+                .expect("native multi-selection geometry");
+            app.update_window(handle.into(), |_, window, _| {
+                let scale = window.scale_factor();
+                let quads = window.painted_quads();
+                for (bounds, colour) in geometry {
+                    let bounds = window.pixel_snap_bounds(bounds).scale(scale);
+                    let fill: gpui::Background = rgb(colour).into();
+                    assert!(
+                        quads.iter().any(|quad| quad.bounds == bounds
+                            && quad.background == fill
+                            && quad.content_mask.bounds.contains(&bounds.center())),
+                        "source active-selection artwork and native rectangles agree, dark={dark}"
+                    );
+                }
+                let guide = window.pixel_snap_bounds(guide).scale(scale);
+                let fill: gpui::Background = rgb(if dark { 0x4f5f5f } else { 0xc0c0c0 }).into();
+                assert!(
+                    quads.iter().any(|quad| quad.background == fill
+                        && quad.bounds.left() == guide.left()
+                        && quad.bounds.top() >= guide.top()
+                        && quad.bounds.bottom() <= guide.bottom()
+                        && quad.bounds.size.width == px(1.).scale(scale)
+                        && quad.bounds.size.height == px(1.).scale(scale)),
+                    "guide follows source column-four text geometry"
+                );
+            })
+            .expect("actual painted primary/additional geometry");
+        }
     }
 
     #[test]
@@ -4665,17 +5166,49 @@ mod tests {
     fn document_list_routes_to_existing_buffers_and_preserves_independent_history(
         cx: &mut gpui::TestAppContext,
     ) {
+        let fixture = tempfile::tempdir().expect("isolated document-list files");
+        let alpha = fixture.path().join("alpha.txt");
+        let beta = fixture.path().join("beta.txt");
+        std::fs::write(&alpha, "alpha").expect("saved alpha baseline");
+        std::fs::write(&beta, "beta").expect("saved beta baseline");
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        cx.simulate_input("alpha");
-        cx.dispatch_action(NewFile);
-        cx.simulate_input("beta");
-        cx.dispatch_action(OpenViewMenu);
-        cx.dispatch_action(MenuEnter);
+        cx.dispatch_action(OpenFile);
+        cx.simulate_path_prompt_response(|_| Some(vec![alpha.clone(), beta.clone()]));
+        cx.run_until_parked();
+        let snapshot = |view: &MatrixWindow| {
+            (
+                view.workspace.active().id(),
+                view.workspace.active_view(),
+                view.workspace
+                    .buffers()
+                    .iter()
+                    .map(|buffer| {
+                        (
+                            buffer.id(),
+                            buffer.editor.committed_text(),
+                            buffer.editor.selections(),
+                            buffer.editor.document().can_undo(),
+                            buffer.editor.document().can_redo(),
+                            buffer.is_modified(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let first_open = view.read_with(cx, |view, _| snapshot(view));
+        let windows = cx.windows().len();
+        let toggle = cx
+            .debug_bounds("toolbar-document-list")
+            .expect("Document List toolbar");
+        cx.simulate_click(toggle.center(), gpui::Modifiers::default());
         assert!(cx.debug_bounds("document-list-panel").is_some());
+        assert_eq!(cx.windows().len(), windows);
+        view.read_with(cx, |view, _| assert_eq!(snapshot(view), first_open));
         let first = cx
-            .debug_bounds("document-list-item-1")
-            .expect("first buffer in actual list");
+            .debug_bounds("document-list-item-2")
+            .expect("alpha buffer in actual list");
         cx.simulate_click(first.center(), gpui::Modifiers::default());
+        cx.dispatch_action(EditorDocumentEnd);
         cx.simulate_input("X");
         let mut actual = None;
         let text = view.update_in(cx, |view, window, cx| {
@@ -4683,26 +5216,87 @@ mod tests {
         });
         assert_eq!(text.as_deref(), Some("alphaX"));
         let second = cx
-            .debug_bounds("document-list-item-2")
-            .expect("second buffer");
+            .debug_bounds("document-list-item-3")
+            .expect("beta buffer");
         cx.simulate_click(second.center(), gpui::Modifiers::default());
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..4, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("beta"));
         let first = cx
-            .debug_bounds("document-list-item-1")
-            .expect("same first buffer");
+            .debug_bounds("document-list-item-2")
+            .expect("same alpha buffer");
         cx.simulate_click(first.center(), gpui::Modifiers::default());
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.workspace.active().id(), crate::workspace::BufferId(2));
+            assert_eq!(view.editor().committed_text(), "alphaX");
+        });
         cx.dispatch_action(EditorUndo);
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().committed_text(),
+                "alpha",
+                "whole-document Undo payload"
+            );
+        });
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..5, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("alpha"));
-        cx.dispatch_action(ToggleDocumentList);
+        let hidden = view.read_with(cx, |view, _| snapshot(view));
+        cx.simulate_click(toggle.center(), gpui::Modifiers::default());
         assert!(cx.debug_bounds("document-list-panel").is_none());
-        cx.dispatch_action(ToggleDocumentList);
-        assert!(cx.debug_bounds("document-list-item-2").is_some());
+        view.update_in(cx, |view, window, _| {
+            assert!(view.editor_focus.is_focused(window))
+        });
+        cx.simulate_click(toggle.center(), gpui::Modifiers::default());
+        assert!(cx.debug_bounds("document-list-item-3").is_some());
+        view.read_with(cx, |view, _| assert_eq!(snapshot(view), hidden));
+        let before = view.read_with(cx, |view, _| snapshot(view));
+        for (button, panel) in [
+            ("toolbar-document-map", "document-map-panel"),
+            ("toolbar-function-list", "function-list-panel"),
+            ("toolbar-folder-workspace", "folder-workspace-panel"),
+        ] {
+            let button = cx.debug_bounds(button).expect("panel toolbar button");
+            cx.simulate_click(button.center(), gpui::Modifiers::default());
+            assert!(
+                cx.debug_bounds(panel).is_some(),
+                "correct destination {panel}"
+            );
+            assert_eq!(cx.windows().len(), windows);
+            assert!(
+                !cx.did_prompt_for_paths()
+                    && !cx.did_prompt_for_new_path()
+                    && !cx.has_pending_prompt()
+            );
+            view.read_with(cx, |view, _| assert_eq!(snapshot(view), before));
+            cx.simulate_click(button.center(), gpui::Modifiers::default());
+            assert!(cx.debug_bounds(panel).is_none());
+            view.update_in(cx, |view, window, _| {
+                assert!(view.editor_focus.is_focused(window));
+                assert_eq!(
+                    snapshot(view),
+                    before,
+                    "panel toggle preserves all documents"
+                );
+            });
+        }
+        let before = view.read_with(cx, |view, _| snapshot(view));
+        let close = cx
+            .debug_bounds("document-list-close")
+            .expect("DocList Close");
+        cx.simulate_click(close.center(), gpui::Modifiers::default());
+        assert!(cx.debug_bounds("document-list-panel").is_none());
+        view.update_in(cx, |view, window, _| {
+            assert_eq!(snapshot(view), before);
+            assert!(view.editor_focus.is_focused(window));
+        });
+        cx.simulate_input("!");
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "alpha!");
+            assert_eq!(view.workspace.buffers()[2].editor.committed_text(), "beta");
+        });
     }
 
     #[gpui::test]
@@ -4774,6 +5368,79 @@ mod tests {
         assert!(cx.debug_bounds("bookmark-marker-0").is_none());
         cx.dispatch_action(ClearBookmarks);
         assert!(cx.debug_bounds("bookmark-marker-2").is_none());
+        cx.dispatch_action(CloneToOtherView);
+        cx.dispatch_action(NewFile);
+        cx.simulate_input("other\npane");
+        let target = view.read_with(cx, |view, _| view.workspace.active().id());
+        let primary = cx.debug_bounds("matrix-editor").expect("primary editor");
+        cx.simulate_click(primary.center(), gpui::Modifiers::default());
+        let snapshot = |view: &MatrixWindow| {
+            view.workspace
+                .buffers()
+                .iter()
+                .map(|buffer| {
+                    let pane = if buffer.id() == target {
+                        crate::workspace::ViewId::Secondary
+                    } else {
+                        crate::workspace::ViewId::Primary
+                    };
+                    let editor = view
+                        .workspace
+                        .editor_in_view(pane, buffer.id())
+                        .expect("owning document view");
+                    (
+                        buffer.id(),
+                        editor.committed_text(),
+                        editor.selections(),
+                        editor.document().can_undo(),
+                        editor.document().can_redo(),
+                        buffer.is_modified(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let before = view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.workspace.active_view(),
+                crate::workspace::ViewId::Primary
+            );
+            snapshot(view)
+        });
+        for marked in [true, false] {
+            let margin = cx
+                .debug_bounds("bookmark-line-secondary-1")
+                .expect("secondary target line");
+            cx.simulate_click(margin.center(), gpui::Modifiers::default());
+            assert_eq!(
+                cx.debug_bounds("bookmark-marker-secondary-1").is_some(),
+                marked
+            );
+            assert!(cx.debug_bounds("bookmark-marker-secondary-0").is_none());
+            assert!(cx.debug_bounds("bookmark-marker-1").is_none());
+            view.read_with(cx, |view, _| {
+                assert_eq!(
+                    view.workspace.active_view(),
+                    crate::workspace::ViewId::Secondary
+                );
+                assert_eq!(view.workspace.active().id(), target);
+                assert_eq!(snapshot(view), before);
+                assert_eq!(
+                    view.editor()
+                        .document()
+                        .bookmarked_lines()
+                        .collect::<Vec<_>>(),
+                    if marked { vec![1] } else { vec![] }
+                );
+                assert!(
+                    view.workspace.buffers()[0]
+                        .editor
+                        .document()
+                        .bookmarked_lines()
+                        .next()
+                        .is_none()
+                );
+            });
+        }
     }
 
     #[gpui::test]
@@ -5119,14 +5786,13 @@ mod tests {
     }
 
     #[gpui::test]
-    fn clipboard_menu_toolbar_and_actions_share_unicode_transactions(
-        cx: &mut gpui::TestAppContext,
-    ) {
+    fn clipboard_toolbar_and_actions_share_unicode_transactions(cx: &mut gpui::TestAppContext) {
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
         cx.simulate_input("A中😀");
         cx.dispatch_action(EditorSelectAll);
-        cx.dispatch_action(OpenEditMenu);
-        let copy = cx.debug_bounds("edit-menu-copy").expect("source Copy menu");
+        let copy = cx
+            .debug_bounds("toolbar-copy")
+            .expect("source Copy toolbar");
         cx.simulate_click(copy.center(), gpui::Modifiers::default());
         assert_eq!(
             cx.read_from_clipboard()
@@ -5199,6 +5865,74 @@ mod tests {
             cx.simulate_click(open.center(), gpui::Modifiers::default());
             cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
             cx.run_until_parked();
+            if path == &a {
+                let snapshot = |view: &MatrixWindow| {
+                    (
+                        view.workspace.active().id(),
+                        view.workspace.active_view(),
+                        view.workspace
+                            .buffers()
+                            .iter()
+                            .map(|buffer| {
+                                (
+                                    buffer.id(),
+                                    buffer.editor.committed_text(),
+                                    buffer.editor.selections(),
+                                    buffer.editor.document().can_undo(),
+                                    buffer.editor.document().can_redo(),
+                                    buffer.is_modified(),
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                };
+                let before = view.read_with(cx, |view, _| snapshot(view));
+                let windows = cx.windows().len();
+                for enabled in [true, false] {
+                    let button = cx
+                        .debug_bounds("toolbar-monitoring")
+                        .expect("Monitoring toolbar");
+                    cx.simulate_click(button.center(), gpui::Modifiers::default());
+                    let editor = cx.debug_bounds("matrix-editor").expect("editor");
+                    cx.simulate_mouse_move(editor.center(), None, gpui::Modifiers::default());
+                    redraw_editor(cx);
+                    let checked = cx.update(|window, _| {
+                        let bounds = button.scale(window.scale_factor());
+                        window.painted_quads().iter().any(|quad| {
+                            quad.bounds == bounds
+                                && quad.content_mask.bounds.contains(&bounds.center())
+                        })
+                    });
+                    assert_eq!(checked, enabled);
+                    view.read_with(cx, |view, _| {
+                        assert_eq!(snapshot(view), before);
+                        assert_eq!(
+                            view.workspace
+                                .active()
+                                .disk_file
+                                .as_ref()
+                                .map(|file| file.path()),
+                            Some(a.as_path())
+                        );
+                        assert_eq!(view.monitoring_active(), enabled);
+                        for buffer in view.workspace.buffers() {
+                            let expected = enabled && buffer.id() == before.0;
+                            assert_eq!(buffer.is_monitoring(), expected);
+                            assert_eq!(buffer.editor.is_read_only(), expected);
+                        }
+                    });
+                    assert_eq!(cx.windows().len(), windows);
+                    assert!(
+                        !cx.did_prompt_for_paths()
+                            && !cx.did_prompt_for_new_path()
+                            && !cx.has_pending_prompt()
+                    );
+                    assert_eq!(
+                        std::fs::read(&a).expect("monitored source unchanged"),
+                        b"disk-A"
+                    );
+                }
+            }
             cx.simulate_input(if path == &a { "X" } else { "Y" });
             if path == &a {
                 let save = cx
@@ -5231,6 +5965,34 @@ mod tests {
         assert_eq!(
             view.update_in(cx, EntityInputHandler::text_length_utf16),
             Some(0)
+        );
+        let original = view.read_with(cx, |view, _| {
+            (view.workspace.active().id(), view.workspace.buffers().len())
+        });
+        let windows = cx.windows().len();
+        let new = cx.debug_bounds("menu-new-document").expect("main-row New");
+        cx.simulate_click(new.center(), gpui::Modifiers::default());
+        view.update_in(cx, |view, window, _| {
+            assert_ne!(view.workspace.active().id(), original.0);
+            assert_eq!(view.workspace.buffers().len(), original.1 + 1);
+            assert_eq!(view.editor().committed_text(), "");
+            assert!(!view.editor().document().can_undo());
+            assert!(view.editor_focus.is_focused(window));
+        });
+        let close = cx
+            .debug_bounds("menu-close-document")
+            .expect("main-row Close");
+        cx.simulate_click(close.center(), gpui::Modifiers::default());
+        view.update_in(cx, |view, window, _| {
+            assert_eq!(
+                (view.workspace.active().id(), view.workspace.buffers().len()),
+                original
+            );
+            assert!(view.editor_focus.is_focused(window));
+        });
+        assert_eq!(cx.windows().len(), windows);
+        assert!(
+            !cx.did_prompt_for_paths() && !cx.did_prompt_for_new_path() && !cx.has_pending_prompt()
         );
     }
 
@@ -5289,12 +6051,13 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..9, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("unsaved-A"));
-        cx.dispatch_action(ActivateReloadChoice);
+        floating_context(cx, "reload-no").dispatch_action(ActivateReloadChoice);
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..9, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("unsaved-B"));
-        cx.dispatch_action(ConfirmReload);
+        std::fs::write(&paths[1], [0xff, 0x80]).expect("failed reload bytes");
+        floating_context(cx, "reload-yes").dispatch_action(ConfirmReload);
         cx.run_until_parked();
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..9, &mut actual, window, cx)
@@ -5305,7 +6068,7 @@ mod tests {
             cx.debug_bounds("editor-error").is_some(),
             "failed B reload remains visible while C is presented"
         );
-        cx.dispatch_action(ConfirmReload);
+        floating_context(cx, "reload-yes").dispatch_action(ConfirmReload);
         cx.run_until_parked();
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..5, &mut actual, window, cx)
@@ -5323,7 +6086,7 @@ mod tests {
         });
         assert_eq!(text.as_deref(), Some("unsaved-A"));
         assert_eq!(std::fs::read(&paths[0]).expect("A disk"), b"new-A");
-        assert_eq!(std::fs::read(&paths[1]).expect("B disk"), [0xff, 0xfe, 0]);
+        assert_eq!(std::fs::read(&paths[1]).expect("B disk"), [0xff, 0x80]);
         assert_eq!(std::fs::read(&paths[2]).expect("C disk"), b"new-C");
     }
 
@@ -5373,7 +6136,7 @@ mod tests {
             floating_bounds(cx, "reload-no").is_some(),
             "source changed-file prompt must be shown on startup"
         );
-        cx.dispatch_action(ActivateReloadChoice);
+        floating_context(cx, "reload-no").dispatch_action(ActivateReloadChoice);
         assert!(floating_bounds(cx, "reload-no").is_none());
         let mut actual = None;
         let text = view.update_in(cx, |view, window, cx| {
@@ -5512,6 +6275,51 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..6, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("A\r\nB\nC"));
+        view.update_in(cx, |view, _, _| {
+            view.workspace.active_mut().set_user_read_only(true)
+        });
+        cx.dispatch_action(EditorSelectAll);
+        let unchanged = |view: &MatrixWindow| {
+            (
+                view.editor().committed_text(),
+                view.editor().display_revision(),
+                view.editor().document().can_undo(),
+                view.editor().document().can_redo(),
+                view.workspace.active().is_modified(),
+            )
+        };
+        let before = view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(6),
+                    head: ByteOffset(0)
+                }
+            );
+            unchanged(view)
+        });
+        cx.dispatch_action(EditorBackspaceNotLine);
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(0),
+                    head: ByteOffset(0)
+                }
+            );
+            assert_eq!(unchanged(view), before);
+        });
+        cx.dispatch_action(EditorBackspaceNotLine);
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(0),
+                    head: ByteOffset(0)
+                }
+            );
+            assert_eq!(unchanged(view), before);
+        });
     }
 
     #[gpui::test]
@@ -5554,10 +6362,19 @@ mod tests {
 
     #[gpui::test]
     fn character_keys_match_source_utf16_boundaries_and_keep_redo(cx: &mut gpui::TestAppContext) {
+        let fixture = tempfile::tempdir().expect("saved character navigation baseline");
+        let path = fixture.path().join("characters.txt");
+        std::fs::write(&path, "A😀\r\ne\u{301}Z").expect("saved Unicode source");
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        cx.simulate_input("A😀\r\ne\u{301}Z");
+        cx.dispatch_action(OpenFile);
+        cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+        cx.run_until_parked();
+        cx.dispatch_action(EditorDocumentEnd);
         cx.simulate_input("X");
         cx.dispatch_action(EditorUndo);
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "A😀\r\ne\u{301}Z")
+        });
         cx.dispatch_action(EditorDocumentStart);
         for expected in [1, 3, 5, 6, 7, 8] {
             cx.dispatch_action(EditorRight);
@@ -5675,8 +6492,11 @@ mod tests {
     }
 
     #[gpui::test]
-    fn undo_toolbar_is_inert_while_save_chooser_owns_the_operation(cx: &mut gpui::TestAppContext) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
+    fn disabled_toolbar_and_pending_confirmations_preserve_document_ownership(
+        app: &mut gpui::TestAppContext,
+    ) {
+        app.update(|cx| cx.bind_keys(MatrixWindow::file_dialog_bindings()));
+        let (view, cx) = app.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
         cx.simulate_input("ABC");
         cx.dispatch_action(EditorDocumentStart);
         cx.dispatch_action(EditorSelectRight);
@@ -5685,8 +6505,10 @@ mod tests {
         cx.dispatch_action(EditorSelectLeft);
         cx.dispatch_action(EditorDelete);
         cx.dispatch_action(SaveFile);
+        let saving_focus = cx.update(|window, cx| window.focused(cx));
         let undo = cx.debug_bounds("toolbar-undo").expect("disabled Undo");
         cx.simulate_click(undo.center(), gpui::Modifiers::default());
+        assert_eq!(cx.update(|window, cx| window.focused(cx)), saving_focus);
         let mut actual = None;
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..1, &mut actual, window, cx)
@@ -5708,6 +6530,158 @@ mod tests {
             view.update_in(cx, EntityInputHandler::text_length_utf16),
             Some(2)
         );
+        let fixture = tempfile::tempdir().expect("isolated confirmation protection");
+        let path = fixture.path().join("project.txt");
+        std::fs::write(&path, "disk").expect("project file");
+        for save_all in [false, true] {
+            for cancellation in 0..3 {
+                let (view, cx) =
+                    app.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
+                cx.simulate_resize(size(px(1080.), px(668.)));
+                cx.simulate_input("first");
+                cx.dispatch_action(NewFile);
+                cx.simulate_input("second");
+                view.update_in(cx, |view, window, cx| {
+                    let panel = view.projects.model.panel_mut(0).expect("Project1");
+                    let root = panel.add_project("Project").expect("project root");
+                    panel.add_file(root, &path).expect("project file row");
+                    view.show_project_panel(0, window, cx);
+                });
+                let snapshot = |view: &MatrixWindow| {
+                    (
+                        view.workspace.active().id(),
+                        view.workspace.active_view(),
+                        view.workspace
+                            .buffers()
+                            .iter()
+                            .map(|buffer| {
+                                (
+                                    buffer.id(),
+                                    buffer.editor.committed_text(),
+                                    buffer.editor.selections(),
+                                    buffer.editor.document().can_undo(),
+                                    buffer.editor.document().can_redo(),
+                                    buffer.is_modified(),
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                        view.menu_bar.mode(),
+                        view.projects.model.panel(0).expect("Project1").selected,
+                    )
+                };
+                let before = view.read_with(cx, |view, _| snapshot(view));
+                let windows = cx.windows().len();
+                let button = cx
+                    .debug_bounds(if save_all {
+                        "toolbar-save-all"
+                    } else {
+                        "toolbar-close"
+                    })
+                    .expect("confirmation entrance");
+                cx.simulate_click(button.center(), gpui::Modifiers::default());
+                let cancel_selector = if save_all {
+                    "save-all-no"
+                } else {
+                    "close-cancel"
+                };
+                let mut dialog = floating_context(cx, cancel_selector);
+                let main_focus = cx.update(|window, cx| window.focused(cx));
+                let target = view.read_with(cx, |view, _| {
+                    if save_all {
+                        assert!(view.save_all_choice_yes);
+                        assert_eq!(view.save_all_restore, Some(before.0));
+                    } else {
+                        assert_eq!(view.close_choice, 0);
+                        assert_eq!(view.close_target, Some(before.0));
+                    }
+                    (
+                        view.close_target,
+                        view.save_all_restore,
+                        view.close_choice,
+                        view.save_all_choice_yes,
+                    )
+                });
+                assert_eq!(cx.windows().len(), windows + 1);
+                for selector in [
+                    "toolbar-new",
+                    "toolbar-find",
+                    "file-menu-trigger",
+                    "menu-new-document",
+                    "buffer-tab-1",
+                    "status-position",
+                    "project-entry-0-2",
+                ]
+                .into_iter()
+                .filter(|_| cancellation == 0)
+                {
+                    let position = cx
+                        .debug_bounds(selector)
+                        .expect("protected underlying target")
+                        .center();
+                    cx.simulate_click(position, gpui::Modifiers::default());
+                    cx.run_until_parked();
+                    view.read_with(cx, |view, _| {
+                        assert_eq!(snapshot(view), before, "protected target {selector}");
+                        assert_eq!(
+                            (
+                                view.close_target,
+                                view.save_all_restore,
+                                view.close_choice,
+                                view.save_all_choice_yes
+                            ),
+                            target
+                        );
+                    });
+                    assert_eq!(
+                        cx.update(|window, cx| window.focused(cx)),
+                        main_focus,
+                        "main focus changed: save_all={save_all}, cancellation={cancellation}, target={selector}"
+                    );
+                    view.update_in(&mut dialog, |view, window, _| {
+                        assert!(view.close_focus.is_focused(window))
+                    });
+                    assert_eq!(cx.windows().len(), windows + 1);
+                    assert!(
+                        !cx.did_prompt_for_paths()
+                            && !cx.did_prompt_for_new_path()
+                            && !cx.has_pending_prompt()
+                    );
+                    assert_eq!(std::fs::read(&path).expect("protected disk bytes"), b"disk");
+                }
+                match cancellation {
+                    0 => dialog.simulate_keystrokes("escape"),
+                    1 => {
+                        let button = dialog
+                            .debug_bounds(cancel_selector)
+                            .expect("own cancellation button");
+                        dialog.simulate_click(button.center(), gpui::Modifiers::default());
+                    }
+                    _ => dialog.simulate_keystrokes(if save_all {
+                        "tab enter"
+                    } else {
+                        "tab tab enter"
+                    }),
+                }
+                assert!(cx.debug_bounds("matrix-editor").is_some());
+                cx.run_until_parked();
+                assert_eq!(cx.windows().len(), windows);
+                assert!(
+                    !cx.did_prompt_for_paths()
+                        && !cx.did_prompt_for_new_path()
+                        && !cx.has_pending_prompt()
+                );
+                assert_eq!(std::fs::read(&path).expect("cancelled disk bytes"), b"disk");
+                view.update_in(cx, |view, window, _| {
+                    assert_eq!(snapshot(view), before, "cancellation preserves all editors");
+                    assert!(view.editor_focus.is_focused(window));
+                });
+                cx.simulate_input("!");
+                view.read_with(cx, |view, _| {
+                    assert_eq!(view.editor().committed_text(), "second!");
+                    assert_eq!(view.workspace.buffers()[0].editor.committed_text(), "first");
+                });
+            }
+        }
     }
 
     #[gpui::test]
@@ -5886,7 +6860,7 @@ mod tests {
         cx.dispatch_action(PreviousBuffer);
         cx.dispatch_action(PreviousBuffer);
         cx.dispatch_action(CloseRightFiles);
-        cx.dispatch_action(SaveAndClose);
+        floating_context(cx, "close-save").dispatch_action(SaveAndClose);
         cx.simulate_new_path_selection(|_| Some(path.clone()));
         cx.run_until_parked();
         assert_eq!(std::fs::read(path).expect("far output"), b"far");
@@ -5897,7 +6871,7 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..4, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("near"));
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
         assert!(cx.debug_bounds("buffer-tab-4").is_none());
         for id in ["buffer-tab-1", "buffer-tab-2", "buffer-tab-3"] {
             assert!(cx.debug_bounds(id).is_some());
@@ -5905,7 +6879,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn right_menu_closes_clean_right_and_disabled_right_cannot_activate_left(
+    fn right_menu_closes_clean_right_and_empty_right_cannot_activate_left(
         cx: &mut gpui::TestAppContext,
     ) {
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
@@ -5942,11 +6916,12 @@ mod tests {
         });
         let right = cx
             .debug_bounds("file-menu-close-right")
-            .expect("disabled Right rendered");
+            .expect("source enabled empty-target Right rendered");
         cx.simulate_click(right.center(), gpui::Modifiers::default());
+        assert!(cx.debug_bounds("file-menu-close-right").is_none());
         assert!(
             cx.debug_bounds("buffer-tab-1").is_some(),
-            "disabled Right activated the previous Left command"
+            "empty-target Right activated the previous Left command"
         );
         assert!(cx.debug_bounds("buffer-tab-2").is_some());
         assert!(floating_bounds(cx, "close-cancel").is_none());
@@ -5993,13 +6968,13 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..3, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("far"));
-        cx.dispatch_action(DiscardClose);
+        floating_context(cx, "close-discard").dispatch_action(DiscardClose);
         assert!(cx.debug_bounds("buffer-tab-4").is_some());
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..4, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("near"));
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
         assert!(cx.debug_bounds("buffer-tab-4").is_none());
         for id in ["buffer-tab-1", "buffer-tab-2", "buffer-tab-3"] {
             assert!(cx.debug_bounds(id).is_some());
@@ -6010,13 +6985,13 @@ mod tests {
         assert_eq!(text.as_deref(), Some("near"));
         cx.dispatch_action(CloseCurrentFile);
         assert!(floating_bounds(cx, "close-cancel").is_some());
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
         assert!(cx.debug_bounds("buffer-tab-1").is_some());
         assert!(cx.debug_bounds("buffer-tab-2").is_some());
     }
 
     #[gpui::test]
-    fn file_nested_close_left_click_and_disabled_parent_are_atomic(cx: &mut gpui::TestAppContext) {
+    fn file_nested_close_left_click_and_empty_target_are_atomic(cx: &mut gpui::TestAppContext) {
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
         cx.dispatch_action(NewFile);
         cx.dispatch_action(NewFile);
@@ -6037,13 +7012,17 @@ mod tests {
         cx.dispatch_action(MenuLast);
         let parent = cx
             .debug_bounds("file-menu-close-multiple")
-            .expect("disabled parent rendered");
+            .expect("source enabled parent rendered");
         cx.simulate_click(parent.center(), gpui::Modifiers::default());
+        let target = cx
+            .debug_bounds("file-menu-close-left")
+            .expect("source enabled empty-target Left");
+        cx.simulate_click(target.center(), gpui::Modifiers::default());
         assert!(cx.debug_bounds("file-menu-close-left").is_none());
         assert!(cx.debug_bounds("buffer-tab-3").is_some());
         assert!(
             floating_bounds(cx, "close-cancel").is_none(),
-            "disabled submenu activated the previously selected Exit"
+            "empty-target Left activated the previously selected Exit"
         );
         let selected = view
             .update_in(cx, |view, window, cx| {
@@ -6064,7 +7043,7 @@ mod tests {
         window_cx.dispatch_action(NewFile);
         window_cx.simulate_input("anchor");
         window_cx.dispatch_action(CloseLeftFiles);
-        window_cx.dispatch_action(SaveAndClose);
+        floating_context(window_cx, "close-save").dispatch_action(SaveAndClose);
         window_cx.simulate_new_path_selection(|_| None);
         window_cx.run_until_parked();
         assert!(window_cx.debug_bounds("buffer-tab-2").is_none());
@@ -6073,7 +7052,7 @@ mod tests {
         assert!(floating_bounds(window_cx, "close-cancel").is_none());
         window_cx.dispatch_action(CloseCurrentFile);
         assert!(floating_bounds(window_cx, "close-cancel").is_some());
-        window_cx.dispatch_action(CancelClose);
+        floating_context(window_cx, "close-cancel").dispatch_action(CancelClose);
         let home = tempfile::tempdir().expect("Left readonly directory");
         let original = home.path().join("readonly");
         std::fs::write(&original, b"A").expect("fixture");
@@ -6093,7 +7072,7 @@ mod tests {
         cx.dispatch_action(NewFile);
         cx.simulate_input("anchor");
         cx.dispatch_action(CloseLeftFiles);
-        cx.dispatch_action(SaveAndClose);
+        floating_context(cx, "close-save").dispatch_action(SaveAndClose);
         cx.run_until_parked();
         assert!(cx.debug_bounds("buffer-tab-3").is_none());
         for id in ["buffer-tab-1", "buffer-tab-2", "buffer-tab-4"] {
@@ -6108,7 +7087,7 @@ mod tests {
         assert_eq!(text.as_deref(), Some("A"));
         cx.dispatch_action(CloseCurrentFile);
         assert!(floating_bounds(cx, "close-cancel").is_some());
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
         assert!(cx.debug_bounds("buffer-tab-1").is_some());
     }
 
@@ -6129,7 +7108,7 @@ mod tests {
         cx.run_until_parked();
         cx.dispatch_action(PreviousBuffer);
         cx.dispatch_action(CloseLeftFiles);
-        cx.dispatch_action(SaveAndClose);
+        floating_context(cx, "close-save").dispatch_action(SaveAndClose);
         cx.simulate_new_path_selection(|_| Some(guarded.clone()));
         cx.run_until_parked();
         assert!(
@@ -6165,7 +7144,7 @@ mod tests {
         cx.dispatch_action(NewFile);
         cx.simulate_input("anchor");
         cx.dispatch_action(CloseLeftFiles);
-        cx.dispatch_action(SaveAndClose);
+        floating_context(cx, "close-save").dispatch_action(SaveAndClose);
         cx.simulate_new_path_selection(|_| Some(path.clone()));
         cx.run_until_parked();
         assert_eq!(
@@ -6182,7 +7161,7 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..3, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("far"));
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
         assert!(cx.debug_bounds("buffer-tab-2").is_none());
         assert!(cx.debug_bounds("buffer-tab-1").is_some());
         assert!(cx.debug_bounds("buffer-tab-3").is_some());
@@ -6208,7 +7187,7 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..4, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("near"));
-        cx.dispatch_action(DiscardClose);
+        floating_context(cx, "close-discard").dispatch_action(DiscardClose);
         assert!(
             cx.debug_bounds("buffer-tab-2").is_some(),
             "approved prefix was deleted before collecting later decisions"
@@ -6218,7 +7197,7 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..3, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("far"));
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
         assert!(cx.debug_bounds("buffer-tab-2").is_none());
         for id in ["buffer-tab-1", "buffer-tab-3", "buffer-tab-4"] {
             assert!(cx.debug_bounds(id).is_some());
@@ -6229,7 +7208,7 @@ mod tests {
         assert_eq!(text.as_deref(), Some("far"));
         cx.dispatch_action(CloseCurrentFile);
         assert!(floating_bounds(cx, "close-cancel").is_some());
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
         for id in ["buffer-tab-1", "buffer-tab-3", "buffer-tab-4"] {
             assert!(
                 cx.debug_bounds(id).is_some(),
@@ -6240,10 +7219,20 @@ mod tests {
 
     #[gpui::test]
     fn close_left_clean_tabs_preserves_anchor_right_and_history(cx: &mut gpui::TestAppContext) {
+        let files = tempfile::tempdir().expect("anchor savepoint");
+        let anchor = files.path().join("anchor.txt");
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
         cx.dispatch_action(NewFile);
         cx.dispatch_action(NewFile);
-        cx.simulate_input("anchor");
+        cx.simulate_input("ancho");
+        cx.dispatch_action(SaveFile);
+        cx.simulate_new_path_selection(|_| Some(anchor.clone()));
+        cx.run_until_parked();
+        assert_eq!(
+            std::fs::read(anchor).expect("saved anchor baseline"),
+            b"ancho"
+        );
+        cx.simulate_input("r");
         cx.dispatch_action(NewFile);
         cx.simulate_input("right");
         cx.dispatch_action(PreviousBuffer);
@@ -6506,7 +7495,12 @@ mod tests {
         });
         cx.simulate_keystrokes("alt-e");
         cx.simulate_event(gpui::ModifiersChangedEvent::default());
-        cx.simulate_keystrokes("end right");
+        assert!(
+            cx.debug_bounds("menu-popup-0").is_some(),
+            "Alt release preserves the actual Edit root"
+        );
+        assert!(cx.debug_bounds("edit-menu-eol").is_some());
+        cx.simulate_keystrokes("e");
         assert!(
             cx.debug_bounds("edit-eol-lf").is_some(),
             "Alt release closed Edit before nested navigation"
@@ -6643,16 +7637,41 @@ mod tests {
             let home = tempfile::tempdir().expect("isolated EOL directory");
             let path = home.path().join("eol.txt");
             std::fs::write(&path, original).expect("EOL fixture");
-            let (_view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
+            let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
             cx.dispatch_action(OpenFile);
             cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
             cx.run_until_parked();
             cx.dispatch_action(EditorDocumentEnd);
             cx.dispatch_action(EditorEnter);
+            let caret = view
+                .update_in(cx, |view, window, cx| {
+                    EntityInputHandler::selected_text_range(view, false, window, cx)
+                })
+                .expect("loaded EOL Enter caret");
+            assert_eq!(caret.range, 4..4);
             cx.simulate_input("next");
             cx.dispatch_action(SaveFile);
             cx.run_until_parked();
             assert_eq!(std::fs::read(path).expect("saved EOL bytes"), expected);
+            cx.dispatch_action(EditorUndo);
+            let eol = if original.contains(&b'\n') {
+                "\n"
+            } else {
+                "\r"
+            };
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), format!("a{eol}b{eol}"))
+            });
+            cx.dispatch_action(EditorUndo);
+            view.update_in(cx, |view, window, cx| {
+                assert_eq!(view.editor().committed_text(), format!("a{eol}b"));
+                assert_eq!(
+                    EntityInputHandler::selected_text_range(view, false, window, cx)
+                        .expect("restored Enter caret")
+                        .range,
+                    3..3
+                );
+            });
         }
     }
 
@@ -6836,7 +7855,18 @@ mod tests {
             0..0,
             "manual horizontal scroll moved the document caret"
         );
-        cx.simulate_click(position, gpui::Modifiers::default());
+        let boundary = view.update_in(cx, |view, window, cx| {
+            let bounds =
+                EntityInputHandler::bounds_for_range(view, 32..32, Bounds::default(), window, cx)
+                    .expect("fixed source byte boundary after scroll");
+            assert!(editor.contains(&bounds.center()));
+            assert_eq!(
+                EntityInputHandler::character_index_for_point(view, bounds.center(), window, cx),
+                Some(32)
+            );
+            bounds.center()
+        });
+        cx.simulate_click(boundary, gpui::Modifiers::default());
         cx.simulate_input("X");
         let mut actual = None;
         let text = view
@@ -6844,10 +7874,16 @@ mod tests {
                 EntityInputHandler::text_for_range(view, 0..4097, &mut actual, window, cx)
             })
             .expect("full edited text");
-        assert_eq!(
-            text,
-            format!("{}X{}", "a".repeat(index), "a".repeat(4096 - index))
-        );
+        assert_eq!(text, format!("{}X{}", "a".repeat(32), "a".repeat(4064)));
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(33),
+                    head: ByteOffset(33)
+                }
+            )
+        });
     }
 
     #[gpui::test]
@@ -6891,6 +7927,55 @@ mod tests {
             beginning.left() >= editor.left(),
             "replacing a long row left a short document scrolled out of view"
         );
+        let fixture = tempfile::tempdir().expect("saved smart Home End source");
+        let path = fixture.path().join("edges.txt");
+        std::fs::write(&path, " \t中😀\r\nZ").expect("source indentation and CRLF");
+        cx.dispatch_action(OpenFile);
+        cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+        cx.run_until_parked();
+        cx.dispatch_action(EditorDocumentStart);
+        let actions: [(Box<dyn gpui::Action>, usize, usize); 4] = [
+            (Box::new(EditorHome), 2, 2),
+            (Box::new(EditorHome), 0, 0),
+            (Box::new(EditorSelectEnd), 0, 9),
+            (Box::new(EditorSelectHome), 0, 2),
+        ];
+        for (action, anchor, head) in actions {
+            cx.update(|window, cx| window.dispatch_action(action, cx));
+            view.read_with(cx, |view, _| {
+                assert_eq!(
+                    view.editor().selection(),
+                    Selection {
+                        anchor: ByteOffset(anchor),
+                        head: ByteOffset(head)
+                    }
+                );
+                assert_eq!(view.editor().committed_text(), " \t中😀\r\nZ");
+                assert!(!view.workspace.active().is_modified());
+                assert!(!view.editor().document().can_undo());
+            });
+        }
+        view.update_in(cx, |view, window, cx| {
+            assert_eq!(
+                EntityInputHandler::selected_text_range(view, false, window, cx)
+                    .expect("native smartHome selection")
+                    .range,
+                0..2
+            )
+        });
+        cx.dispatch_action(EditorDocumentEnd);
+        cx.dispatch_action(EditorHome);
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(11),
+                    head: ByteOffset(11)
+                }
+            );
+            assert_eq!(view.editor().committed_text(), " \t中😀\r\nZ");
+            assert!(!view.editor().document().can_undo() && !view.workspace.active().is_modified());
+        });
     }
 
     #[gpui::test]
@@ -6942,7 +8027,9 @@ mod tests {
             floating_bounds(cx, "close-cancel").is_some(),
             "copy acknowledged savepoint"
         );
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
+        cx.dispatch_action(EditorLeft);
+        cx.dispatch_action(EditorRight);
         cx.simulate_input("Y");
         cx.dispatch_action(SaveFile);
         cx.run_until_parked();
@@ -7036,7 +8123,7 @@ mod tests {
         cx.simulate_input(" edits");
         std::fs::write(&path, [0xff, 0x80]).expect("malformed external bytes");
         cx.dispatch_action(ReloadFile);
-        cx.dispatch_action(ConfirmReload);
+        floating_context(cx, "reload-yes").dispatch_action(ConfirmReload);
         cx.run_until_parked();
         assert!(cx.debug_bounds("editor-error").is_some());
         let mut actual = None;
@@ -7184,26 +8271,34 @@ mod tests {
 
     #[gpui::test]
     fn close_current_cancel_and_discard_affect_only_target_buffer(cx: &mut gpui::TestAppContext) {
+        let click_confirmation = |cx: &mut gpui::VisualTestContext, selector: &'static str| {
+            let mut dialog = floating_context(cx, selector);
+            let button = dialog
+                .debug_bounds(selector)
+                .expect("actual Close Current decision");
+            dialog.simulate_click(button.center(), gpui::Modifiers::default());
+            cx.run_until_parked();
+        };
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
         cx.simulate_input("first");
         cx.dispatch_action(NewFile);
         cx.simulate_input("second");
         cx.dispatch_action(CloseCurrentFile);
-        cx.dispatch_action(CancelClose);
+        click_confirmation(cx, "close-cancel");
         let mut actual = None;
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..6, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("second"));
         cx.dispatch_action(CloseCurrentFile);
-        cx.dispatch_action(DiscardClose);
+        click_confirmation(cx, "close-discard");
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..5, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("first"));
         assert!(cx.debug_bounds("buffer-tab-2").is_none());
         cx.dispatch_action(CloseCurrentFile);
-        cx.dispatch_action(DiscardClose);
+        click_confirmation(cx, "close-discard");
         let length = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_length_utf16(view, window, cx)
         });
@@ -7242,7 +8337,9 @@ mod tests {
             floating_bounds(cx, "close-cancel").is_some(),
             "copy incorrectly marked edits saved"
         );
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
+        cx.dispatch_action(EditorLeft);
+        cx.dispatch_action(EditorRight);
         cx.simulate_input("Y");
         cx.dispatch_action(SaveFile);
         cx.run_until_parked();
@@ -7260,7 +8357,7 @@ mod tests {
             floating_bounds(cx, "close-cancel").is_some(),
             "copy incorrectly marked edits saved"
         );
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
         let mut actual = None;
         let text = view.update_in(cx, |view, window, cx| {
             EntityInputHandler::text_for_range(view, 0..4, &mut actual, window, cx)
@@ -7324,7 +8421,13 @@ mod tests {
         cx.dispatch_action(NewFile);
         cx.simulate_input("second");
         cx.dispatch_action(SaveAllFiles);
-        cx.dispatch_action(ConfirmSaveAll);
+        let mut dialog = floating_context(cx, "save-all-yes");
+        let yes = dialog
+            .debug_bounds("save-all-yes")
+            .expect("actual Save All confirmation");
+        dialog.simulate_click(yes.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert!(cx.did_prompt_for_new_path());
         let commands: [Box<dyn gpui::Action>; 3] = [
             Box::new(EditorBackspace),
             Box::new(EditorUndo),
@@ -7370,7 +8473,11 @@ mod tests {
         cx.simulate_input("X");
         std::fs::write(&a, b"external").expect("external conflict");
         cx.dispatch_action(SaveAllFiles);
-        cx.dispatch_action(ConfirmSaveAll);
+        let mut dialog = floating_context(cx, "save-all-yes");
+        let yes = dialog
+            .debug_bounds("save-all-yes")
+            .expect("actual conflict-flow Save All approval");
+        dialog.simulate_click(yes.center(), gpui::Modifiers::default());
         cx.run_until_parked();
         assert_eq!(std::fs::read(&a).expect("external a"), b"external");
         assert_eq!(
@@ -7400,8 +8507,21 @@ mod tests {
         cx.simulate_click(first.center(), gpui::Modifiers::default());
         cx.dispatch_action(EditorDocumentEnd);
         cx.simulate_input("X");
+        view.read_with(cx, |view, _| {
+            let texts = view
+                .workspace
+                .buffers()
+                .iter()
+                .map(|buffer| buffer.editor.committed_text())
+                .collect::<Vec<_>>();
+            assert_eq!(texts, ["", "AX", "BY"]);
+        });
         cx.dispatch_action(SaveAllFiles);
-        cx.dispatch_action(ConfirmSaveAll);
+        let mut dialog = floating_context(cx, "save-all-yes");
+        let confirm = dialog
+            .debug_bounds("save-all-yes")
+            .expect("floating Save All confirmation");
+        dialog.simulate_click(confirm.center(), gpui::Modifiers::default());
         cx.run_until_parked();
         assert_eq!(std::fs::read(&a).expect("saved a"), b"AX");
         assert_eq!(std::fs::read(&b).expect("saved b"), b"BY");
@@ -7445,6 +8565,410 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..2, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("AX"));
+    }
+
+    #[gpui::test]
+    fn reference_frame_preserves_region_order_title_and_document_identity(
+        app: &mut gpui::TestAppContext,
+    ) {
+        let fixture = tempfile::tempdir().expect("isolated reference frame");
+        let a = fixture.path().join("frame-a.txt");
+        let b = fixture.path().join("frame-b.txt");
+        std::fs::write(&a, "A").expect("first reference document");
+        std::fs::write(&b, "B").expect("second reference document");
+        for dark in [false, true] {
+            let (view, cx) = app.add_window_view(|window, cx| MatrixWindow::new(dark, window, cx));
+            cx.simulate_resize(size(px(1080.), px(668.)));
+            cx.dispatch_action(OpenFile);
+            cx.simulate_path_prompt_response(|_| Some(vec![a.clone(), b.clone()]));
+            cx.run_until_parked();
+            assert_eq!(
+                cx.window_title().as_deref(),
+                Some("frame-b.txt - Notepad Matrix")
+            );
+            let caption = cx.debug_bounds("window-close").expect("caption control");
+            let menu = cx.debug_bounds("matrix-menu-bar").expect("menu bar");
+            let toolbar = cx.debug_bounds("toolbar-new").expect("toolbar button");
+            let toolbar_end = cx
+                .debug_bounds("toolbar-macro-save")
+                .expect("last toolbar button");
+            let tabs = cx.debug_bounds("buffer-tabs").expect("document tabs");
+            let editor = cx.debug_bounds("matrix-editor").expect("editor");
+            let status = cx.debug_bounds("status-bar").expect("status bar");
+            assert!(caption.top() >= px(0.) && caption.bottom() <= menu.top());
+            assert!(menu.bottom() <= toolbar.top());
+            assert_eq!(toolbar.top(), toolbar_end.top());
+            assert!(toolbar.bottom() <= tabs.top());
+            assert!(tabs.bottom() <= editor.top());
+            assert!(editor.bottom() <= status.top());
+            assert!(status.bottom() <= px(668.));
+            for bounds in [caption, menu, toolbar, toolbar_end, tabs, editor, status] {
+                assert!(bounds.left() >= px(0.) && bounds.right() <= px(1080.));
+                assert!(bounds.size.width > px(0.) && bounds.size.height > px(0.));
+            }
+            let first = cx.debug_bounds("buffer-tab-2").expect("first named tab");
+            cx.simulate_click(first.center(), gpui::Modifiers::default());
+            assert_eq!(
+                cx.window_title().as_deref(),
+                Some("frame-a.txt - Notepad Matrix")
+            );
+            let selection = view.update_in(cx, |view, _, _| {
+                view.editor_mut().set_read_only(true);
+                view.editor().selections()
+            });
+            cx.simulate_input("Y");
+            assert_eq!(
+                cx.window_title().as_deref(),
+                Some("frame-a.txt - Notepad Matrix")
+            );
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.workspace.active().id(), crate::workspace::BufferId(2));
+                assert_eq!(view.editor().committed_text(), "A");
+                assert_eq!(view.editor().selections(), selection);
+                assert!(view.editor().is_read_only());
+                assert!(
+                    !view.editor().document().can_undo() && !view.workspace.active().is_modified()
+                );
+                let other = &view.workspace.buffers()[2];
+                assert_eq!(other.editor.committed_text(), "B");
+                assert!(!other.editor.is_read_only() && !other.is_modified());
+            });
+            view.update_in(cx, |view, _, _| view.editor_mut().set_read_only(false));
+            cx.simulate_input("X");
+            assert_eq!(
+                cx.window_title().as_deref(),
+                Some("*frame-a.txt - Notepad Matrix")
+            );
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.workspace.active().id(), crate::workspace::BufferId(2));
+                let buffers = view.workspace.buffers();
+                assert_eq!(buffers.len(), 3);
+                assert_eq!(buffers[0].editor.committed_text(), "");
+                assert_eq!(buffers[1].editor.committed_text(), "XA");
+                assert_eq!(buffers[2].editor.committed_text(), "B");
+                assert!(buffers[1].is_modified());
+                assert!(!buffers[0].is_modified() && !buffers[2].is_modified());
+            });
+        }
+    }
+
+    #[gpui::test]
+    fn resized_frame_keeps_editor_and_source_status_tail_visible(app: &mut gpui::TestAppContext) {
+        for dark in [false, true] {
+            let (view, cx) = app.add_window_view(|window, cx| MatrixWindow::new(dark, window, cx));
+            cx.simulate_input("A\t中😀\r\nZ");
+            let before = view.read_with(cx, |view, _| {
+                (
+                    view.workspace.active().id(),
+                    view.editor().committed_text(),
+                    view.editor().selections(),
+                    view.editor().document().can_undo(),
+                    view.editor().document().can_redo(),
+                    view.workspace.active().is_modified(),
+                )
+            });
+            for viewport in [
+                size(px(1080.), px(668.)),
+                size(px(480.), px(320.)),
+                size(px(1080.), px(668.)),
+            ] {
+                cx.simulate_resize(viewport);
+                let editor = cx.debug_bounds("matrix-editor").expect("resized editor");
+                let toolbar = cx
+                    .debug_bounds("toolbar-new")
+                    .expect("visible first toolbar control");
+                let status = cx.debug_bounds("status-bar").expect("resized status bar");
+                for bounds in [editor, toolbar, status] {
+                    assert!(bounds.left() >= px(0.) && bounds.right() <= viewport.width);
+                    assert!(bounds.top() >= px(0.) && bounds.bottom() <= viewport.height);
+                    assert!(bounds.size.width > px(0.) && bounds.size.height > px(0.));
+                }
+                assert!(toolbar.bottom() <= editor.top());
+                assert!(editor.bottom() <= status.top());
+                let mut right = status.right() - px(20.);
+                for (id, width) in [
+                    ("status-insert-mode", 45.),
+                    ("status-encoding", 120.),
+                    ("status-eol", 110.),
+                    ("status-position", 260.),
+                    ("status-document-size", 220.),
+                ] {
+                    let part = cx.debug_bounds(id).expect("source status field");
+                    assert_eq!(part.size.width, px(width), "source width for {id}");
+                    assert_eq!(part.right(), right, "source right anchor for {id}");
+                    if matches!(id, "status-insert-mode" | "status-encoding" | "status-eol") {
+                        assert!(part.left() >= status.left() && part.right() <= status.right());
+                    }
+                    right = part.left();
+                }
+                view.read_with(cx, |view, _| {
+                    assert_eq!(
+                        (
+                            view.workspace.active().id(),
+                            view.editor().committed_text(),
+                            view.editor().selections(),
+                            view.editor().document().can_undo(),
+                            view.editor().document().can_redo(),
+                            view.workspace.active().is_modified(),
+                        ),
+                        before,
+                        "resizing only changes layout"
+                    );
+                });
+            }
+        }
+    }
+
+    #[gpui::test]
+    fn caption_close_preserves_dirty_document_on_cancel_and_closes_clean_window(
+        app: &mut gpui::TestAppContext,
+    ) {
+        for dark in [false, true] {
+            let (view, cx) = app.add_window_view(|window, cx| MatrixWindow::new(dark, window, cx));
+            cx.simulate_input("dirty");
+            let before = view.read_with(cx, |view, _| {
+                (
+                    view.workspace.active().id(),
+                    view.editor().committed_text(),
+                    view.editor().selections(),
+                    view.editor().document().can_undo(),
+                    view.editor().document().can_redo(),
+                    view.workspace.active().is_modified(),
+                )
+            });
+            assert_eq!(cx.windows().len(), 1);
+            let close = cx.debug_bounds("window-close").expect("caption close");
+            cx.simulate_click(close.center(), gpui::Modifiers::default());
+            let mut dialog = floating_context(cx, "close-cancel");
+            assert_eq!(cx.windows().len(), 2);
+            cx.simulate_click(close.center(), gpui::Modifiers::default());
+            cx.run_until_parked();
+            assert_eq!(
+                cx.windows().len(),
+                2,
+                "caption cannot duplicate confirmation"
+            );
+            let cancel = dialog
+                .debug_bounds("close-cancel")
+                .expect("own Cancel control");
+            dialog.simulate_click(cancel.center(), gpui::Modifiers::default());
+            assert!(cx.debug_bounds("matrix-editor").is_some());
+            cx.run_until_parked();
+            assert_eq!(cx.windows().len(), 1);
+            view.update_in(cx, |view, window, _| {
+                assert!(view.editor_focus.is_focused(window));
+                assert_eq!(
+                    (
+                        view.workspace.active().id(),
+                        view.editor().committed_text(),
+                        view.editor().selections(),
+                        view.editor().document().can_undo(),
+                        view.editor().document().can_redo(),
+                        view.workspace.active().is_modified(),
+                    ),
+                    before,
+                    "cancelled window close preserves the original editor"
+                );
+            });
+            cx.dispatch_action(EditorUndo);
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), "");
+                assert!(!view.workspace.active().is_modified());
+            });
+            let close = cx
+                .debug_bounds("window-close")
+                .expect("clean caption close");
+            cx.simulate_click(close.center(), gpui::Modifiers::default());
+            cx.run_until_parked();
+            assert!(
+                cx.windows().is_empty(),
+                "clean Close removes its own window"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn toolbar_open_cancel_preserves_documents_history_and_prompt_identity(
+        app: &mut gpui::TestAppContext,
+    ) {
+        for dark in [false, true] {
+            let (view, cx) = app.add_window_view(|window, cx| MatrixWindow::new(dark, window, cx));
+            cx.simulate_resize(size(px(1080.), px(668.)));
+            cx.simulate_input("first");
+            cx.dispatch_action(NewFile);
+            cx.simulate_input("second");
+            cx.dispatch_action(EditorDocumentStart);
+            cx.simulate_input("X");
+            cx.dispatch_action(EditorUndo);
+            let snapshot = |view: &MatrixWindow| {
+                (
+                    view.workspace.active().id(),
+                    view.workspace.active_view(),
+                    view.workspace
+                        .buffers()
+                        .iter()
+                        .map(|buffer| {
+                            (
+                                buffer.id(),
+                                buffer.editor.committed_text(),
+                                buffer.editor.selections(),
+                                buffer.editor.document().can_undo(),
+                                buffer.editor.document().can_redo(),
+                                buffer.is_modified(),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            };
+            let before = view.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), "second");
+                assert!(view.editor().document().can_undo());
+                assert!(view.editor().document().can_redo());
+                snapshot(view)
+            });
+            let windows = cx.windows().len();
+            assert!(!cx.did_prompt_for_paths());
+            assert!(!cx.did_prompt_for_new_path());
+            assert!(!cx.has_pending_prompt());
+            let open = cx
+                .debug_bounds("toolbar-open")
+                .expect("Open toolbar button");
+            cx.simulate_click(open.center(), gpui::Modifiers::default());
+            assert!(cx.did_prompt_for_paths());
+            assert!(!cx.did_prompt_for_new_path());
+            cx.simulate_click(open.center(), gpui::Modifiers::default());
+            cx.simulate_path_prompt_response(|options| {
+                assert!(options.files && options.multiple && !options.directories);
+                None
+            });
+            cx.run_until_parked();
+            assert!(cx.debug_bounds("matrix-editor").is_some());
+            assert!(
+                !cx.did_prompt_for_paths(),
+                "only one Open picker was queued"
+            );
+            assert!(!cx.did_prompt_for_new_path());
+            assert_eq!(cx.windows().len(), windows);
+            assert!(!cx.has_pending_prompt());
+            view.update_in(cx, |view, window, _| {
+                assert!(view.editor_focus.is_focused(window));
+                assert_eq!(
+                    snapshot(view),
+                    before,
+                    "Open cancellation preserves every editor"
+                );
+            });
+            cx.dispatch_action(EditorRedo);
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), "Xsecond");
+                assert_eq!(view.workspace.buffers()[0].editor.committed_text(), "first");
+            });
+            cx.dispatch_action(EditorUndo);
+            view.read_with(cx, |view, _| assert_eq!(snapshot(view), before));
+        }
+    }
+
+    #[gpui::test]
+    fn toolbar_save_uses_active_target_and_preserves_history_across_savepoint(
+        app: &mut gpui::TestAppContext,
+    ) {
+        for dark in [false, true] {
+            for named in [false, true] {
+                let fixture = tempfile::tempdir().expect("isolated toolbar Save fixture");
+                let path = fixture.path().join("toolbar-save.txt");
+                let (view, cx) =
+                    app.add_window_view(|window, cx| MatrixWindow::new(dark, window, cx));
+                cx.simulate_resize(size(px(1080.), px(668.)));
+                cx.simulate_input("unrelated");
+                if named {
+                    std::fs::write(&path, "base").expect("named Save fixture");
+                    cx.dispatch_action(OpenFile);
+                    cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+                    cx.run_until_parked();
+                } else {
+                    cx.dispatch_action(NewFile);
+                }
+                cx.simulate_input("中😀");
+                let expected = if named { "中😀base" } else { "中😀" };
+                let before = view.read_with(cx, |view, _| {
+                    (
+                        view.workspace.active().id(),
+                        view.editor().committed_text(),
+                        view.editor().selections(),
+                    )
+                });
+                assert_eq!(before.1, expected);
+                let windows = cx.windows().len();
+                assert!(!cx.did_prompt_for_paths() && !cx.did_prompt_for_new_path());
+                assert!(!cx.has_pending_prompt());
+                let save = cx.debug_bounds("toolbar-save").expect("active Save button");
+                cx.simulate_click(save.center(), gpui::Modifiers::default());
+                if !named {
+                    assert!(cx.did_prompt_for_new_path());
+                    assert!(!cx.did_prompt_for_paths());
+                    cx.simulate_click(save.center(), gpui::Modifiers::default());
+                    cx.simulate_new_path_selection(|_| None);
+                    cx.run_until_parked();
+                    assert!(!cx.did_prompt_for_new_path());
+                    assert!(!path.exists(), "cancelled Save cannot create a file");
+                    view.update_in(cx, |view, window, _| {
+                        assert!(view.editor_focus.is_focused(window));
+                        assert!(view.disk_file().is_none());
+                        assert_eq!(
+                            (
+                                view.workspace.active().id(),
+                                view.editor().committed_text(),
+                                view.editor().selections(),
+                            ),
+                            before
+                        );
+                        assert!(view.workspace.active().is_modified());
+                    });
+                    cx.simulate_click(save.center(), gpui::Modifiers::default());
+                    assert!(cx.did_prompt_for_new_path());
+                    cx.simulate_new_path_selection(|_| Some(path.clone()));
+                }
+                cx.run_until_parked();
+                assert_eq!(
+                    std::fs::read(&path).expect("first Save bytes"),
+                    expected.as_bytes()
+                );
+                assert!(!cx.did_prompt_for_paths() && !cx.did_prompt_for_new_path());
+                assert!(!cx.has_pending_prompt());
+                assert_eq!(cx.windows().len(), windows);
+                assert_eq!(
+                    cx.window_title().as_deref(),
+                    Some("toolbar-save.txt - Notepad Matrix")
+                );
+                view.update_in(cx, |view, window, _| {
+                    assert!(view.editor_focus.is_focused(window));
+                    assert_eq!(view.workspace.active().id(), before.0);
+                    assert_eq!(view.editor().selections(), before.2);
+                    assert!(!view.workspace.active().is_modified());
+                    assert_eq!(view.workspace.buffers().len(), 2);
+                    let other = &view.workspace.buffers()[0];
+                    assert_eq!(other.editor.committed_text(), "unrelated");
+                    assert!(other.is_modified() && other.editor.document().can_undo());
+                    assert_eq!(
+                        view.disk_file().expect("saved document path").path(),
+                        std::fs::canonicalize(&path).expect("canonical saved path")
+                    );
+                });
+                cx.dispatch_action(EditorUndo);
+                view.read_with(cx, |view, _| {
+                    assert_eq!(
+                        view.editor().committed_text(),
+                        if named { "base" } else { "" }
+                    );
+                    assert!(view.workspace.active().is_modified());
+                });
+                cx.dispatch_action(EditorRedo);
+                view.read_with(cx, |view, _| {
+                    assert_eq!(view.editor().committed_text(), expected);
+                    assert!(!view.workspace.active().is_modified());
+                });
+            }
+        }
     }
 
     #[gpui::test]
@@ -7550,9 +9074,185 @@ mod tests {
     }
 
     #[gpui::test]
-    fn file_menu_new_uses_the_same_document_route_as_shortcut(cx: &mut gpui::TestAppContext) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
+    fn document_dropdown_selects_existing_documents_without_toggling_the_dock(
+        app: &mut gpui::TestAppContext,
+    ) {
+        app.update(|cx| cx.bind_keys(menu_surface::bindings()));
+        let (view, cx) = app.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
         cx.simulate_input("first");
+        cx.dispatch_action(NewFile);
+        cx.simulate_input("second");
+        let dropdown = cx
+            .debug_bounds("menu-document-list")
+            .expect("main-row dropdown");
+        cx.simulate_click(dropdown.center(), gpui::Modifiers::default());
+        view.read_with(cx, |view, _| {
+            assert!(
+                !view.document_list_visible,
+                "dropdown is not the docked panel"
+            );
+            let entries = view.menu_bar.popup_entries(0).expect("document menu");
+            assert_eq!(
+                entries
+                    .iter()
+                    .map(|entry| entry.label())
+                    .collect::<Vec<_>>(),
+                ["new 1*", "new 2*"]
+            );
+        });
+        assert!(cx.debug_bounds("document-dropdown-item-1").is_some());
+        cx.simulate_keystrokes("escape");
+        assert!(cx.debug_bounds("document-dropdown-item-1").is_none());
+        view.update_in(cx, |view, window, _| {
+            assert!(view.editor_focus.is_focused(window));
+            assert_eq!(view.editor().committed_text(), "second");
+        });
+        cx.simulate_click(dropdown.center(), gpui::Modifiers::default());
+        let first = cx
+            .debug_bounds("document-dropdown-item-1")
+            .expect("first document");
+        cx.simulate_click(first.center(), gpui::Modifiers::default());
+        assert!(cx.debug_bounds("document-dropdown-item-1").is_none());
+        view.update_in(cx, |view, window, _| {
+            assert!(view.editor_focus.is_focused(window));
+            assert_eq!(view.workspace.active().id(), crate::workspace::BufferId(1));
+            assert_eq!(view.editor().committed_text(), "first");
+            assert_eq!(
+                view.workspace.buffers()[1].editor.committed_text(),
+                "second"
+            );
+            assert!(!view.document_list_visible);
+        });
+        cx.dispatch_action(EditorUndo);
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "");
+            assert_eq!(
+                view.workspace.buffers()[1].editor.committed_text(),
+                "second"
+            );
+        });
+        cx.simulate_click(dropdown.center(), gpui::Modifiers::default());
+        cx.simulate_keystrokes("end enter");
+        assert!(cx.debug_bounds("document-dropdown-item-1").is_none());
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.workspace.active().id(), crate::workspace::BufferId(2));
+            assert_eq!(view.editor().committed_text(), "second");
+        });
+    }
+
+    #[gpui::test]
+    fn file_menu_new_uses_the_same_document_route_as_shortcut(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| cx.bind_keys(menu_surface::bindings()));
+        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
+        cx.simulate_resize(size(px(1080.), px(668.)));
+        let roots = [
+            "File", "Edit", "Search", "View", "Encoding", "Language", "Settings", "Tools", "Macro",
+            "Run", "Plugins", "Window", "Help",
+        ];
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.menu_bar
+                    .definitions()
+                    .iter()
+                    .map(|root| root.label)
+                    .collect::<Vec<_>>(),
+                roots
+            );
+        });
+        let bar = cx.debug_bounds("matrix-menu-bar").expect("main menu bar");
+        let mut edge = bar.left();
+        let selectors = [
+            "file-menu-trigger",
+            "edit-menu-trigger",
+            "search-menu-trigger",
+            "view-menu-trigger",
+            "encoding-menu-trigger",
+            "language-menu-trigger",
+            "settings-menu-trigger",
+            "tools-menu-trigger",
+            "macro-menu-trigger",
+            "run-menu-trigger",
+            "plugins-menu-trigger",
+            "window-menu-trigger",
+            "help-menu-trigger",
+        ];
+        for selector in selectors {
+            let root = cx.debug_bounds(selector).expect("runtime root drawn");
+            assert!(
+                root.left() >= edge && root.right() > root.left() && root.right() <= bar.right()
+            );
+            assert!(root.top() >= bar.top() && root.bottom() <= bar.bottom());
+            edge = root.right();
+        }
+        cx.simulate_input("first");
+        let snapshot = |view: &MatrixWindow| {
+            (
+                view.workspace.active().id(),
+                view.workspace.active_view(),
+                view.editor().committed_text(),
+                view.editor().selections(),
+                view.editor().document().can_undo(),
+                view.editor().document().can_redo(),
+                view.workspace.active().is_modified(),
+            )
+        };
+        let before = view.read_with(cx, |view, _| snapshot(view));
+        for (index, selector) in selectors.into_iter().enumerate() {
+            let root = cx.debug_bounds(selector).expect("menu root");
+            cx.simulate_click(root.center(), gpui::Modifiers::default());
+            assert!(cx.debug_bounds("menu-popup-0").is_some());
+            let selected = view.update_in(cx, |view, window, _| {
+                assert_eq!(view.menu_bar.active_root(), index);
+                assert_eq!(view.menu_bar.mode(), MenuMode::Open);
+                assert!(view.menu_focus.is_focused(window));
+                view.menu_bar.selected_path().to_vec()
+            });
+            cx.simulate_keystrokes("down");
+            view.read_with(cx, |view, _| {
+                if matches!(index, 8 | 9 | 12) {
+                    assert_eq!(
+                        view.menu_bar.selected_path(),
+                        [0],
+                        "one available row wraps in {selector}"
+                    );
+                    if index == 8 {
+                        assert!(
+                            view.macro_steps.is_empty()
+                                && view.macro_dialogs.library.macros.is_empty()
+                        );
+                    }
+                } else {
+                    assert_ne!(
+                        view.menu_bar.selected_path(),
+                        selected,
+                        "Down navigates {selector}"
+                    );
+                }
+                assert_eq!(snapshot(view), before, "menu owns Down for {selector}");
+            });
+            cx.simulate_keystrokes("escape escape");
+            view.update_in(cx, |view, window, _| {
+                assert_eq!(view.menu_bar.mode(), MenuMode::Closed);
+                assert!(view.editor_focus.is_focused(window));
+                assert_eq!(snapshot(view), before);
+            });
+        }
+        let file = cx.debug_bounds("file-menu-trigger").expect("File root");
+        let edit = cx.debug_bounds("edit-menu-trigger").expect("Edit root");
+        cx.simulate_click(file.center(), gpui::Modifiers::default());
+        cx.simulate_mouse_move(edit.center(), None, gpui::Modifiers::default());
+        view.read_with(cx, |view, _| assert_eq!(view.menu_bar.active_root(), 1));
+        cx.simulate_click(edit.center(), gpui::Modifiers::default());
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.menu_bar.mode(), MenuMode::Closed)
+        });
+        cx.simulate_click(file.center(), gpui::Modifiers::default());
+        cx.simulate_click(gpui::point(px(1070.), px(60.)), gpui::Modifiers::default());
+        view.update_in(cx, |view, window, _| {
+            assert_eq!(view.menu_bar.mode(), MenuMode::Closed);
+            assert!(view.editor_focus.is_focused(window));
+            assert_eq!(snapshot(view), before);
+        });
         cx.dispatch_action(OpenFileMenu);
         let item = cx
             .debug_bounds("file-menu-new")
@@ -7566,6 +9266,10 @@ mod tests {
             EntityInputHandler::text_for_range(view, 0..5, &mut actual, window, cx)
         });
         assert_eq!(text.as_deref(), Some("first"));
+        cx.simulate_input("!");
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "first!")
+        });
     }
 
     #[gpui::test]
@@ -7697,7 +9401,7 @@ mod tests {
             13..13,
             "popup click changed document selection"
         );
-        cx.dispatch_action(CancelClose);
+        floating_context(cx, "close-cancel").dispatch_action(CancelClose);
         cx.simulate_input("Z");
         let mut actual = None;
         let text = view.update_in(cx, |view, window, cx| {
@@ -7840,6 +9544,12 @@ mod tests {
                 })
                 .expect("native selection");
             assert_eq!(selected.range, expected..expected);
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), "123456\r\nx\r\nABCDEF");
+                assert!(
+                    view.editor().document().can_undo() && !view.editor().document().can_redo()
+                );
+            });
         }
     }
 
@@ -7916,7 +9626,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn invalid_native_query_redraws_error_alert(cx: &mut gpui::TestAppContext) {
+    fn invalid_native_query_does_not_display_edit_error(cx: &mut gpui::TestAppContext) {
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
         cx.simulate_input("😀");
         assert!(cx.debug_bounds("editor-error").is_none());
@@ -7928,8 +9638,8 @@ mod tests {
         assert_eq!(actual, None);
         cx.run_until_parked();
         assert!(
-            cx.debug_bounds("editor-error").is_some(),
-            "native query failure did not redraw the alert"
+            cx.debug_bounds("editor-error").is_none(),
+            "read-only native query displayed an edit error"
         );
     }
 }
@@ -7953,7 +9663,14 @@ impl EntityInputHandler for MatrixWindow {
     ) -> Option<String> {
         let text = self.editor().display_snapshot();
         *actual = None;
-        let bytes = self.native_query(byte_range(&text, range.clone()), cx)?;
+        if range.start > range.end
+            || range.start > text.len_utf16()
+            || (range.start == text.len_utf16() && !range.is_empty())
+        {
+            return None;
+        }
+        let range = range.start..range.end.min(text.len_utf16());
+        let bytes = byte_range(&text, range.clone()).ok()?;
         let content = self.native_query(
             text.try_slice(bytes.start.0..bytes.end.0)
                 .map(|text| text.to_string())
@@ -8082,9 +9799,9 @@ impl EntityInputHandler for MatrixWindow {
         range: Range<usize>,
         _: Bounds<Pixels>,
         _: &mut Window,
-        cx: &mut Context<Self>,
+        _: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
-        let range = self.native_query(byte_range(&self.editor().display_snapshot(), range), cx)?;
+        let range = byte_range(&self.editor().display_snapshot(), range).ok()?;
         self.range_rectangles(range).into_iter().next()
     }
 
@@ -8093,9 +9810,9 @@ impl EntityInputHandler for MatrixWindow {
         range: Range<usize>,
         _: Bounds<Pixels>,
         _: &mut Window,
-        cx: &mut Context<Self>,
+        _: &mut Context<Self>,
     ) -> Vec<Bounds<Pixels>> {
-        self.native_query(byte_range(&self.editor().display_snapshot(), range), cx)
+        byte_range(&self.editor().display_snapshot(), range)
             .map(|range| self.range_rectangles(range))
             .unwrap_or_default()
     }
@@ -8306,7 +10023,7 @@ impl Element for EditorElement {
                 } else {
                     Vec::new()
                 };
-                let whitespace = if view.editor_all_characters_shown() {
+                let whitespace = if view.editor_symbols.whitespace {
                     raw.trim_end_matches(['\r', '\n'])
                         .char_indices()
                         .filter(|&(byte, ch)| {
@@ -8416,6 +10133,23 @@ impl Element for EditorElement {
             let tag_indicators = view.builtin_tag_indicators();
             let focused = focus.is_focused(window);
             let dark = view.dark;
+            let colour = |name, attribute, fallback| {
+                rgb(super::workspace_surface::theme_style_colour(
+                    dark, name, attribute, fallback,
+                ))
+            };
+            let caret_colour = colour("Caret colour", "fgColor", 0x000000);
+            let additional_caret_colour = colour("Multi-edit carets color", "fgColor", 0x404040);
+            let selection_colour = colour("Selected text colour", "bgColor", 0x808080);
+            let additional_selection_colour =
+                colour("Multi-selected text color", "bgColor", 0xc0c0c0);
+            let current_line_colour = colour(
+                "Current line background colour",
+                "bgColor",
+                if dark { 0x101010 } else { 0xe8e8ff },
+            );
+            let guide_colour = colour("Indent guideline style", "fgColor", 0xc0c0c0);
+            let whitespace_colour = colour("White space symbol", "fgColor", 0xffb56a);
             let total = prepaint.layout.rows.len() as f32;
             let caret_logical = prepaint.layout.rows.rows()
                 [prepaint.layout.rows.row_for_byte(selection.head.0)]
@@ -8447,7 +10181,7 @@ impl Element for EditorElement {
                                     point(text_bounds.left(), line.origin.y),
                                     size(text_bounds.size.width, line_height),
                                 ),
-                                rgb(if dark { 0x101010 } else { 0xe8e8ff }),
+                                current_line_colour,
                             ));
                         }
                         let mut clip = line.clip;
@@ -8455,14 +10189,16 @@ impl Element for EditorElement {
                             clip.size.width = (text_bounds.right() - clip.left()).max(px(0.));
                         }
                         window.with_content_mask(Some(ContentMask { bounds: clip }), |window| {
-                            if let Err(error) = line.shape.paint_background(
-                                line.origin,
-                                line_height,
-                                gpui::TextAlign::Left,
-                                None,
-                                window,
-                                cx,
-                            ) {
+                            if caret_logical != line.logical_line
+                                && let Err(error) = line.shape.paint_background(
+                                    line.origin,
+                                    line_height,
+                                    gpui::TextAlign::Left,
+                                    None,
+                                    window,
+                                    cx,
+                                )
+                            {
                                 failure = Some(error.to_string());
                             }
                             for indicator in &tag_indicators {
@@ -8502,7 +10238,7 @@ impl Element for EditorElement {
                                             point(line.origin.x + *x, line.origin.y + px(y as f32)),
                                             size(px(1.), px(1.)),
                                         ),
-                                        rgb(0xb0b0b0),
+                                        guide_colour,
                                     ));
                                 }
                             }
@@ -8515,7 +10251,7 @@ impl Element for EditorElement {
                                             point(line.origin.x + *left + px(2.), middle),
                                             size((*right - *left - px(4.)).max(px(1.)), px(1.)),
                                         ),
-                                        rgb(0x808080),
+                                        whitespace_colour,
                                     ));
                                     for step in 0..3 {
                                         for sign in [-1., 1.] {
@@ -8527,7 +10263,7 @@ impl Element for EditorElement {
                                                     ),
                                                     size(px(1.), px(1.)),
                                                 ),
-                                                rgb(0x808080),
+                                                whitespace_colour,
                                             ));
                                         }
                                     }
@@ -8540,11 +10276,11 @@ impl Element for EditorElement {
                                             ),
                                             size(px(2.), px(2.)),
                                         ),
-                                        rgb(0x808080),
+                                        whitespace_colour,
                                     ));
                                 }
                             }
-                            for selected in selections.ranges() {
+                            for (index, selected) in selections.ranges().iter().enumerate() {
                                 if let Some(span) = line
                                     .geometry()
                                     .highlight(selection_geometry(*selected), |byte| {
@@ -8556,7 +10292,11 @@ impl Element for EditorElement {
                                             point(line.origin.x + px(span.start), line.origin.y),
                                             size(px(span.end - span.start), line_height),
                                         ),
-                                        rgba(0x0078d450),
+                                        if index == selections.primary_index() {
+                                            selection_colour
+                                        } else {
+                                            additional_selection_colour
+                                        },
                                     ));
                                 }
                             }
@@ -8571,7 +10311,7 @@ impl Element for EditorElement {
                                 failure = Some(error.to_string());
                             }
                             if focused {
-                                for selected in selections.ranges() {
+                                for (index, selected) in selections.ranges().iter().enumerate() {
                                     if let Some(x) = line
                                         .geometry()
                                         .caret(selection_geometry(*selected), |byte| {
@@ -8611,7 +10351,11 @@ impl Element for EditorElement {
                                                     if overwrite { px(2.) } else { line_height },
                                                 ),
                                             ),
-                                            rgb(0x0078d4),
+                                            if index == selections.primary_index() {
+                                                caret_colour
+                                            } else {
+                                                additional_caret_colour
+                                            },
                                         ));
                                     }
                                 }
@@ -8630,7 +10374,7 @@ impl Element for EditorElement {
                                 point(line.origin.x + line.x_for_byte(target), line.origin.y),
                                 size(px(2.), line_height),
                             ),
-                            rgb(0x0078d4),
+                            caret_colour,
                         ));
                     }
                 },

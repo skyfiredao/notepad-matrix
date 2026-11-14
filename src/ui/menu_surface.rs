@@ -5,8 +5,100 @@ use crate::menu::{
 };
 
 const MENU_BAR_HEIGHT: f32 = 22.;
+const MENU_FONT_SIZE: f32 = 13.;
 
 impl MatrixWindow {
+    pub(super) fn symbol_menu_open(&self) -> bool {
+        self.menu_anchor.is_some()
+            && self.menu_submenu_only
+            && self
+                .menu_bar
+                .popup_entries(0)
+                .and_then(|entries| {
+                    self.menu_bar
+                        .selected_path()
+                        .first()
+                        .and_then(|index| entries.get(*index))
+                })
+                .is_some_and(|entry| {
+                    matches!(
+                        entry,
+                        MenuEntry::Submenu {
+                            selector: "view-show-symbol-menu",
+                            ..
+                        }
+                    )
+                })
+    }
+
+    pub(super) fn open_symbol_dropdown(
+        &mut self,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.symbol_menu_open() {
+            self.menu_input(MenuEvent::Dismiss, window, cx);
+            return;
+        }
+        self.menu_input(
+            MenuEvent::OpenSubmenuLimited {
+                selector: "view-show-symbol-menu",
+                limit: 6,
+            },
+            window,
+            cx,
+        );
+        if self.menu_bar.mode() == MenuMode::Open {
+            self.menu_anchor = Some(position);
+            self.menu_submenu_only = true;
+            self.symbol_menu_selection_visible = false;
+            cx.notify();
+        }
+    }
+
+    pub(super) fn open_document_dropdown(
+        &mut self,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !availability(self, cx).allows(MenuCommand::DocumentDropdown)
+            || self.reload_target.is_some()
+        {
+            return;
+        }
+        if self.menu_bar.document_menu_open() {
+            self.menu_input(MenuEvent::Dismiss, window, cx);
+            return;
+        }
+        let documents = self
+            .workspace
+            .view_buffer_ids(self.workspace.active_view())
+            .iter()
+            .filter_map(|id| {
+                self.workspace
+                    .buffers()
+                    .iter()
+                    .find(|buffer| buffer.id() == *id)
+            })
+            .map(|buffer| {
+                (
+                    buffer.id(),
+                    format!(
+                        "{}{}",
+                        buffer.name(),
+                        if buffer.is_modified() { "*" } else { "" }
+                    ),
+                )
+            })
+            .collect();
+        self.menu_input(MenuEvent::OpenDocuments(documents), window, cx);
+        self.menu_anchor = Some(position);
+        self.menu_submenu_only = false;
+        cx.notify();
+    }
+
     pub(super) fn show_editor_context_menu(
         &mut self,
         position: gpui::Point<gpui::Pixels>,
@@ -66,10 +158,14 @@ pub(super) fn bindings() -> [KeyBinding; 22] {
 
 #[derive(Clone, Copy)]
 pub(super) struct Availability {
+    dirty: bool,
+    any_dirty: bool,
+    recent_count: usize,
+    file_exists: bool,
+    default_viewer: bool,
     selection: bool,
-    close_left: bool,
-    close_right: bool,
     editable: bool,
+    line_ending: LineEnding,
     undo: bool,
     redo: bool,
     paste: bool,
@@ -92,6 +188,30 @@ pub(super) struct Availability {
 impl Availability {
     pub(super) fn allows(self, command: MenuCommand) -> bool {
         match command {
+            MenuCommand::File(FileCommand::Save) => self.navigation_ready && self.dirty,
+            MenuCommand::File(FileCommand::SaveAll) => self.navigation_ready && self.any_dirty,
+            MenuCommand::File(
+                FileCommand::Reveal
+                | FileCommand::Terminal
+                | FileCommand::Trash
+                | FileCommand::Reload
+                | FileCommand::ContainingWorkspace,
+            ) => self.navigation_ready && self.file_exists,
+            MenuCommand::File(FileCommand::DefaultViewer) => {
+                self.navigation_ready && self.file_exists && self.default_viewer
+            }
+            MenuCommand::File(FileCommand::Recent(index)) => {
+                self.navigation_ready && index < self.recent_count
+            }
+            MenuCommand::File(FileCommand::OpenAllRecent | FileCommand::ClearRecent) => {
+                self.navigation_ready && self.recent_count > 0
+            }
+            MenuCommand::File(FileCommand::CloseLeft | FileCommand::CloseRight) => {
+                self.navigation_ready
+            }
+            MenuCommand::ActivateDocument(_) | MenuCommand::DocumentDropdown => {
+                self.navigation_ready
+            }
             MenuCommand::Binary(crate::clipboard::BinaryCommand::Copy) => self.navigation_ready,
             MenuCommand::Binary(crate::clipboard::BinaryCommand::Cut) => {
                 self.navigation_ready && self.editable
@@ -153,8 +273,6 @@ impl Availability {
             MenuCommand::SavedMacro(index) => {
                 self.saved_macros_idle && index < self.saved_macro_count
             }
-            MenuCommand::File(FileCommand::CloseLeft) => self.close_left,
-            MenuCommand::File(FileCommand::CloseRight) => self.close_right,
             MenuCommand::File(_) | MenuCommand::Edit(EditCommand::SelectAll) => true,
             MenuCommand::SelectEncoding(_) | MenuCommand::ConvertEncoding(_) => true,
             MenuCommand::Edit(EditCommand::Undo) => self.editable && self.undo,
@@ -162,8 +280,10 @@ impl Availability {
             MenuCommand::Edit(EditCommand::Cut) => self.editable,
             MenuCommand::Edit(EditCommand::Copy) => true,
             MenuCommand::Edit(EditCommand::Paste) => self.editable && self.paste,
-            MenuCommand::Edit(EditCommand::Delete) => self.editable && self.selection,
-            MenuCommand::Edit(EditCommand::ConvertEol(_)) => self.editable,
+            MenuCommand::Edit(EditCommand::Delete) => self.navigation_ready && self.selection,
+            MenuCommand::Edit(EditCommand::ConvertEol(target)) => {
+                self.editable && target != self.line_ending
+            }
             MenuCommand::Edit(EditCommand::DuplicateLine) => self.editable,
         }
     }
@@ -182,6 +302,13 @@ pub(super) fn availability(view: &MatrixWindow, cx: &App) -> Availability {
     };
     let syntax = text_transform_surface::comment_syntax(language, definition).ok();
     Availability {
+        dirty: view.workspace.active().is_modified(),
+        any_dirty: !view.workspace.dirty_buffers().is_empty(),
+        recent_count: view.workspace.recently_closed().len(),
+        file_exists: view.disk_file().is_some_and(|file| file.path().is_file()),
+        default_viewer: view.disk_file().is_some_and(|file| {
+            file.path().is_file() && file_menu_surface::has_default_viewer(file.path())
+        }),
         transformations: TransformationAvailability {
             editable: navigation_ready && !document.is_read_only(),
             line_comment: syntax.as_ref().is_some_and(|syntax| syntax.line.is_some()),
@@ -194,13 +321,8 @@ pub(super) fn availability(view: &MatrixWindow, cx: &App) -> Availability {
         multiple_selections: view.editor().display_selections().ranges().len() > 1,
         document_switcher: view.document_switcher,
         selection: !view.editor().selection().range().is_empty(),
-        close_left: view.workspace.active_index() > 0,
-        close_right: view.workspace.active_index() + 1
-            < view
-                .workspace
-                .view_buffer_ids(view.workspace.active_view())
-                .len(),
         editable: !document.is_read_only(),
+        line_ending: view.editor().line_ending(),
         undo: document.can_undo(),
         redo: document.can_redo(),
         paste: clipboard_surface::has_text(cx),
@@ -224,6 +346,11 @@ pub(super) fn availability(view: &MatrixWindow, cx: &App) -> Availability {
 
 fn selector(command: MenuCommand) -> String {
     match command {
+        MenuCommand::File(FileCommand::Recent(index)) => {
+            return format!("file-menu-recent-{index}");
+        }
+        MenuCommand::ActivateDocument(id) => return format!("document-dropdown-item-{}", id.0),
+        MenuCommand::DocumentDropdown => "document-dropdown",
         MenuCommand::Binary(command) => return format!("edit-binary-{}", command.source_id()),
         MenuCommand::CharacterPanel => "edit-character-panel",
         MenuCommand::CopyPath(command) => return format!("edit-copy-path-{}", command.source_id()),
@@ -293,6 +420,10 @@ fn selector(command: MenuCommand) -> String {
         MenuCommand::View(ViewCommand::MoveToNewInstance) => "view-move-new-instance",
         MenuCommand::View(ViewCommand::OpenInNewInstance) => "view-open-new-instance",
         MenuCommand::View(ViewCommand::DocumentMap) => "view-document-map",
+        MenuCommand::View(ViewCommand::Whitespace) => "view-whitespace",
+        MenuCommand::View(ViewCommand::EndOfLine) => "view-eol",
+        MenuCommand::View(ViewCommand::Nonprinting) => "view-nonprinting",
+        MenuCommand::View(ViewCommand::ControlCharacters) => "view-control-characters",
         MenuCommand::View(ViewCommand::AllCharacters) => "view-all-characters",
         MenuCommand::View(ViewCommand::IndentGuides) => "view-indent-guides",
         MenuCommand::View(ViewCommand::ZoomIn) => "view-zoom-in",
@@ -359,6 +490,18 @@ fn selector(command: MenuCommand) -> String {
             FileCommand::Exit => "file-menu-exit",
             FileCommand::CloseLeft => "file-menu-close-left",
             FileCommand::CloseRight => "file-menu-close-right",
+            FileCommand::Print => "file-menu-print",
+            FileCommand::PrintNow => "file-menu-print-now",
+            FileCommand::Reveal => "file-menu-reveal",
+            FileCommand::Terminal => "file-menu-terminal",
+            FileCommand::ContainingWorkspace => "file-menu-containing-workspace",
+            FileCommand::FolderWorkspace => "file-menu-folder-workspace",
+            FileCommand::DefaultViewer => "file-menu-default-viewer",
+            FileCommand::Rename => "file-menu-rename",
+            FileCommand::Trash => "file-menu-trash",
+            FileCommand::OpenAllRecent => "file-menu-open-all-recent",
+            FileCommand::ClearRecent => "file-menu-clear-recent",
+            FileCommand::Recent(_) => "file-menu-recent",
         },
         MenuCommand::Edit(EditCommand::Undo) => "edit-menu-undo",
         MenuCommand::Edit(EditCommand::Redo) => "edit-menu-redo",
@@ -402,12 +545,10 @@ pub(super) fn render(
     let document_controls = DocumentControl::ALL
         .into_iter()
         .map(|control| {
-            let (id, action): (&'static str, Box<dyn gpui::Action>) = match control {
-                DocumentControl::New => ("menu-new-document", Box::new(NewFile)),
-                DocumentControl::DocumentList => {
-                    ("menu-document-list", Box::new(ToggleDocumentList))
-                }
-                DocumentControl::Close => ("menu-close-document", Box::new(CloseCurrentFile)),
+            let id = match control {
+                DocumentControl::New => "menu-new-document",
+                DocumentControl::DocumentList => "menu-document-list",
+                DocumentControl::Close => "menu-close-document",
             };
             let enabled = document_controls_enabled && available.allows(control.command());
             div()
@@ -422,7 +563,7 @@ pub(super) fn render(
                     }
                 })
                 .when(control == DocumentControl::DocumentList, |button| {
-                    button.aria_toggled(view.document_list_visible.into())
+                    button.aria_expanded(view.menu_bar.document_menu_open())
                 })
                 .w(px(24.))
                 .h(px(MENU_BAR_HEIGHT))
@@ -434,31 +575,70 @@ pub(super) fn render(
                 .when(!enabled, |button| button.opacity(0.4))
                 .child(control.glyph())
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    if enabled {
-                        view.menu_input(MenuEvent::Dismiss, window, cx);
-                        window.dispatch_action(action.boxed_clone(), cx);
-                    }
-                    cx.stop_propagation();
-                }))
+                .on_click(
+                    cx.listener(move |view, event: &gpui::ClickEvent, window, cx| {
+                        if enabled {
+                            if control == DocumentControl::DocumentList {
+                                view.open_document_dropdown(event.position(), window, cx);
+                            } else {
+                                view.menu_input(MenuEvent::Dismiss, window, cx);
+                                let action: Box<dyn gpui::Action> = match control {
+                                    DocumentControl::New => Box::new(NewFile),
+                                    _ => Box::new(CloseCurrentFile),
+                                };
+                                window.dispatch_action(action, cx);
+                            }
+                        }
+                        cx.stop_propagation();
+                    }),
+                )
         })
         .collect::<Vec<_>>();
     let selected = view.menu_bar.selected_path().to_vec();
     let definitions = view.menu_bar.definitions().to_vec();
     let total_columns = view.menu_bar.popup_count();
     let anchor = view.menu_anchor;
+    let symbol_popup = view.symbol_menu_open();
+    let symbol_selection_visible = view.symbol_menu_selection_visible;
+    let popup_row_height = |entry: &MenuEntry| {
+        if symbol_popup && !matches!(entry, MenuEntry::Separator) {
+            px(22.)
+        } else {
+            row_height(entry)
+        }
+    };
     let first_depth = usize::from(anchor.is_some() && view.menu_submenu_only && total_columns > 1);
     let columns = total_columns.saturating_sub(first_depth);
     while view.menu_scroll.len() < total_columns {
         view.menu_scroll.push(gpui::ScrollHandle::new());
     }
     let viewport = window.viewport_size();
-    let width = px(240.).min(viewport.width / (columns.max(1) as f32));
-    let root_left = px(definitions
+    let width =
+        px(if symbol_popup { 280. } else { 240. }).min(viewport.width / (columns.max(1) as f32));
+    let root_widths = definitions
         .iter()
-        .take(root)
-        .map(|menu| menu.label.chars().count() as f32 * 7. + 20.)
-        .sum());
+        .map(|definition| {
+            window
+                .text_system()
+                .shape_line(
+                    definition.label.into(),
+                    px(MENU_FONT_SIZE),
+                    &[gpui::TextRun {
+                        len: definition.label.len(),
+                        font: gpui::font("Helvetica"),
+                        color: rgb(0x6d6d6d).into(),
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    }],
+                    None,
+                )
+                .width()
+                .ceil()
+                + px(13.)
+        })
+        .collect::<Vec<_>>();
+    let root_left = root_widths.iter().take(root).copied().sum::<gpui::Pixels>();
     let left = root_left.min((viewport.width - width * columns as f32).max(px(0.)));
     let max_height = if anchor.is_some() {
         viewport.height
@@ -482,18 +662,22 @@ pub(super) fn render(
         };
         let height = (entries
             .iter()
-            .map(row_height)
+            .map(popup_row_height)
             .fold(px(2.), |sum, row| sum + row))
         .min(max_height);
         let top = desired_top.min((max_height - height).max(px(0.)));
         let label = if depth == 0 {
-            format!(
-                "{} menu",
-                definitions
-                    .get(root)
-                    .map(|definition| definition.label)
-                    .unwrap_or("Application")
-            )
+            if view.menu_bar.document_menu_open() {
+                "Document list".into()
+            } else {
+                format!(
+                    "{} menu",
+                    definitions
+                        .get(root)
+                        .map(|definition| definition.label)
+                        .unwrap_or("Application")
+                )
+            }
         } else {
             view.menu_bar
                 .popup_entries(depth - 1)
@@ -512,7 +696,7 @@ pub(super) fn render(
                 + entries
                     .iter()
                     .take(*index)
-                    .map(row_height)
+                    .map(popup_row_height)
                     .fold(px(0.), |sum, row| sum + row)
                 + scroll.offset().y;
         }
@@ -527,12 +711,17 @@ pub(super) fn render(
                         .h(px(8.))
                         .flex_shrink_0()
                         .px(px(8.))
-                        .child(div().mt(px(3.)).h(px(1.)).bg(rgb(0x808080)))
+                        .when(symbol_popup, |row| row.pl(px(24.)).pr(px(2.)))
+                        .child(div().mt(px(3.)).h(px(1.)).bg(rgb(if symbol_popup { 0xd7d7d7 } else { 0x808080 })))
                         .into_any_element();
                 }
                 let enabled = entry.enabled(&|command| available.allows(command));
                 let is_selected = selected.get(depth) == Some(&index);
                 let checked = match &entry {
+                    MenuEntry::DynamicAction {
+                        command: MenuCommand::ActivateDocument(id),
+                        ..
+                    } => Some(view.workspace.active().id() == *id),
                     MenuEntry::Action(MenuCommand::CharacterPanel) => Some(view.characters.visible),
                     MenuEntry::Action(MenuCommand::Language(language))
                     | MenuEntry::DynamicAction {
@@ -592,17 +781,13 @@ pub(super) fn render(
                     MenuEntry::Action(MenuCommand::View(ViewCommand::SyncHorizontal)) => {
                         Some(view.sync_horizontal_enabled())
                     }
-                    MenuEntry::Action(MenuCommand::View(ViewCommand::AllCharacters)) => {
-                        Some(view.editor_all_characters_shown())
-                    }
+                    MenuEntry::Action(MenuCommand::View(command))
+                        if view.editor_symbol_shown(*command).is_some() => view.editor_symbol_shown(*command),
                     MenuEntry::Action(MenuCommand::View(ViewCommand::IndentGuides)) => {
                         Some(view.editor_indent_guides_shown())
                     }
                     MenuEntry::Action(MenuCommand::SelectEncoding(target)) => {
                         Some(*target == view.workspace.active().format())
-                    }
-                    MenuEntry::Action(MenuCommand::Edit(EditCommand::ConvertEol(target))) => {
-                        Some(*target == view.editor().line_ending())
                     }
                     _ => None,
                 };
@@ -622,13 +807,15 @@ pub(super) fn render(
                 div()
                     .id(("menu-row", index))
                     .debug_selector(move || id.clone())
-                    .role(if checked.is_some() {
+                    .role(if matches!(&entry, MenuEntry::Action(MenuCommand::View(command)) if view.editor_symbol_shown(*command).is_some()) {
+                        Role::MenuItemCheckBox
+                    } else if checked.is_some() {
                         Role::MenuItemRadio
                     } else {
                         Role::MenuItem
                     })
                     .aria_label(label.clone())
-                    .aria_selected(is_selected)
+                    .aria_selected(is_selected && (!symbol_popup || symbol_selection_visible))
                     .a11y_synthetic_children(move |builder| {
                         if !enabled {
                             builder.parent_node().set_disabled();
@@ -641,19 +828,24 @@ pub(super) fn render(
                     .when(!shortcut.is_empty(), |row| {
                         row.aria_keyshortcuts(shortcut.clone())
                     })
-                    .h(px(24.))
+                    .h(px(if symbol_popup { 22. } else { 24. }))
                     .w_full()
                     .flex_shrink_0()
                     .flex()
                     .items_center()
                     .gap(px(4.))
                     .px(px(8.))
+                    .when(symbol_popup, |row| row.pl(px(0.)).gap(px(10.)))
                     .text_color(rgb(if enabled { foreground } else { 0x808080 }))
-                    .when(is_selected && enabled, |row| {
-                        row.bg(rgb(0x0078d4)).text_color(rgb(0xffffff))
+                    .when(is_selected && enabled && (!symbol_popup || symbol_selection_visible), |row| {
+                        if symbol_popup {
+                            row.bg(rgb(0xe5f3ff))
+                        } else {
+                            row.bg(rgb(0x0078d4)).text_color(rgb(0xffffff))
+                        }
                     })
                     .when(
-                        is_selected && enabled && depth + 1 == total_columns,
+                        is_selected && enabled && depth + 1 == total_columns && (!symbol_popup || symbol_selection_visible),
                         |row| row.aria_active_descendant(),
                     )
                     .on_mouse_move(cx.listener(move |view, _, window, cx| {
@@ -679,7 +871,11 @@ pub(super) fn render(
                     }))
                     .child(
                         div()
-                            .w(px(12.))
+                            .w(px(if symbol_popup { 24. } else { 12. }))
+                            .when(symbol_popup, |cell| {
+                                cell.h_full().flex().items_center().justify_center()
+                                    .when(checked == Some(true), |cell| cell.bg(rgb(0x9dccf3)))
+                            })
                             .child(if checked == Some(true) { "✓" } else { "" }),
                     )
                     .child(div().flex_1().truncate().child(label))
@@ -726,21 +922,29 @@ pub(super) fn render(
                 .debug_selector(move || id.into())
                 .role(Role::MenuItem)
                 .aria_label(definition.label)
-                .aria_expanded(open && root == index)
+                .aria_expanded(
+                    open && root == index && !view.menu_bar.document_menu_open() && !symbol_popup,
+                )
                 .h(px(MENU_BAR_HEIGHT))
-                .w(px(definition.label.chars().count() as f32 * 7. + 20.))
+                .w(root_widths[index])
+                .flex_shrink_0()
                 .flex()
                 .items_center()
                 .justify_center()
-                .when(mode != MenuMode::Closed && root == index, |row| {
-                    row.bg(rgb(0x0078d4)).text_color(rgb(0xffffff))
-                })
+                .when(
+                    mode != MenuMode::Closed
+                        && !symbol_popup
+                        && root == index
+                        && !view.menu_bar.document_menu_open(),
+                    |row| row.bg(rgb(0x0078d4)).text_color(rgb(0xffffff)),
+                )
                 .when(mode == MenuMode::BarFocused && root == index, |row| {
                     row.aria_active_descendant()
                 })
                 .on_mouse_move(cx.listener(move |view, _, window, cx| {
                     if view.menu_bar.mode() != MenuMode::Closed
-                        && view.menu_bar.active_root() != index
+                        && (view.menu_bar.active_root() != index
+                            || view.menu_bar.document_menu_open())
                     {
                         view.menu_input(MenuEvent::HoverRoot(index), window, cx);
                     }
@@ -812,7 +1016,7 @@ pub(super) fn render(
                 && !key.modifiers.platform
                 && key.key.len() == 1
                 && let Some(ch) = key.key.chars().next()
-                && ch.is_ascii_alphabetic()
+                && (ch.is_ascii_alphabetic() || ch == '?')
             {
                 view.menu_input(MenuEvent::Mnemonic(ch), window, cx);
                 cx.stop_propagation();
@@ -821,6 +1025,8 @@ pub(super) fn render(
         .relative()
         .h(px(MENU_BAR_HEIGHT))
         .flex_shrink_0()
+        .font_family("Helvetica")
+        .text_size(px(MENU_FONT_SIZE))
         .bg(rgb(if view.dark { 0x2b2b2b } else { 0xffffff }))
         .text_color(rgb(if view.dark { 0xeeeeee } else { 0x6d6d6d }))
         .child(
@@ -837,7 +1043,10 @@ pub(super) fn render(
                 })
                 .occlude()
                 .on_mouse_down_out(cx.listener(|view, _, window, cx| {
-                    if view.menu_bar.mode() != MenuMode::Closed {
+                    if view.menu_bar.mode() != MenuMode::Closed
+                        && !view.menu_bar.document_menu_open()
+                        && view.menu_anchor.is_none()
+                    {
                         view.menu_input(MenuEvent::Dismiss, window, cx);
                     }
                 }))
@@ -882,5 +1091,17 @@ pub(super) fn render(
                     )
                 }),
         )
+        .when(!view.dark, |bar| {
+            bar.child(
+                div()
+                    .absolute()
+                    .top(px(MENU_BAR_HEIGHT - 2.))
+                    .left(px(0.))
+                    .right(px(0.))
+                    .h(px(2.))
+                    .bg(rgb(0xf0f0f0))
+                    .child(div().w_full().h(px(1.)).bg(rgb(0xf2f2f2))),
+            )
+        })
         .into_any_element()
 }

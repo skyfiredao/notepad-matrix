@@ -1108,10 +1108,14 @@ fn build_plan(
             replacements.sort_by_key(|e| e.range.start);
             let explicit = post_selections
                 .iter()
-                .map(|s| TransformSelection {
-                    anchor: map_position(s.anchor, &replacements, true),
-                    caret: map_position(s.caret, &replacements, true),
-                    ..*s
+                .zip(selections)
+                .map(|(s, original)| {
+                    let (first, last) = scope_lines(&lines, *original, false);
+                    TransformSelection {
+                        anchor: map_position(s.anchor, &replacements, first == last),
+                        caret: map_position(s.caret, &replacements, first == last),
+                        ..*s
+                    }
                 })
                 .collect();
             return finish_plan(replacements, selections, Some(explicit));

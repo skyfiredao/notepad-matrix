@@ -35,6 +35,7 @@ mod document_session_surface;
 mod document_session_tests;
 mod editor_surface;
 mod file_actions;
+mod file_menu_surface;
 mod file_search_surface;
 mod find_surface;
 #[cfg(all(test, feature = "native-input-tests"))]
@@ -53,11 +54,13 @@ mod macro_dialog_surface;
 mod macro_surface;
 mod markdown_surface;
 mod menu_surface;
+mod mermaid;
 mod mime_surface;
 mod monitoring_surface;
 mod native_quit;
 mod panel_surface;
 mod preferences_surface;
+mod print_surface;
 mod project_surface;
 mod recovery_surface;
 #[cfg(feature = "native-input-tests")]
@@ -105,6 +108,7 @@ actions!(
         SaveCurrentMacro,
         RunMacroMultiple,
         ShowRun,
+        PrintFile,
         ConfirmRun,
         CancelRun,
         RunFocusNext,
@@ -290,6 +294,7 @@ struct MatrixWindow {
     editor_observed_selection: crate::editor::Selection,
     editor_preferred_x: Option<gpui::Pixels>,
     file_busy: bool,
+    printing: bool,
     close_dialog: bool,
     close_choice: usize,
     close_focus: FocusHandle,
@@ -299,9 +304,14 @@ struct MatrixWindow {
     conditional_close: Option<file_actions::ConditionalClose>,
     close_discarded: std::collections::BTreeSet<crate::workspace::BufferId>,
     tab_scroll: gpui::ScrollHandle,
+    tab_overflow: [bool; 2],
+    tab_scroll_repeat: Option<gpui::Task<()>>,
     panels: panel_surface::PanelState,
+    editor_symbols: editor_surface::EditorSymbols,
+    symbol_menu_selection_visible: bool,
     tab_multiline: bool,
     tab_vertical: bool,
+    tab_compact_label_len: usize,
     tab_close_pressed: Option<(crate::workspace::ViewId, crate::workspace::BufferId)>,
     mru_switching: bool,
     document_switcher: bool,
@@ -397,6 +407,7 @@ impl MatrixWindow {
         let close_view = cx.weak_entity();
         cx.observe_window_activation(window, |view: &mut Self, window, cx| {
             if !window.is_window_active() {
+                view.tab_scroll_repeat = None;
                 view.cancel_finder_drag();
                 view.defer_intelligence_focus_loss(cx);
             }
@@ -404,17 +415,8 @@ impl MatrixWindow {
         .detach();
         window.on_window_should_close(cx, move |window, cx| {
             match close_view.update(cx, |view: &mut Self, cx| {
-                if view.file_busy
-                    || view.reload_target.is_some()
-                    || !view.workspace.dirty_buffers().is_empty()
-                {
-                    view.request_close(window, cx);
-                    false
-                } else if !view.prepare_udl_close(window, cx) {
-                    false
-                } else {
-                    view.retire_recovery_on_confirmed_close(cx)
-                }
+                view.request_close(window, cx);
+                false
             }) {
                 Ok(allow) => allow,
                 Err(error) => {
@@ -482,6 +484,7 @@ impl MatrixWindow {
             editor_observed_selection,
             editor_preferred_x: None,
             file_busy: false,
+            printing: false,
             close_dialog: false,
             close_choice: 0,
             close_focus: cx.focus_handle(),
@@ -491,9 +494,14 @@ impl MatrixWindow {
             conditional_close: None,
             close_discarded: std::collections::BTreeSet::new(),
             tab_scroll: gpui::ScrollHandle::new(),
+            tab_overflow: [false; 2],
+            tab_scroll_repeat: None,
             panels: Default::default(),
+            editor_symbols: Default::default(),
+            symbol_menu_selection_visible: false,
             tab_multiline: false,
             tab_vertical: false,
+            tab_compact_label_len: 0,
             tab_close_pressed: None,
             mru_switching: true,
             document_switcher: true,
@@ -501,7 +509,7 @@ impl MatrixWindow {
             mru_focus: cx.focus_handle(),
             document_list_visible: false,
             document_map: Default::default(),
-            folder: folder_surface::FolderState::new(),
+            folder: folder_surface::FolderState::new(cx),
             projects: project_surface::ProjectState::new(cx),
             characters: character_panel_surface::State::new(cx),
             function_list: function_list_surface::FunctionListState::new(cx),
@@ -648,8 +656,35 @@ impl MatrixWindow {
         {
             return;
         }
-        let input = if self.menu_submenu_only
-            && self.menu_anchor.is_some()
+        let input = if self.symbol_menu_open() {
+            let input = if matches!(input, MenuEvent::Left) {
+                MenuEvent::Dismiss
+            } else if !self.symbol_menu_selection_visible {
+                match input {
+                    MenuEvent::Down => MenuEvent::First,
+                    MenuEvent::Up => MenuEvent::Last,
+                    input => input,
+                }
+            } else {
+                input
+            };
+            if matches!(
+                &input,
+                MenuEvent::Up
+                    | MenuEvent::Down
+                    | MenuEvent::First
+                    | MenuEvent::Last
+                    | MenuEvent::Mnemonic(_)
+                    | MenuEvent::Hover { .. }
+            ) {
+                self.symbol_menu_selection_visible = true;
+            }
+            input
+        } else {
+            input
+        };
+        let input = if self.menu_anchor.is_some()
+            && (self.menu_submenu_only || self.menu_bar.popup_count() == 1)
             && matches!(&input, MenuEvent::Escape)
         {
             MenuEvent::Dismiss
@@ -699,6 +734,18 @@ impl MatrixWindow {
         }
         cx.notify();
         match effect {
+            MenuOutcome::Activate(MenuCommand::ActivateDocument(id)) => {
+                if self
+                    .workspace
+                    .view_buffer_ids(self.workspace.active_view())
+                    .contains(&id)
+                {
+                    self.activate_buffer(id, window, cx);
+                }
+            }
+            MenuOutcome::Activate(MenuCommand::DocumentDropdown) => {
+                self.open_document_dropdown(window.mouse_position(), window, cx);
+            }
             MenuOutcome::Activate(MenuCommand::Binary(command)) => {
                 self.binary_clipboard(command, window, cx)
             }
@@ -793,8 +840,14 @@ impl MatrixWindow {
             MenuOutcome::Activate(MenuCommand::File(FileCommand::Reload)) => {
                 self.request_reload(window, cx)
             }
+            MenuOutcome::Activate(MenuCommand::File(FileCommand::Print)) => {
+                self.print_document(window, cx)
+            }
             MenuOutcome::Activate(MenuCommand::File(FileCommand::Exit)) => {
                 window.dispatch_action(Box::new(CloseWindow), cx)
+            }
+            MenuOutcome::Activate(MenuCommand::File(command)) => {
+                self.file_menu_command(command, window, cx)
             }
             MenuOutcome::Activate(MenuCommand::Edit(EditCommand::Undo)) => {
                 window.dispatch_action(Box::new(EditorUndo), cx)
@@ -837,8 +890,12 @@ impl MatrixWindow {
                     self.set_zoom_delta(-1, window, cx);
                 }
                 ViewCommand::ZoomReset => self.reset_editor_zoom(window, cx),
-                ViewCommand::AllCharacters => {
-                    self.toggle_editor_all_characters(window, cx);
+                ViewCommand::Whitespace
+                | ViewCommand::EndOfLine
+                | ViewCommand::Nonprinting
+                | ViewCommand::ControlCharacters
+                | ViewCommand::AllCharacters => {
+                    self.toggle_editor_symbol(command, window, cx);
                 }
                 ViewCommand::IndentGuides => {
                     self.toggle_editor_indent_guides(window, cx);
@@ -926,6 +983,8 @@ impl MatrixWindow {
 
 impl Render for MatrixWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.menu_bar
+            .set_recent_files(self.workspace.recently_closed());
         self.refresh_udl_registry(cx);
         self.flush_udl_style_invalidation(window, cx);
         self.sync_floating_windows(window, cx);
@@ -949,7 +1008,7 @@ impl Render for MatrixWindow {
         let menu = menu_surface::render(self, window, cx);
         let editing_toolbar = toolbar_surface::render(self, cx);
         self.reconcile_editor_panes();
-        let editor = self.render_split_editors(cx);
+        let editor = self.render_split_editors(window, cx);
         let panels_left = self.render_panel_region(crate::panel_layout::DockSide::Left, cx);
         let panels_right = self.render_panel_region(crate::panel_layout::DockSide::Right, cx);
         let panels_top = self.render_panel_region(crate::panel_layout::DockSide::Top, cx);
@@ -1426,6 +1485,10 @@ impl Render for MatrixWindow {
                 view.show_preferences(window, cx);
                 cx.stop_propagation();
             }))
+            .on_action(cx.listener(|view, _: &PrintFile, window, cx| {
+                view.print_document(window, cx);
+                cx.stop_propagation();
+            }))
             .on_action(cx.listener(|view, _: &ShowMarkdownPreview, window, cx| {
                 view.toggle_markdown_preview(window, cx);
             }))
@@ -1588,6 +1651,14 @@ impl Render for MatrixWindow {
                 view.request_close(window, cx);
                 cx.stop_propagation();
             }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|view, _, _, _| view.tab_scroll_repeat = None),
+            )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|view, _, _, _| view.tab_scroll_repeat = None),
+            )
             .size_full()
             .relative()
             .flex()
@@ -1598,11 +1669,14 @@ impl Render for MatrixWindow {
             .text_size(px(13.))
             .child(
                 div()
-                    .h(px(30.))
+                    .h(px(32.))
                     .flex_shrink_0()
                     .flex()
                     .items_center()
                     .bg(rgb(toolbar))
+                    .when(!self.dark, |caption| {
+                        caption.border_b_1().border_color(rgb(0xf0f0f0))
+                    })
                     .child(
                         div()
                             .flex_1()
@@ -1630,7 +1704,7 @@ impl Render for MatrixWindow {
                         div()
                             .id("window-caption-controls")
                             .w(px(140.))
-                            .h(px(30.))
+                            .h(px(32.))
                             .pr(px(3.))
                             .flex_shrink_0()
                             .flex()
@@ -1862,6 +1936,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         cx.bind_keys(document_session_surface::bindings());
         cx.bind_keys([
             KeyBinding::new("ctrl-f", ShowFind, None),
+            KeyBinding::new("cmd-p", PrintFile, None),
             KeyBinding::new("cmd-w", CloseWindow, Some("MatrixAuxiliary")),
             KeyBinding::new("escape", CloseWindow, Some("MatrixAuxiliary")),
             KeyBinding::new("tab", DialogFocusNext, Some("MatrixAuxiliary")),
@@ -1954,14 +2029,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 Some("MatrixEditor"),
             ),
         ]);
-        let closed_control = quit_control.clone();
-        cx.on_window_closed(move |cx, _| {
-            if cx.windows().is_empty() {
-                closed_control.approve();
-                cx.quit();
-            }
-        })
-        .detach();
+        cx.set_quit_mode(gpui::QuitMode::LastWindowClosed);
         let bounds = Bounds::centered(None, size(px(1080.), px(668.)), cx);
         let opened = cx.open_window(
             WindowOptions {
@@ -2002,6 +2070,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .get("tab_vertical")
                         .and_then(serde_json::Value::as_bool)
                         .unwrap_or(false);
+                    view.tab_compact_label_len = settings
+                        .get("tabCompactLabelLen")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0)
+                        .min(257) as usize;
+                    view.configure_editor_symbols(&settings);
                     view.mru_switching = settings
                         .get("mru_switching")
                         .and_then(serde_json::Value::as_bool)

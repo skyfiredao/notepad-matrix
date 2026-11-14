@@ -611,6 +611,68 @@ mod tests {
         })
         .expect("isolated private configuration store");
         record_a_from_toolbar(cx, main.into());
+        let snapshot = |view: &MatrixWindow| {
+            (
+                view.workspace.active().id(),
+                view.workspace.active_view(),
+                view.editor().committed_text(),
+                view.editor().selections(),
+                view.editor().document().can_undo(),
+                view.editor().document().can_redo(),
+                view.workspace.active().is_modified(),
+                view.macro_steps.clone(),
+            )
+        };
+        for escape in [true, false] {
+            let before = main
+                .read_with(cx, |view, _| snapshot(view))
+                .expect("original recording document");
+            click_control(cx, main.into(), "toolbar-macro-save");
+            cx.run_until_parked();
+            let dialog = cx
+                .windows()
+                .into_iter()
+                .find(|handle| *handle != main.into())
+                .expect("Save Macro window");
+            let mut visual = gpui::VisualTestContext::from_window(dialog, cx);
+            visual.simulate_input("discard");
+            visual.update(|window, cx| {
+                main.read_with(cx, |view, cx| {
+                    assert!(view.macro_dialogs.name_input.read(cx).is_focused(window));
+                    assert_eq!(view.macro_dialogs.name_input.read(cx).text(), "discard");
+                    assert_eq!(snapshot(view), before);
+                })
+                .expect("name receives input, not editor");
+            });
+            if escape {
+                visual.simulate_keystrokes("escape");
+            } else {
+                click_control(cx, dialog, "macro-save-cancel");
+            }
+            cx.run_until_parked();
+            assert_eq!(cx.windows(), vec![main.into()]);
+            main.update(cx, |view, window, _| {
+                assert_eq!(snapshot(view), before);
+                assert!(view.editor_focus.is_focused(window));
+                assert!(
+                    view.macro_dialogs.save_task.is_none()
+                        && view.macro_dialogs.pending_save.is_none()
+                );
+            })
+            .expect("non-applying cancellation restores owning editor");
+            assert!(
+                MacroLibrary::load(&ConfigStore::under_home(home.path()))
+                    .expect("unchanged private library")
+                    .macros
+                    .is_empty()
+            );
+            cx.simulate_input(main.into(), "!");
+            main.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), "!")
+            })
+            .expect("post-dismissal editor input");
+            click_control(cx, main.into(), "toolbar-undo");
+        }
         click_control(cx, main.into(), "toolbar-macro-save");
         cx.run_until_parked();
         let dialog = cx
@@ -684,6 +746,54 @@ mod tests {
     ) {
         let main = cx.add_window(|window, cx| MatrixWindow::new(false, window, cx));
         record_a_from_toolbar(cx, main.into());
+        let snapshot = |view: &MatrixWindow| {
+            (
+                view.workspace.active().id(),
+                view.workspace.active_view(),
+                view.editor().committed_text(),
+                view.editor().selections(),
+                view.editor().document().can_undo(),
+                view.editor().document().can_redo(),
+                view.workspace.active().is_modified(),
+                view.macro_steps.clone(),
+            )
+        };
+        for escape in [true, false] {
+            let before = main
+                .read_with(cx, |view, _| snapshot(view))
+                .expect("original repeat document");
+            let dialog = open_repeat_from_toolbar(cx, main.into());
+            let mut visual = gpui::VisualTestContext::from_window(dialog, cx);
+            visual.simulate_input("2");
+            visual.update(|window, cx| {
+                main.read_with(cx, |view, cx| {
+                    assert!(view.macro_dialogs.count_input.read(cx).is_focused(window));
+                    assert_eq!(view.macro_dialogs.count_input.read(cx).text(), "2");
+                    assert_eq!(snapshot(view), before);
+                    assert!(!view.macro_playing);
+                })
+                .expect("count receives input without replay");
+            });
+            if escape {
+                visual.simulate_keystrokes("escape");
+            } else {
+                click_control(cx, dialog, "macro-repeat-close");
+            }
+            cx.run_until_parked();
+            assert_eq!(cx.windows(), vec![main.into()]);
+            main.update(cx, |view, window, _| {
+                assert_eq!(snapshot(view), before);
+                assert!(!view.macro_playing);
+                assert!(view.editor_focus.is_focused(window));
+            })
+            .expect("non-running dismissal restores owning editor");
+            cx.simulate_input(main.into(), "!");
+            main.read_with(cx, |view, _| {
+                assert_eq!(view.editor().committed_text(), "!")
+            })
+            .expect("post-dismissal editor input");
+            click_control(cx, main.into(), "toolbar-undo");
+        }
         let dialog = open_repeat_from_toolbar(cx, main.into());
         cx.simulate_input(dialog, "70");
         click_control(cx, dialog, "macro-repeat-run");

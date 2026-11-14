@@ -90,7 +90,6 @@ impl MatrixWindow {
 
     pub(super) fn open_function_list_body(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.function_list.model.open();
-        self.function_list.target = None;
         self.refresh_function_list(window, cx);
         self.editor_focus.focus(window, cx);
         cx.notify();
@@ -333,8 +332,8 @@ impl MatrixWindow {
         let preference_enabled =
             self.function_list.preference_ready && self.function_list.pending_preference.is_none();
         let rows = self.function_list.model.rows();
-        let parsed = matches!(self.function_list.model.outcome(), ParseOutcome::Parsed(_));
         let target = self.function_list.target.clone();
+        let parsed = matches!(self.function_list.model.outcome(), ParseOutcome::Parsed(_));
         let dark = self.dark;
         let button = |id: &'static str, label: &'static str| {
             div()
@@ -463,7 +462,7 @@ impl MatrixWindow {
                         .aria_description(match self.function_list.model.outcome() {
                             ParseOutcome::NoParser => "No function parser for this language",
                             ParseOutcome::Parsed(_) => {
-                                "Functions and classes; Enter jumps to the selected source position"
+                                "Functions and classes; Enter toggles groups or jumps to the selected function"
                             }
                         })
                         .flex_1()
@@ -496,11 +495,19 @@ impl MatrixWindow {
                                     }
                                 }
                                 "enter" => {
-                                    if let (Some(row), Some(target)) = (
-                                        rows.get(view.function_list.selected),
-                                        view.function_list.target.clone(),
-                                    ) {
-                                        view.jump_function_list(row.jump_byte, target, window, cx);
+                                    if let Some(row) = rows.get(view.function_list.selected) {
+                                        if row.has_children {
+                                            view.function_list.model.toggle_expanded(row.jump_byte);
+                                        } else if let Some(target) =
+                                            view.function_list.target.clone()
+                                        {
+                                            view.jump_function_list(
+                                                row.jump_byte,
+                                                target,
+                                                window,
+                                                cx,
+                                            );
+                                        }
                                     }
                                 }
                                 _ => return,
@@ -533,20 +540,41 @@ impl MatrixWindow {
                                 .debug_selector(|| "function-list-entry".into())
                                 .role(Role::TreeItem)
                                 .aria_label(row.name.clone())
+                                .aria_selected(index == self.function_list.selected)
+                                .when(has_children, |item| item.aria_expanded(row.expanded))
                                 .pl(px(8. + row.depth as f32 * 14.))
                                 .py(px(2.))
                                 .cursor_pointer()
                                 .when(index == self.function_list.selected, |row| {
                                     row.bg(rgb(if dark { 0x30465a } else { 0xcce8ff }))
                                 })
-                                .child(format!("{prefix}{}", row.name))
+                                .child(
+                                    div()
+                                        .id(("function-list-expander", index))
+                                        .w(px(14.))
+                                        .child(prefix)
+                                        .when(has_children, |expander| {
+                                            expander.on_click(cx.listener(move |view, _, _, cx| {
+                                                view.function_list.model.toggle_expanded(jump_byte);
+                                                cx.notify();
+                                                cx.stop_propagation();
+                                            }))
+                                        }),
+                                )
+                                .child(row.name)
+                                .flex()
+                                .items_center()
                                 .on_click(cx.listener(
                                     move |view, event: &gpui::ClickEvent, window, cx| {
                                         view.function_list.selected = index;
-                                        if has_children && event.click_count() == 1 {
-                                            view.function_list.model.toggle_expanded(jump_byte);
-                                        } else if let Some(target) = target.clone() {
-                                            view.jump_function_list(jump_byte, target, window, cx);
+                                        if event.click_count() == 2 {
+                                            if has_children {
+                                                view.function_list.model.toggle_expanded(jump_byte);
+                                            } else if let Some(target) = target.clone() {
+                                                view.jump_function_list(
+                                                    jump_byte, target, window, cx,
+                                                );
+                                            }
                                         }
                                         cx.notify();
                                         cx.stop_propagation();
@@ -658,7 +686,7 @@ mod tests {
     #[gpui::test]
     fn builtin_row_click_jumps_to_source_bytes_without_editing(cx: &mut gpui::TestAppContext) {
         let main = cx.add_window(|window, cx| MatrixWindow::new(false, window, cx));
-        let source = "# λ\ndef target():\n    pass\n";
+        let source = "# λ\ndef first():\n    pass\ndef target():\n    pass\n";
         let task = main
             .update(cx, |view, window, cx| {
                 view.settings_store = None;
@@ -678,6 +706,16 @@ mod tests {
         cx.run_until_parked();
         let mut visual = gpui::VisualTestContext::from_window(main.into(), cx);
         click(&mut visual, "function-list-entry");
+        main.update(&mut visual, |view, window, _| {
+            assert_eq!(
+                view.editor().selection().head.0,
+                source.len(),
+                "single-click only selects"
+            );
+            assert!(view.function_list.tree_focus.is_focused(window));
+        })
+        .expect("selected row has tree focus");
+        visual.simulate_keystrokes("enter");
         main.read_with(&visual, |view, _| {
             assert_eq!(
                 view.editor().selection().head.0,
@@ -686,6 +724,88 @@ mod tests {
             assert_eq!(view.editor().committed_text(), source);
         })
         .expect("jump keeps document text");
+        visual.dispatch_action(EditorDocumentEnd);
+        let row = visual
+            .debug_bounds("function-list-entry")
+            .expect("source function row");
+        visual.simulate_event(gpui::MouseDownEvent {
+            position: row.center(),
+            button: MouseButton::Left,
+            click_count: 2,
+            ..Default::default()
+        });
+        visual.simulate_event(gpui::MouseUpEvent {
+            position: row.center(),
+            button: MouseButton::Left,
+            click_count: 2,
+            ..Default::default()
+        });
+        main.read_with(&visual, |view, _| {
+            assert_eq!(
+                view.editor().selection().head.0,
+                source.find("target").expect("source byte")
+            );
+            assert_eq!(view.editor().committed_text(), source);
+        })
+        .expect("double-click activates without editing");
+        click(&mut visual, "function-list-entry");
+        let snapshot = |view: &MatrixWindow| {
+            (
+                view.workspace.active().id(),
+                view.workspace.active_view(),
+                view.editor().committed_text(),
+                view.editor().selections(),
+                view.editor().document().can_undo(),
+                view.editor().document().can_redo(),
+                view.workspace.active().is_modified(),
+                view.function_list.selected,
+            )
+        };
+        let before = main
+            .read_with(&visual, |view, _| {
+                assert_eq!(
+                    view.function_list.selected, 1,
+                    "second function selected without activation"
+                );
+                snapshot(view)
+            })
+            .expect("selected object before hide");
+        click(&mut visual, "function-list-hide");
+        assert!(visual.debug_bounds("function-list-panel").is_none());
+        click(&mut visual, "toolbar-function-list");
+        let task = main
+            .update(&mut visual, |view, _, _| {
+                view.function_list.parse_task.take()
+            })
+            .expect("reopen task");
+        if let Some(task) = task {
+            visual.foreground_executor().clone().block_test(task);
+        }
+        visual.run_until_parked();
+        assert!(visual.debug_bounds("function-list-panel").is_some());
+        main.read_with(&visual, |view, _| {
+            assert_eq!(
+                snapshot(view),
+                before,
+                "reopen preserves selected function and source document"
+            )
+        })
+        .expect("reopened owner");
+        click(&mut visual, "function-list-hide");
+        assert!(visual.debug_bounds("function-list-panel").is_none());
+        main.update(&mut visual, |view, window, _| {
+            assert_eq!(snapshot(view), before);
+            assert!(view.editor_focus.is_focused(window));
+        })
+        .expect("Function hide returns owning editor focus without edits");
+        visual.simulate_input("!");
+        main.read_with(&visual, |view, _| {
+            assert_eq!(
+                view.editor().committed_text(),
+                "# λ\ndef first():\n    pass\ndef !target():\n    pass\n"
+            );
+        })
+        .expect("post-hide input reaches source editor");
     }
 
     fn click(cx: &mut gpui::VisualTestContext, selector: &'static str) {

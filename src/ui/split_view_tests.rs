@@ -93,8 +93,26 @@ fn sync_requires_two_panes_and_tracks_wheel_postpaint_without_reflecting_back(
     cx: &mut gpui::TestAppContext,
 ) {
     let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-    cx.dispatch_action(ToggleSyncVertical);
-    cx.dispatch_action(ToggleSyncHorizontal);
+    let checked = |cx: &mut gpui::VisualTestContext, selector: &'static str| {
+        let bounds = cx.debug_bounds(selector).expect("sync toolbar button");
+        let editor = cx.debug_bounds("matrix-editor").expect("editor");
+        cx.simulate_mouse_move(editor.center(), None, gpui::Modifiers::default());
+        redraw(cx);
+        cx.update(|window, _| {
+            let bounds = bounds.scale(window.scale_factor());
+            window.painted_quads().iter().any(|quad| {
+                quad.bounds == bounds && quad.content_mask.bounds.contains(&bounds.center())
+            })
+        })
+    };
+    for selector in ["toolbar-sync-vertical", "toolbar-sync-horizontal"] {
+        let button = cx.debug_bounds(selector).expect("disabled sync button");
+        cx.simulate_click(button.center(), gpui::Modifiers::default());
+        view.update_in(cx, |view, window, _| {
+            assert!(view.editor_focus.is_focused(window))
+        });
+        assert!(!checked(cx, selector));
+    }
     assert!(cx.debug_bounds("matrix-editor-secondary").is_none());
     view.read_with(cx, |view, _| {
         assert!(!view.sync_vertical_enabled() && !view.sync_horizontal_enabled())
@@ -135,8 +153,32 @@ fn sync_requires_two_panes_and_tracks_wheel_postpaint_without_reflecting_back(
     });
     assert_eq!(initial.0.0, 0);
     assert!(initial.1.0 > 0);
-    cx.dispatch_action(ToggleSyncVertical);
-    cx.dispatch_action(ToggleSyncHorizontal);
+    let document = |view: &MatrixWindow| {
+        (
+            view.workspace.active().id(),
+            view.workspace.active_view(),
+            view.editor().committed_text(),
+            view.editor().selections(),
+            view.editor().document().can_undo(),
+            view.editor().document().can_redo(),
+            view.workspace.active().is_modified(),
+        )
+    };
+    let before = view.read_with(cx, |view, _| document(view));
+    for (index, selector) in ["toolbar-sync-vertical", "toolbar-sync-horizontal"]
+        .into_iter()
+        .enumerate()
+    {
+        let button = cx.debug_bounds(selector).expect("enabled sync button");
+        cx.simulate_click(button.center(), gpui::Modifiers::default());
+        assert!(checked(cx, "toolbar-sync-vertical"));
+        assert_eq!(checked(cx, "toolbar-sync-horizontal"), index == 1);
+        view.read_with(cx, |view, _| {
+            assert!(view.sync_vertical_enabled());
+            assert_eq!(view.sync_horizontal_enabled(), index == 1);
+            assert_eq!(document(view), before, "sync only changes display linking");
+        });
+    }
     cx.simulate_event(gpui::ScrollEvent {
         position: primary.origin + gpui::point(px(100.), px(30.)),
         delta: gpui::ScrollDelta::Pixels(gpui::point(px(-67.), px(-120.))),
@@ -203,10 +245,21 @@ fn udl_folds_are_pane_local_and_style_sizes_change_real_native_geometry(
     let fold = cx
         .debug_bounds("fold-line-secondary-0")
         .expect("real secondary fold control");
+    let snapshot = |view: &MatrixWindow| {
+        (
+            view.editor().committed_text(),
+            view.editor().selections(),
+            view.editor().document().can_undo(),
+            view.editor().document().can_redo(),
+            view.workspace.active().is_modified(),
+        )
+    };
+    let before = view.read_with(cx, |view, _| snapshot(view));
     cx.simulate_click(fold.center(), gpui::Modifiers::default());
     redraw(cx);
     let width = view.update_in(cx, |view, window, cx| {
         assert_eq!(view.editor_visual_row_count(), 2);
+        assert_eq!(snapshot(view), before, "fold changes visibility only");
         assert!(view.focus_editor_pane(ViewId::Primary, window, cx));
         assert_eq!(view.editor_visual_row_count(), 4);
         use gpui::EntityInputHandler;
@@ -565,6 +618,47 @@ fn proportional_tabs_use_pixel_stops_and_preserve_native_byte_hit_testing(
         assert_eq!(selection.range, 3..3);
         assert_eq!(view.editor().display_text(), "Wi\tX\tY");
     });
+    let before = view.read_with(cx, |view, _| {
+        (
+            view.workspace.active().id(),
+            view.workspace.active_view(),
+            view.editor().document().can_undo(),
+            view.editor().document().can_redo(),
+            view.workspace.active().is_modified(),
+        )
+    });
+    let origin = view
+        .update_in(cx, |view, window, cx| {
+            gpui::EntityInputHandler::bounds_for_range(view, 0..0, Bounds::default(), window, cx)
+        })
+        .expect("painted start boundary");
+    cx.simulate_click(
+        origin.center(),
+        gpui::Modifiers {
+            shift: true,
+            ..Default::default()
+        },
+    );
+    view.read_with(cx, |view, _| {
+        assert_eq!(
+            view.editor().selection(),
+            Selection {
+                anchor: ByteOffset(3),
+                head: ByteOffset(0)
+            }
+        );
+        assert_eq!(view.editor().committed_text(), "Wi\tX\tY");
+        assert_eq!(
+            (
+                view.workspace.active().id(),
+                view.workspace.active_view(),
+                view.editor().document().can_undo(),
+                view.editor().document().can_redo(),
+                view.workspace.active().is_modified()
+            ),
+            before
+        );
+    });
 }
 
 #[gpui::test]
@@ -572,14 +666,13 @@ fn scrollbar_arrow_endcaps_step_one_row_or_default_column_and_reserved_thumb_tra
     cx: &mut gpui::TestAppContext,
 ) {
     let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
+    let source = format!(
+        "{}\r\n{}",
+        "wide\t中😀 ".repeat(150),
+        "line\r\n".repeat(200)
+    );
     view.update_in(cx, |view, window, cx| {
-        gpui::EntityInputHandler::replace_text_in_range(
-            view,
-            None,
-            &format!("{}\n{}", "wide ".repeat(150), "line\n".repeat(200)),
-            window,
-            cx,
-        );
+        gpui::EntityInputHandler::replace_text_in_range(view, None, &source, window, cx);
     });
     cx.dispatch_action(EditorDocumentStart);
     cx.dispatch_action(EditorSelectRight);
@@ -593,6 +686,26 @@ fn scrollbar_arrow_endcaps_step_one_row_or_default_column_and_reserved_thumb_tra
     assert_eq!(view.read_with(cx, |view, _| view.editor_top_line), 1);
     click(cx, editor.right() - px(8.), editor.top() + px(8.));
     assert_eq!(view.read_with(cx, |view, _| view.editor_top_line), 0);
+    let row_height = view
+        .update_in(cx, |view, window, cx| {
+            gpui::EntityInputHandler::bounds_for_range(view, 0..0, Bounds::default(), window, cx)
+        })
+        .expect("native visual row height")
+        .size
+        .height;
+    for (direction, expected) in [(-1., 1), (1., 0)] {
+        cx.simulate_event(gpui::ScrollEvent {
+            position: editor.origin + gpui::point(px(100.), px(30.)),
+            delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), row_height * direction)),
+            ..Default::default()
+        });
+        redraw(cx);
+        assert_eq!(
+            view.read_with(cx, |view, _| view.editor_top_line),
+            expected,
+            "one visual-row wheel equals one arrow step"
+        );
+    }
     click(cx, editor.right() - px(24.), editor.bottom() - px(8.));
     view.read_with(cx, |view, _| {
         assert!(
@@ -633,12 +746,12 @@ fn scrollbar_arrow_endcaps_step_one_row_or_default_column_and_reserved_thumb_tra
     redraw(cx);
     view.update_in(cx, |view, window, cx| {
         assert_eq!(view.editor_top_line, total - capacity);
-        assert_eq!(
-            gpui::EntityInputHandler::selected_text_range(view, false, window, cx)
-                .expect("preserved selection")
-                .range,
-            0..1
-        );
+        let selection = gpui::EntityInputHandler::selected_text_range(view, false, window, cx)
+            .expect("preserved selection");
+        assert_eq!(selection.range, 0..1);
+        assert!(!selection.reversed);
+        assert_eq!(view.editor().committed_text(), source);
+        assert!(view.editor().document().can_undo() && !view.editor().document().can_redo());
     });
     cx.dispatch_action(EditorUndo);
     assert_eq!(

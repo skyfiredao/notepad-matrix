@@ -882,7 +882,7 @@ fn status_eol_opens_existing_conversion_submenu_and_respects_read_only()
 
 #[test]
 fn menu_document_controls_keep_source_order_and_reuse_existing_commands() {
-    use notepad_matrix::menu::{DocumentControl, ViewCommand};
+    use notepad_matrix::menu::DocumentControl;
     assert_eq!(
         DocumentControl::ALL.map(|control| control.glyph()),
         ["＋", "▼", "✕"]
@@ -891,14 +891,11 @@ fn menu_document_controls_keep_source_order_and_reuse_existing_commands() {
         DocumentControl::ALL.map(|control| control.command()),
         [
             MenuCommand::File(FileCommand::New),
-            MenuCommand::View(ViewCommand::DocumentList),
+            MenuCommand::DocumentDropdown,
             MenuCommand::File(FileCommand::Close),
         ]
     );
-    assert_eq!(
-        DocumentControl::DocumentList.label(),
-        "Toggle Document List"
-    );
+    assert_eq!(DocumentControl::DocumentList.label(), "Document list");
 }
 
 #[test]

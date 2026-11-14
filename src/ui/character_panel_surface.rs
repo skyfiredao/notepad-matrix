@@ -17,14 +17,34 @@ mod tests {
 
     #[gpui::test]
     fn character_panel_selects_encoding_inserts_and_floats(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| cx.bind_keys(menu_surface::bindings()));
         let home = tempfile::tempdir().expect("isolated character preferences");
         let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
         cx.simulate_input("ab");
         cx.dispatch_action(EditorSelectAll);
-        view.update_in(cx, |view, window, cx| {
+        cx.simulate_resize(size(px(1080.), px(668.)));
+        view.update_in(cx, |view, _, _| {
             view.settings_store = Some(ConfigStore::under_home(home.path()));
-            view.toggle_character_panel(window, cx);
         });
+        let open = |cx: &mut gpui::VisualTestContext| {
+            let edit = cx.debug_bounds("edit-menu-trigger").expect("Edit menu");
+            cx.simulate_click(edit.center(), gpui::Modifiers::default());
+            cx.simulate_keystrokes("end");
+            for _ in 0..2 {
+                cx.update(|window, cx| window.draw(cx).clear(cx));
+            }
+            let popup = cx.debug_bounds("menu-popup-0").expect("Edit popup");
+            let entry = cx
+                .debug_bounds("edit-character-panel")
+                .expect("Characters entry");
+            assert!(
+                entry.top() >= popup.top() && popup.contains(&entry.center()),
+                "Characters click must be inside the visible popup: {entry:?}, popup={popup:?}"
+            );
+            cx.simulate_click(entry.center(), gpui::Modifiers::default());
+            assert!(cx.debug_bounds("character-panel").is_some());
+        };
+        open(cx);
         let picker = cx
             .debug_bounds("character-code-page")
             .expect("encoding selector");
@@ -44,9 +64,60 @@ mod tests {
             .debug_bounds("character-cell-65-2")
             .expect("character row");
         cx.simulate_click(glyph.center(), gpui::Modifiers::default());
+        let owner = view.read_with(cx, |view, _| {
+            (view.workspace.active().id(), view.workspace.active_view())
+        });
         cx.simulate_keystrokes("enter");
         view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "A")
+            assert_eq!(view.editor().committed_text(), "A");
+            assert_eq!(
+                (view.workspace.active().id(), view.workspace.active_view()),
+                owner
+            );
+        });
+        let snapshot = |view: &MatrixWindow| {
+            (
+                view.workspace.active().id(),
+                view.workspace.active_view(),
+                view.editor().committed_text(),
+                view.editor().selections(),
+                view.editor().document().can_undo(),
+                view.editor().document().can_redo(),
+                view.workspace.active().is_modified(),
+            )
+        };
+        let before = view.read_with(cx, |view, _| snapshot(view));
+        cx.simulate_click(glyph.center(), gpui::Modifiers::default());
+        view.update_in(cx, |view, window, _| {
+            assert!(view.characters.focus.is_focused(window));
+            assert_eq!(
+                snapshot(view),
+                before,
+                "single click only selects the character row"
+            );
+        });
+        let hide = cx
+            .debug_bounds("characters-hide")
+            .expect("actual Characters header hide");
+        cx.simulate_click(hide.center(), gpui::Modifiers::default());
+        assert!(cx.debug_bounds("character-panel").is_none());
+        view.update_in(cx, |view, window, _| {
+            assert_eq!(snapshot(view), before);
+            assert!(
+                view.editor_focus.is_focused(window),
+                "hiding the focused panel restores its owning editor"
+            );
+        });
+        cx.simulate_input("!");
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "A!")
+        });
+        let reopened = view.read_with(cx, |view, _| snapshot(view));
+        open(cx);
+        view.read_with(cx, |view, _| {
+            assert_eq!(snapshot(view), reopened);
+            assert_eq!(view.characters.selected, Some(65));
+            assert_eq!(view.characters.table.encoding(), "windows-1252");
         });
         view.update_in(cx, |view, window, cx| {
             view.float_panel(PanelId::Characters, window, cx)

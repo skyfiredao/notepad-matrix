@@ -24,6 +24,15 @@ additional runtime images do not require bundling another copy of their BMP inpu
 `saved.png` and `unsaved.png` preserve the original 16×16 PNG entries from
 `PowerEditor/src/icons/standard/tabbar/{saved,unsaved}.ico` at the same commit.
 
+Document-state icons follow `ScintillaComponent/DocTabView.cpp:190–205`:
+Monitoring, system read-only, application read-only, modified, then saved.
+`readonly{,-dark}.png`, `monitoring-tab{,-dark}.png`, and `unsaved-dark.png`
+preserve the original 16×16 PNG entries selected by `Notepad_plus.rc:278–291`.
+`readonly-system{,-dark}.png` losslessly converts the original 16×16 DIB32/DIB8
+pixels and ICO AND mask to PNG. `saved-dark.png` converts the source transparent
+13×13 DIB1 `icons/dark/tabbar/empty.ico`; transparency remains unchanged.
+Only containers change, without resampling or recoloring; the same license applies.
+
 `tab-pin.png` and `tab-pinned.png` preserve the 16×16 RGBA DIB entries from
 `PowerEditor/src/icons/standard/tabbar/pinTabButton{,_pinned}.ico` without
 resampling or recoloring; only the image container is converted to PNG.

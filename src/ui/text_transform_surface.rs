@@ -177,19 +177,47 @@ mod tests {
         cx.dispatch_action(EditorSelectAll);
         cx.dispatch_action(EditorTab);
         view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "\tone\n\ttwo")
+            assert_eq!(view.editor().committed_text(), "\tone\n\ttwo");
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(9),
+                    head: ByteOffset(0)
+                }
+            );
         });
         cx.dispatch_action(EditorBackTab);
         view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "one\ntwo")
+            assert_eq!(view.editor().committed_text(), "one\ntwo");
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(7),
+                    head: ByteOffset(0)
+                }
+            );
         });
         cx.dispatch_action(EditorUndo);
         view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "\tone\n\ttwo")
+            assert_eq!(view.editor().committed_text(), "\tone\n\ttwo");
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(9),
+                    head: ByteOffset(0)
+                }
+            );
         });
         cx.dispatch_action(EditorUndo);
         view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "one\ntwo")
+            assert_eq!(view.editor().committed_text(), "one\ntwo");
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(7),
+                    head: ByteOffset(0)
+                }
+            );
         });
         view.update_in(cx, |view, _, _| {
             *view.editor_mut() = EditorSession::new("    one");

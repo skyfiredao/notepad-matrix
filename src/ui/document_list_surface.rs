@@ -86,6 +86,7 @@ impl MatrixWindow {
                         .child(
                             div()
                                 .id("document-list-close")
+                                .debug_selector(|| "document-list-close".into())
                                 .role(Role::Button)
                                 .aria_label("Close Document List")
                                 .tooltip(move |_, cx| {
@@ -237,5 +238,30 @@ mod tests {
             )),
             (ViewId::Secondary, ByteOffset(1))
         );
+        let new = cx
+            .debug_bounds("toolbar-new")
+            .expect("first toolbar operation after switching pane");
+        cx.simulate_click(new.center(), gpui::Modifiers::default());
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.workspace.active_view(), ViewId::Secondary);
+            assert_eq!(view.workspace.active().id(), crate::workspace::BufferId(2));
+            assert_eq!(
+                view.workspace.view_buffer_ids(ViewId::Primary),
+                &[crate::workspace::BufferId(1)]
+            );
+            assert_eq!(
+                view.workspace.view_buffer_ids(ViewId::Secondary),
+                &[crate::workspace::BufferId(1), crate::workspace::BufferId(2)]
+            );
+            assert_eq!(view.editor().committed_text(), "");
+            for (pane, caret) in [(ViewId::Primary, 0), (ViewId::Secondary, 1)] {
+                let editor = view
+                    .workspace
+                    .editor_in_view(pane, crate::workspace::BufferId(1))
+                    .expect("original clone membership");
+                assert_eq!(editor.committed_text(), "A");
+                assert_eq!(editor.selection().head, ByteOffset(caret));
+            }
+        });
     }
 }

@@ -136,6 +136,19 @@ impl DiskFile {
         self.path = path;
     }
 
+    pub(crate) fn after_move(&self, path: &Path) -> io::Result<Self> {
+        let metadata = fs::metadata(path)?;
+        let mut file = self.clone();
+        file.path = fs::canonicalize(path)?;
+        file.read_only = metadata.permissions().readonly();
+        file.original_modified = Some(metadata.modified()?);
+        #[cfg(unix)]
+        {
+            file.identity = (metadata.dev(), metadata.ino());
+        }
+        Ok(file)
+    }
+
     pub fn is_read_only(&self) -> bool {
         self.read_only
     }

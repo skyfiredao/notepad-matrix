@@ -29,8 +29,6 @@ pub fn wheel_zoom_delta(control: bool, vertical: f32) -> Option<i32> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EditorDisplay {
     zoom: i32,
-    pub all_characters: bool,
-    pub control_characters: bool,
     pub indent_guides: bool,
     pub word_wrap: bool,
 }
@@ -39,8 +37,6 @@ impl Default for EditorDisplay {
     fn default() -> Self {
         Self {
             zoom: 0,
-            all_characters: false,
-            control_characters: true,
             indent_guides: true,
             word_wrap: false,
         }
@@ -67,38 +63,58 @@ impl EditorDisplay {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EditorSymbols {
+    pub whitespace: bool,
+    pub eol: bool,
+    pub nonprinting: bool,
+    pub controls: bool,
+}
+
+impl Default for EditorSymbols {
+    fn default() -> Self {
+        Self {
+            whitespace: false,
+            eol: false,
+            nonprinting: false,
+            controls: true,
+        }
+    }
+}
+
+impl EditorSymbols {
+    pub fn all(self) -> bool {
+        self.whitespace && self.eol && self.nonprinting && self.controls
+    }
+}
+
 pub struct DisplayRow {
     pub text: String,
+    pub representations: Vec<Range<usize>>,
     boundaries: Vec<(usize, usize)>,
 }
 
 impl DisplayRow {
-    pub fn with_controls(raw: &str, show_all: bool, show_controls: bool) -> Self {
+    pub fn with_symbols(raw: &str, symbols: EditorSymbols) -> Self {
         use crate::byte_text::{ByteUnit, ByteValue};
         if raw.is_ascii() {
-            return Self::with_bytes(raw.as_bytes(), show_all, show_controls);
+            return Self::with_bytes(raw.as_bytes(), symbols);
         }
         let units = raw.char_indices().map(|(start, character)| ByteUnit {
             range: start..start + character.len_utf8(),
             value: ByteValue::Scalar(character),
         });
-        Self::project(raw.as_bytes(), units, show_all, show_controls)
+        Self::project(raw.as_bytes(), units, symbols)
     }
 
-    pub fn with_bytes(raw: &[u8], show_all: bool, show_controls: bool) -> Self {
-        Self::project(
-            raw,
-            crate::byte_text::units(raw.iter().copied()),
-            show_all,
-            show_controls,
-        )
+    pub fn with_bytes(raw: &[u8], symbols: EditorSymbols) -> Self {
+        Self::project(raw, crate::byte_text::units(raw.iter().copied()), symbols)
     }
 
     fn project(
         raw: &[u8],
         units: impl Iterator<Item = crate::byte_text::ByteUnit>,
-        show_all: bool,
-        show_controls: bool,
+        symbols: EditorSymbols,
     ) -> Self {
         use crate::byte_text::ByteValue;
         let content = &raw[..raw
@@ -106,6 +122,7 @@ impl DisplayRow {
             .rposition(|byte| !matches!(byte, b'\r' | b'\n'))
             .map_or(0, |index| index + 1)];
         let mut text = String::new();
+        let mut representations = Vec::new();
         let mut boundaries = Vec::new();
         let mut column = 0;
         for unit in units.take_while(|unit| unit.range.end <= content.len()) {
@@ -125,11 +142,19 @@ impl DisplayRow {
                 text.extend(std::iter::repeat_n(' ', count));
                 column += count;
             } else {
-                let visible = show_all
-                    || (show_controls
-                        && (ch.is_control() || matches!(ch, '\u{2028}' | '\u{2029}')));
-                if let Some(label) = visible.then(|| control_label(ch)).flatten() {
-                    text.push_str(label);
+                let control = ch.is_control() || matches!(ch, '\u{2028}' | '\u{2029}');
+                if let Some(label) = control_label(ch) {
+                    if if control {
+                        symbols.controls
+                    } else {
+                        symbols.nonprinting
+                    } {
+                        let start = text.len();
+                        text.push_str(label);
+                        representations.push(start..text.len());
+                    } else if !control {
+                        text.push(ch);
+                    }
                 } else {
                     text.push(ch);
                 }
@@ -137,15 +162,18 @@ impl DisplayRow {
             }
         }
         boundaries.push((content.len(), text.len()));
-        if show_all {
-            text.push_str(match &raw[content.len()..] {
-                b"\r\n" => "CRLF",
-                b"\r" => "CR",
-                b"\n" => "LF",
-                _ => "",
-            });
+        if symbols.eol {
+            for byte in &raw[content.len()..] {
+                let start = text.len();
+                text.push_str(if *byte == b'\r' { "CR" } else { "LF" });
+                representations.push(start..text.len());
+            }
         }
-        Self { text, boundaries }
+        Self {
+            text,
+            representations,
+            boundaries,
+        }
     }
 
     pub fn content_len(&self) -> usize {

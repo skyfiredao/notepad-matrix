@@ -452,6 +452,9 @@ mod tests {
         cx.run_until_parked();
         let selection = view.read_with(cx, |view, _| view.editor().selection());
         let count = view.read_with(cx, |view, _| view.workspace.buffers().len());
+        let owner = view.read_with(cx, |view, _| {
+            (view.workspace.active().id(), view.workspace.active_view())
+        });
         let map = cx
             .debug_bounds("document-map-preview")
             .expect("bounded map");
@@ -476,6 +479,10 @@ mod tests {
         });
         view.read_with(cx, |view, _| {
             assert!(view.editor_top_line > clicked_top, "drag scrolls farther");
+            assert_eq!(
+                (view.workspace.active().id(), view.workspace.active_view()),
+                owner
+            );
             assert_eq!(view.editor().selection(), selection);
             assert_eq!(view.editor().committed_text(), source);
             assert!(view.editor().document().can_undo());
@@ -489,6 +496,7 @@ mod tests {
             .debug_bounds("document-map-close")
             .expect("panel close")
             .center();
+        let top = view.read_with(cx, |view, _| view.editor_top_line);
         cx.simulate_click(close, gpui::Modifiers::default());
         cx.run_until_parked();
         assert!(cx.debug_bounds("document-map-panel").is_none());
@@ -497,6 +505,21 @@ mod tests {
             assert_eq!(view.editor().selection(), selection);
             assert_eq!(view.editor().committed_text(), source);
         });
+        let reopen = cx
+            .debug_bounds("toolbar-document-map")
+            .expect("Map reopen toolbar");
+        cx.simulate_click(reopen.center(), gpui::Modifiers::default());
+        assert!(cx.debug_bounds("document-map-panel").is_some());
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                (view.workspace.active().id(), view.workspace.active_view()),
+                owner
+            );
+            assert_eq!(view.editor_top_line, top);
+            assert_eq!(view.editor().selection(), selection);
+            assert_eq!(view.editor().committed_text(), source);
+            assert!(view.editor().document().can_undo() && !view.editor().document().can_redo());
+        });
         cx.dispatch_action(EditorUndo);
         view.read_with(cx, |view, _| {
             assert_eq!(
@@ -504,6 +527,40 @@ mod tests {
                 "",
                 "one undo removes the original edit"
             );
+        });
+        let before = view.read_with(cx, |view, _| {
+            (
+                view.workspace.active().id(),
+                view.workspace.active_view(),
+                view.editor().selections(),
+                view.editor().document().can_undo(),
+                view.editor().document().can_redo(),
+                view.workspace.active().is_modified(),
+            )
+        });
+        let close = cx
+            .debug_bounds("document-map-close")
+            .expect("reopened Map Close");
+        cx.simulate_click(close.center(), gpui::Modifiers::default());
+        assert!(cx.debug_bounds("document-map-panel").is_none());
+        view.update_in(cx, |view, window, _| {
+            assert_eq!(
+                (
+                    view.workspace.active().id(),
+                    view.workspace.active_view(),
+                    view.editor().selections(),
+                    view.editor().document().can_undo(),
+                    view.editor().document().can_redo(),
+                    view.workspace.active().is_modified()
+                ),
+                before
+            );
+            assert_eq!(view.editor().committed_text(), "");
+            assert!(view.editor_focus.is_focused(window));
+        });
+        cx.simulate_input("!");
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "!")
         });
     }
 }

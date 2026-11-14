@@ -20,7 +20,7 @@ enum CloseSide {
     Right,
 }
 
-fn resolve_save_target(path: &std::path::Path) -> io::Result<PathBuf> {
+pub(super) fn resolve_save_target(path: &std::path::Path) -> io::Result<PathBuf> {
     match std::fs::canonicalize(path) {
         Ok(path) => Ok(path),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -663,8 +663,7 @@ impl MatrixWindow {
             .is_some_and(crate::recovery::RecoveryManager::snapshot_mode)
         {
             if self.synchronize_recovery(cx) {
-                self.save_search_history_on_close(cx);
-                window.remove_window();
+                self.finish_window_close(window, cx);
             } else {
                 self.cancel_native_quit();
             }
@@ -690,12 +689,20 @@ impl MatrixWindow {
             cx.notify();
         } else {
             if self.retire_recovery_on_confirmed_close(cx) {
-                self.save_search_history_on_close(cx);
-                window.remove_window();
+                self.finish_window_close(window, cx);
             } else {
                 self.cancel_native_quit();
             }
         }
+    }
+
+    fn finish_window_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.save_search_history_on_close(cx);
+        if let Some(control) = &self.native_quit {
+            control.approve();
+        }
+        window.remove_window();
+        cx.quit();
     }
 
     pub(super) fn render_close_dialog(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -902,6 +909,9 @@ impl MatrixWindow {
         }
         self.close_after_save = true;
         self.start_save(false, window, cx);
+        if self.conditional_close.is_some() && !self.file_busy {
+            self.finish_close_batch(true, window, cx);
+        }
     }
 
     pub(super) fn start_save(
@@ -1017,7 +1027,14 @@ impl MatrixWindow {
             .as_ref()
             .and_then(|file| file.path().file_name())
             .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| format!("{}.txt", self.workspace.active().name()));
+            .unwrap_or_else(|| {
+                let name = self.workspace.active().name();
+                if std::path::Path::new(&name).extension().is_some() {
+                    name
+                } else {
+                    format!("{name}.txt")
+                }
+            });
         let prompt = if needs_path {
             Some(cx.prompt_for_new_path(&directory, Some(&suggested)))
         } else {

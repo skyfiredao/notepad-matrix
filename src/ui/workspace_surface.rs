@@ -1,6 +1,17 @@
 use super::*;
 
-fn tab_style_colour(dark: bool, name: &str, attribute: &str, fallback: u32) -> u32 {
+const TAB_SCROLL_ARROW_SIZE: f32 = 17.;
+const TAB_SCROLL_ARROW_TOP: f32 = 6.;
+
+fn first_visible_tab(scroll: &gpui::ScrollHandle, count: usize) -> Option<usize> {
+    (0..count).find(|index| {
+        scroll.bounds_for_item(*index).is_some_and(|bounds| {
+            bounds.right() + scroll.offset().x > scroll.bounds().left() + px(2.)
+        })
+    })
+}
+
+pub(super) fn theme_style_colour(dark: bool, name: &str, attribute: &str, fallback: u32) -> u32 {
     crate::languages::catalog()
         .ok()
         .and_then(|catalog| {
@@ -105,6 +116,107 @@ impl Render for TabDrag {
 }
 
 impl MatrixWindow {
+    fn scroll_tabs(&mut self, pane: ViewId, forward: bool, cx: &mut Context<Self>) -> bool {
+        let scroll = if pane == self.pane {
+            &self.tab_scroll
+        } else {
+            &self.other_pane.tab_scroll
+        };
+        let viewport = scroll.bounds();
+        let offset = scroll.offset();
+        let count = self.workspace.view_buffer_ids(pane).len();
+        let Some(first) = first_visible_tab(scroll, count) else {
+            return false;
+        };
+        let target = if forward {
+            (first + 1).min(count - 1)
+        } else {
+            first.saturating_sub(1)
+        };
+        if let Some(bounds) = scroll.bounds_for_item(target) {
+            let x =
+                (viewport.left() + px(2.) - bounds.left()).clamp(-scroll.max_offset().x, px(0.));
+            if x == offset.x {
+                return false;
+            }
+            scroll.set_offset(gpui::point(x, offset.y));
+            cx.notify();
+            return true;
+        }
+        false
+    }
+
+    fn tab_wheel(
+        &mut self,
+        pane: ViewId,
+        draggable: bool,
+        event: &gpui::ScrollEvent,
+        original_offset: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let modified = event.modifiers.control || event.modifiers.shift;
+        if !modified && (self.tab_vertical || self.tab_multiline) {
+            return;
+        }
+        let delta = event.delta.pixel_delta(px(1.));
+        let wheel = if event.modifiers.shift && delta.y == px(0.) {
+            delta.x
+        } else {
+            delta.y
+        };
+        if (delta.x != px(0.) && !event.modifiers.shift)
+            || wheel == px(0.)
+            || !f32::from(wheel).is_finite()
+        {
+            return;
+        }
+        cx.stop_propagation();
+        if modified {
+            let scroll = if pane == self.pane {
+                &self.tab_scroll
+            } else {
+                &self.other_pane.tab_scroll
+            };
+            scroll.set_offset(original_offset);
+        }
+        if cx.has_active_drag() {
+            return;
+        }
+        let forward = wheel < px(0.);
+        if !modified {
+            self.scroll_tabs(pane, forward, cx);
+            return;
+        }
+        if !self.focus_editor_pane(pane, window, cx) {
+            return;
+        }
+        let count = self.workspace.view_buffer_ids(pane).len();
+        let current = self.workspace.active_index();
+        let target = if event.modifiers.control && event.modifiers.shift {
+            if forward { count - 1 } else { 0 }
+        } else if forward {
+            (current + 1) % count
+        } else {
+            (current + count - 1) % count
+        };
+        if event.modifiers.shift && !event.modifiers.control && draggable {
+            if let Err(error) = self
+                .workspace
+                .move_tab(self.workspace.active().id(), target)
+            {
+                self.notify_editor_error(error.to_string(), cx);
+                return;
+            }
+            self.tab_scroll.scroll_to_item(target);
+            self.synchronize_recovery(cx);
+            cx.notify();
+        } else {
+            let id = self.workspace.view_buffer_ids(pane)[target];
+            self.activate_buffer(id, window, cx);
+        }
+    }
+
     pub(super) fn drop_document_tab(
         &mut self,
         drag: &TabDrag,
@@ -293,20 +405,20 @@ impl MatrixWindow {
         let inactive = if self.dark {
             0x202020
         } else {
-            tab_style_colour(false, "Inactive tabs", "bgColor", 0xc0c0c0)
+            theme_style_colour(false, "Inactive tabs", "bgColor", 0xc0c0c0)
         };
         let inactive_text = if self.dark {
             0xc0c0c0
         } else {
-            tab_style_colour(false, "Inactive tabs", "fgColor", 0x808080)
+            theme_style_colour(false, "Inactive tabs", "fgColor", 0x808080)
         };
         let active_text = if self.dark {
             0xe0e0e0
         } else {
-            tab_style_colour(false, "Active tab text", "fgColor", 0x000000)
+            theme_style_colour(false, "Active tab text", "fgColor", 0x000000)
         };
         let button_size = if self.dark { 16. } else { 11. };
-        let indicator = tab_style_colour(
+        let indicator = theme_style_colour(
             self.dark,
             if focused {
                 "Active tab focused indicator"
@@ -327,7 +439,51 @@ impl MatrixWindow {
         let text_system = cx.text_system();
         let font = text_system.resolve_font(&gpui::font("Helvetica"));
         let text_descent = f32::from(text_system.descent(font, px(14.))).ceil() as i32;
-        div()
+        let space_width = f32::from(text_system.layout_width(font, px(14.), ' ')).round();
+        let scroll = self.tab_scroll.clone();
+        let previous_size = scroll.bounds().size;
+        let previous_offset = scroll.offset();
+        let wheel_offset = Rc::new(std::cell::Cell::new(previous_offset));
+        let captured_offset = wheel_offset.clone();
+        let inner_offset = wheel_offset.clone();
+        let captured_scroll = scroll.clone();
+        let capture_scroll = gpui::canvas(
+            |_, _, _| (),
+            move |_, _, window, _| {
+                window.on_mouse_event(move |_: &gpui::ScrollEvent, phase, _, _| {
+                    if phase == gpui::DispatchPhase::Capture {
+                        captured_offset.set(captured_scroll.offset());
+                    }
+                });
+            },
+        )
+        .absolute()
+        .size(px(0.));
+        let render_owner = cx.entity();
+        let tabs = div()
+            .on_children_prepainted(move |_, window, _| {
+                if scroll.bounds().size != previous_size {
+                    let scroll = scroll.clone();
+                    let owner = render_owner.clone();
+                    window.on_next_frame(move |_, cx| {
+                        owner.update(cx, |view, cx| {
+                            if let Some(active) = view.workspace.active_id_in_view(pane)
+                                && let Some(index) = view
+                                    .workspace
+                                    .view_buffer_ids(pane)
+                                    .iter()
+                                    .position(|id| *id == active)
+                            {
+                                scroll.scroll_to_item(index);
+                                cx.notify();
+                            }
+                        });
+                    });
+                } else if scroll.offset() != previous_offset {
+                    let owner = render_owner.clone();
+                    window.on_next_frame(move |_, cx| owner.update(cx, |_, cx| cx.notify()));
+                }
+            })
             .id(if pane == crate::workspace::ViewId::Primary {
                 "buffer-tabs"
             } else {
@@ -349,12 +505,19 @@ impl MatrixWindow {
                 tabs.flex_col().w(px(160.)).h_full().overflow_y_scroll()
             })
             .when(!vertical && !multiline, |tabs| {
-                tabs.w_full().h(px(27.)).overflow_x_scroll()
+                tabs.flex_1()
+                    .min_w(px(0.))
+                    .h(px(27.))
+                    .overflow_x_scroll()
+                    .restrict_scroll_to_axis()
             })
             .when(!vertical && multiline, |tabs| {
                 tabs.w_full().flex_wrap().h_auto().overflow_y_scroll()
             })
             .track_scroll(&self.tab_scroll)
+            .on_scroll(cx.listener(move |view, event, window, cx| {
+                view.tab_wheel(pane, draggable, event, inner_offset.get(), window, cx);
+            }))
             .px(px(2.))
             .bg(rgb(background))
             .text_size(px(14.))
@@ -375,6 +538,46 @@ impl MatrixWindow {
                     .map(|buffer| {
                         let id = buffer.id();
                         let name = buffer.name();
+                        let limit = self.tab_compact_label_len;
+                        let caption = if limit == 0 || name.encode_utf16().count() <= limit {
+                            name.clone()
+                        } else {
+                            let mut caption = String::new();
+                            let mut length = 0;
+                            for ch in name.chars() {
+                                length += ch.len_utf16();
+                                if length > limit.saturating_sub(3) {
+                                    break;
+                                }
+                                caption.push(ch);
+                            }
+                            caption.push_str(&".".repeat(limit.min(3)));
+                            caption
+                        };
+                        let tab_height: f32 = if vertical {
+                            27.
+                        } else if id == active {
+                            24.
+                        } else {
+                            20.
+                        };
+                        let caption_pin_gap = if !dark && !vertical {
+                            let drawing_height = if id == active {
+                                tab_height - 6.
+                            } else {
+                                tab_height
+                            };
+                            let image_inset = ((drawing_height - 16. + 1.) / 2.).floor();
+                            let button_inset = ((drawing_height - button_size + 1.) / 2.).floor();
+                            3. * 16. + if id == active { -4. } else { 4. }
+                                - image_inset
+                                - button_inset
+                                - 2. * button_size
+                                - 8.
+                                - space_width
+                        } else {
+                            0.
+                        };
                         let dirty = buffer.is_modified();
                         let pinned = buffer.is_pinned();
                         let pin_icon = match (pinned, self.dark) {
@@ -426,16 +629,39 @@ impl MatrixWindow {
                             } else {
                                 format!("Tab color {}", color + 1)
                             };
-                            tab_style_colour(dark, &name, "bgColor", colors[usize::from(color)])
+                            theme_style_colour(dark, &name, "bgColor", colors[usize::from(color)])
                         });
                         let inactive_background =
                             color.map_or(inactive, |colour| tab_colour(colour, dark, false, false));
                         let hover_background = tab_colour(inactive_background, dark, false, true);
-                        let icon = if dirty {
-                            super::toolbar_icons::ToolbarIcon::ModifiedDocument
+                        let (icon, dark_icon) = if buffer.is_monitoring() {
+                            (
+                                ToolbarIcon::MonitoringDocument,
+                                ToolbarIcon::MonitoringDocumentDark,
+                            )
+                        } else if buffer
+                            .disk_file
+                            .as_ref()
+                            .is_some_and(crate::files::DiskFile::is_read_only)
+                        {
+                            (
+                                ToolbarIcon::SystemReadOnlyDocument,
+                                ToolbarIcon::SystemReadOnlyDocumentDark,
+                            )
+                        } else if buffer.is_user_read_only() {
+                            (
+                                ToolbarIcon::ReadOnlyDocument,
+                                ToolbarIcon::ReadOnlyDocumentDark,
+                            )
+                        } else if dirty {
+                            (
+                                ToolbarIcon::ModifiedDocument,
+                                ToolbarIcon::ModifiedDocumentDark,
+                            )
                         } else {
-                            super::toolbar_icons::ToolbarIcon::SavedDocument
+                            (ToolbarIcon::SavedDocument, ToolbarIcon::SavedDocumentDark)
                         };
+                        let icon = if dark { dark_icon } else { icon };
                         div()
                             .id(("buffer-tab", id.0))
                             .group(tab_group.clone())
@@ -455,13 +681,7 @@ impl MatrixWindow {
                                 "Unmodified document"
                             })
                             .relative()
-                            .h(px(if vertical {
-                                27.
-                            } else if id == active {
-                                24.
-                            } else {
-                                20.
-                            }))
+                            .h(px(tab_height))
                             .mt(px(if vertical {
                                 0.
                             } else if id == active {
@@ -496,6 +716,7 @@ impl MatrixWindow {
                                 if view.focus_editor_pane(pane, window, cx) {
                                     view.activate_buffer(id, window, cx);
                                 }
+                                cx.stop_propagation();
                             }))
                             .on_mouse_down(
                                 MouseButton::Left,
@@ -504,6 +725,7 @@ impl MatrixWindow {
                                     if view.focus_editor_pane(pane, window, cx) {
                                         view.activate_buffer(id, window, cx);
                                     }
+                                    cx.stop_propagation();
                                 }),
                             )
                             .when(draggable, |tab| {
@@ -527,7 +749,7 @@ impl MatrixWindow {
                                     cx,
                                 );
                             }))
-                            .on_mouse_down(
+                            .on_mouse_up(
                                 MouseButton::Middle,
                                 cx.listener(move |view, _, window, cx| {
                                     if view.focus_editor_pane(pane, window, cx)
@@ -578,13 +800,16 @@ impl MatrixWindow {
                                     .when(!vertical, |caption| {
                                         caption.flex_shrink_0().whitespace_nowrap()
                                     })
+                                    .when(!vertical && !dark, |caption| {
+                                        caption.mr(px(caption_pin_gap))
+                                    })
                                     .line_height(px(20.))
                                     .when(!vertical, |caption| {
                                         caption.relative().top(px(2.
                                             + ((text_descent + i32::from(dark || id != active)) / 2)
                                                 as f32))
                                     })
-                                    .child(format!(" {name}")),
+                                    .child(format!(" {caption}")),
                             )
                             .child(
                                 div()
@@ -633,7 +858,14 @@ impl MatrixWindow {
                                             .group_hover(tab_group.clone(), |style| {
                                                 style.opacity(1.)
                                             })
-                                            .child(gpui::img(pin_icon.image()).size_full())
+                                            .child(
+                                                div()
+                                                    .size_full()
+                                                    .group_hover(pin_group.clone(), |style| {
+                                                        style.opacity(0.)
+                                                    })
+                                                    .child(gpui::img(pin_icon.image()).size_full()),
+                                            )
                                             .child(
                                                 div()
                                                     .absolute()
@@ -738,6 +970,178 @@ impl MatrixWindow {
                             )
                     }),
             )
+            .into_any_element();
+        if vertical || multiline {
+            return div()
+                .relative()
+                .flex()
+                .flex_col()
+                .flex_shrink_0()
+                .when(vertical, |row| row.w(px(160.)).h_full())
+                .when(!vertical, |row| row.w_full())
+                .child(tabs)
+                .child(capture_scroll)
+                .into_any_element();
+        }
+        let overflowing = self.tab_overflow[pane as usize];
+        let scroll = self.tab_scroll.clone();
+        let observed_scroll = scroll.clone();
+        let owner = cx.entity();
+        let arrows = [false, true].map(|forward| {
+            let enabled = if forward {
+                scroll.offset().x > -scroll.max_offset().x
+                    && first_visible_tab(&scroll, self.workspace.view_buffer_ids(pane).len())
+                        .is_some_and(|index| index + 1 < self.workspace.view_buffer_ids(pane).len())
+            } else {
+                scroll.offset().x < px(0.)
+            };
+            div()
+                .id(("tab-scroll-arrow", pane as usize * 2 + usize::from(forward)))
+                .role(Role::Button)
+                .aria_label(if forward {
+                    "向右滚动标签"
+                } else {
+                    "向左滚动标签"
+                })
+                .a11y_synthetic_children(move |builder| {
+                    if !enabled {
+                        builder.parent_node().set_disabled();
+                    }
+                })
+                .w(px(TAB_SCROLL_ARROW_SIZE))
+                .h(px(TAB_SCROLL_ARROW_SIZE))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .border_1()
+                .border_color(rgb(0xa0a0a0))
+                .bg(rgb(0xf0f0f0))
+                .text_color(rgb(if enabled { 0x000000 } else { 0xa0a0a0 }))
+                .text_size(px(9.))
+                .child(if forward { "▶" } else { "◀" })
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|view, _, _, _| view.tab_scroll_repeat = None),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    cx.listener(|view, _, _, _| view.tab_scroll_repeat = None),
+                )
+                .when(enabled, |button| {
+                    button
+                        .hover(|style| style.bg(rgb(0xe5f1fb)).border_color(rgb(0x0078d7)))
+                        .active(|style| style.bg(rgb(0xcce4f7)))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |view, _, window, cx| {
+                                view.scroll_tabs(pane, forward, cx);
+                                let scroll = if pane == view.pane {
+                                    view.tab_scroll.clone()
+                                } else {
+                                    view.other_pane.tab_scroll.clone()
+                                };
+                                let executor = cx.background_executor().clone();
+                                view.tab_scroll_repeat =
+                                    Some(cx.spawn_in(window, async move |view, cx| {
+                                        executor.timer(std::time::Duration::from_millis(500)).await;
+                                        loop {
+                                            let moved = view.update_in(cx, |view, window, cx| {
+                                                if !window.is_window_active()
+                                                    || !view.tab_overflow[pane as usize]
+                                                    || view.tab_multiline
+                                                    || view.tab_vertical
+                                                    || view
+                                                        .workspace
+                                                        .active_id_in_view(pane)
+                                                        .is_none()
+                                                    || view.menu_bar.mode() != MenuMode::Closed
+                                                    || view.file_busy
+                                                    || view.close_dialog
+                                                    || view.save_all_dialog
+                                                    || view.reload_target.is_some()
+                                                {
+                                                    return false;
+                                                }
+                                                let bounds = scroll.bounds();
+                                                let arrow = Bounds::new(
+                                                    gpui::point(
+                                                        bounds.right()
+                                                            + px(if forward {
+                                                                TAB_SCROLL_ARROW_SIZE
+                                                            } else {
+                                                                0.
+                                                            }),
+                                                        bounds.top() + px(TAB_SCROLL_ARROW_TOP),
+                                                    ),
+                                                    size(
+                                                        px(TAB_SCROLL_ARROW_SIZE),
+                                                        px(TAB_SCROLL_ARROW_SIZE),
+                                                    ),
+                                                );
+                                                !arrow.contains(&window.mouse_position())
+                                                    || view.scroll_tabs(pane, forward, cx)
+                                            });
+                                            if !matches!(moved, Ok(true)) {
+                                                break;
+                                            }
+                                            executor
+                                                .timer(std::time::Duration::from_millis(50))
+                                                .await;
+                                        }
+                                    }));
+                                cx.stop_propagation();
+                            }),
+                        )
+                        .on_click(cx.listener(move |view, event, _, cx| {
+                            if !matches!(event, gpui::ClickEvent::Mouse(_)) {
+                                view.scroll_tabs(pane, forward, cx);
+                            }
+                            cx.stop_propagation();
+                        }))
+                })
+        });
+        div()
+            .on_children_prepainted(move |children, window, _| {
+                let width = children
+                    .iter()
+                    .map(|bounds| bounds.size.width)
+                    .fold(px(0.), |sum, width| sum + width);
+                let overflow =
+                    observed_scroll.bounds().size.width + observed_scroll.max_offset().x > width;
+                if overflow != overflowing {
+                    let owner = owner.clone();
+                    window.on_next_frame(move |_, cx| {
+                        owner.update(cx, |view, cx| {
+                            if view.tab_overflow[pane as usize] != overflow {
+                                view.tab_overflow[pane as usize] = overflow;
+                                cx.notify();
+                            }
+                        });
+                    });
+                }
+            })
+            .flex()
+            .relative()
+            .w_full()
+            .h(px(27.))
+            .flex_shrink_0()
+            .child(tabs)
+            .child(capture_scroll)
+            .on_scroll(
+                cx.listener(move |view, event: &gpui::ScrollEvent, window, cx| {
+                    view.tab_wheel(pane, draggable, event, wheel_offset.get(), window, cx);
+                }),
+            )
+            .when(overflowing, |row| {
+                row.child(
+                    div()
+                        .flex()
+                        .flex_shrink_0()
+                        .mt(px(TAB_SCROLL_ARROW_TOP))
+                        .children(arrows),
+                )
+            })
             .into_any_element()
     }
 }
@@ -777,6 +1181,61 @@ mod tests {
             selected.left() >= strip.left() && selected.right() <= strip.right(),
             "source WindowsDlg::doSort reactivates and reveals the selected document: {selected:?}, {strip:?}"
         );
+        cx.simulate_input("moved");
+        let selection = view.read_with(cx, |view, _| view.editor().selections());
+        let target = cx
+            .debug_bounds("buffer-tab-14")
+            .expect("visible drag target");
+        let origin = gpui::point(selected.left() + px(35.), selected.center().y);
+        let destination = gpui::point(target.left() + px(35.), target.center().y);
+        let windows = cx.windows().len();
+        cx.simulate_event(gpui::MouseDownEvent {
+            position: origin,
+            button: MouseButton::Left,
+            ..Default::default()
+        });
+        cx.simulate_mouse_move(
+            origin + gpui::point(px(12.), px(0.)),
+            Some(MouseButton::Left),
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            destination,
+            Some(MouseButton::Left),
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_event(gpui::MouseUpEvent {
+            position: destination,
+            button: MouseButton::Left,
+            ..Default::default()
+        });
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.workspace.active().id(), BufferId(15));
+            assert_eq!(
+                &view.workspace.view_buffer_ids(view.pane)[..2],
+                &[BufferId(14), BufferId(15)]
+            );
+            assert_eq!(view.editor().committed_text(), "moved");
+            assert_eq!(view.editor().selections(), selection);
+            assert!(view.editor().document().can_undo() && view.workspace.active().is_modified());
+            let other = view
+                .workspace
+                .buffers()
+                .iter()
+                .find(|buffer| buffer.id() == BufferId(14))
+                .expect("unchanged drop target");
+            assert_eq!(other.editor.committed_text(), "");
+            assert!(!other.editor.document().can_undo() && !other.is_modified());
+        });
+        let moved = cx.debug_bounds("buffer-tab-15").expect("moved tab");
+        assert!(moved.left() >= strip.left() && moved.right() <= strip.right());
+        assert_eq!(cx.windows().len(), windows);
+        assert!(
+            !cx.did_prompt_for_paths() && !cx.did_prompt_for_new_path() && !cx.has_pending_prompt()
+        );
+        cx.dispatch_action(EditorUndo);
+        view.read_with(cx, |view, _| assert_eq!(view.editor().committed_text(), ""));
     }
 
     #[gpui::test]
@@ -805,7 +1264,35 @@ mod tests {
             view.editor_mut().insert_text("temporary edit").unwrap();
             assert!(view.editor_mut().undo());
         });
-        cx.dispatch_action(PinCurrentTab);
+        let click_pin = |cx: &mut gpui::VisualTestContext, pinned: bool| {
+            let position = cx
+                .debug_bounds("buffer-tab-pin-0-15")
+                .expect("target pin control")
+                .center();
+            let windows = cx.windows().len();
+            cx.simulate_event(gpui::MouseDownEvent {
+                position,
+                button: MouseButton::Left,
+                ..Default::default()
+            });
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.workspace.active().id(), BufferId(15));
+                assert_eq!(view.workspace.buffers().len(), 15);
+                assert_eq!(view.workspace.active().is_pinned(), pinned);
+            });
+            assert_eq!(cx.windows().len(), windows);
+            cx.simulate_event(gpui::MouseUpEvent {
+                position,
+                button: MouseButton::Left,
+                ..Default::default()
+            });
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.workspace.active().is_pinned(), !pinned);
+                assert_eq!(view.workspace.buffers().len(), 15);
+            });
+            assert_eq!(cx.windows().len(), windows);
+        };
+        click_pin(cx, false);
         cx.run_until_parked();
         let selected = cx.debug_bounds("buffer-tab-15").unwrap();
         assert!(
@@ -826,7 +1313,7 @@ mod tests {
             cx.dispatch_action(PinCurrentTab);
         }
         cx.dispatch_action(NextBuffer);
-        cx.dispatch_action(PinCurrentTab);
+        click_pin(cx, true);
         cx.run_until_parked();
         let selected = cx.debug_bounds("buffer-tab-15").unwrap();
         assert!(
@@ -924,6 +1411,32 @@ mod tests {
             capture(&mut app) == normal,
             "source restores normal close artwork before mouse up"
         );
+        app.update_window(handle.into(), |_, window, cx| {
+            window.dispatch_event(
+                gpui::PlatformInput::MouseUp(gpui::MouseUpEvent {
+                    position: gpui::point(px(40.), px(90.)),
+                    button: MouseButton::Left,
+                    ..Default::default()
+                }),
+                cx,
+            );
+            window.draw(cx).clear(cx);
+        })
+        .unwrap();
+        app.run_until_parked();
+        assert_eq!(
+            capture(&mut app),
+            normal,
+            "outside release keeps normal artwork"
+        );
+        handle
+            .read_with(&app, |view, _| {
+                assert_eq!(view.workspace.buffers().len(), 1);
+                assert_eq!(view.workspace.active().id(), BufferId(1));
+                assert_eq!(view.editor().committed_text(), "");
+                assert!(!view.workspace.active().is_modified());
+            })
+            .unwrap();
     }
 
     #[gpui::test]
@@ -1124,6 +1637,751 @@ mod tests {
             image.get_pixel(450 * scale, 81 * scale).0[..3],
             [250, 170, 60]
         );
+        let files = tempfile::tempdir().expect("three named tab states");
+        let mut app = gpui::HeadlessAppContext::with_platform(
+            std::sync::Arc::new(gpui::NoopTextSystem),
+            std::sync::Arc::new(()),
+            gpui_platform::current_headless_renderer,
+        );
+        for dark in [false, true] {
+            for (name, text) in [("a.txt", "A"), ("b.txt", "A\t中😀\r\nZ"), ("c.txt", "C")] {
+                std::fs::write(files.path().join(name), text).expect("saved tab fixture");
+            }
+            let icons = app
+                .open_window(size(px(1080.), px(668.)), |window, cx| {
+                    cx.new(|cx| {
+                        let mut view = MatrixWindow::new(dark, window, cx);
+                        let empty = view.workspace.active().id();
+                        for name in ["a.txt", "b.txt", "c.txt"] {
+                            let (file, text) =
+                                crate::files::DiskFile::load_utf8(&files.path().join(name))
+                                    .expect("named tab source");
+                            view.workspace
+                                .open_buffer(file, &text)
+                                .expect("tab document");
+                        }
+                        view.workspace
+                            .close_buffer(empty, crate::workspace::CloseDisposition::IfUnmodified)
+                            .expect("remove unused fixture tab");
+                        view.workspace
+                            .set_pinned(BufferId(2), true)
+                            .expect("pinned first document");
+                        view.reset_active_view(window, cx);
+                        view
+                    })
+                })
+                .expect("tab state scene");
+            let capture_icon = |app: &mut gpui::HeadlessAppContext| {
+                for _ in 0..3 {
+                    app.update_window(icons.into(), |_, window, cx| window.draw(cx).clear(cx))
+                        .expect("draw source tab state");
+                    app.run_until_parked();
+                }
+                let origin = app
+                    .update_window(icons.into(), |_, window, _| {
+                        let colour: gpui::Background =
+                            rgb(if dark { 0x80d4b2 } else { 0xfaaa3c }).into();
+                        window
+                            .painted_quads()
+                            .iter()
+                            .find(|quad| {
+                                quad.background == colour
+                                    && quad.bounds.size.height
+                                        == px(4.).scale(window.scale_factor())
+                            })
+                            .expect("source active indicator locates rendered tab")
+                            .bounds
+                            .origin
+                    })
+                    .expect("rendered active tab");
+                let image = app
+                    .capture_screenshot(icons.into())
+                    .expect("actual tab artwork");
+                let scale = image.width() / 1080;
+                let x = origin.x.as_f32() as u32 + 5 * scale;
+                let y = origin.y.as_f32() as u32 + 3 * scale;
+                assert!(x + 16 * scale <= image.width() && y + 16 * scale <= image.height());
+                let mut pixels = Vec::new();
+                for dy in 0..16 * scale {
+                    for dx in 0..16 * scale {
+                        pixels.push(image.get_pixel(x + dx, y + dy).0);
+                    }
+                }
+                pixels
+            };
+            let saved = capture_icon(&mut app);
+            icons
+                .update(&mut app, |view, _, cx| {
+                    assert_eq!(view.workspace.active().id(), BufferId(4));
+                    view.workspace.active_mut().set_user_read_only(true);
+                    cx.notify();
+                })
+                .expect("application readonly fixture");
+            let readonly = capture_icon(&mut app);
+            assert!(
+                readonly != saved,
+                "readonly tab must paint its distinct source document artwork, dark={dark}"
+            );
+            if dark {
+                assert!(
+                    readonly.iter().any(|pixel| pixel[..3] == [222, 222, 222]),
+                    "source dark readonly opaque fill"
+                );
+            }
+            let position = app
+                .update_window(icons.into(), |_, window, _| {
+                    let colour: gpui::Background =
+                        rgb(if dark { 0x202020 } else { 0xc0c0c0 }).into();
+                    let scale = window.scale_factor();
+                    let mut tabs = window
+                        .painted_quads()
+                        .into_iter()
+                        .filter(|quad| {
+                            quad.background == colour
+                                && quad.bounds.size.height == px(20.).scale(scale)
+                                && quad.bounds.origin.y >= px(76.).scale(scale)
+                                && quad.bounds.origin.y < px(104.).scale(scale)
+                        })
+                        .collect::<Vec<_>>();
+                    tabs.sort_by(|left, right| {
+                        left.bounds
+                            .origin
+                            .x
+                            .partial_cmp(&right.bounds.origin.x)
+                            .expect("finite tab bounds")
+                    });
+                    let center = tabs[1].bounds.center();
+                    gpui::point(px(center.x.as_f32() / scale), px(center.y.as_f32() / scale))
+                })
+                .expect("second inactive tab");
+            app.update_window(icons.into(), |_, window, cx| {
+                window.dispatch_event(
+                    gpui::PlatformInput::MouseDown(gpui::MouseDownEvent {
+                        position,
+                        button: MouseButton::Left,
+                        ..Default::default()
+                    }),
+                    cx,
+                );
+                window.dispatch_event(
+                    gpui::PlatformInput::MouseUp(gpui::MouseUpEvent {
+                        position,
+                        button: MouseButton::Left,
+                        ..Default::default()
+                    }),
+                    cx,
+                );
+            })
+            .expect("activate second named tab");
+            let saved = capture_icon(&mut app);
+            if dark {
+                assert!(
+                    saved.iter().enumerate().all(|(index, pixel)| pixel[..3]
+                        == if index < (16 * scale * scale) as usize {
+                            [128, 212, 178]
+                        } else {
+                            [56, 56, 56]
+                        }),
+                    "source saved dark icon preserves the underlying indicator and tab body"
+                );
+            }
+            icons
+                .update(&mut app, |view, window, cx| {
+                    assert_eq!(view.workspace.active().id(), BufferId(3));
+                    gpui::EntityInputHandler::replace_text_in_range(
+                        view,
+                        Some(8..8),
+                        "X",
+                        window,
+                        cx,
+                    );
+                })
+                .expect("actual native edit of second document");
+            assert!(
+                capture_icon(&mut app) != saved,
+                "edit paints modified source artwork"
+            );
+            let capture_status = |app: &mut gpui::HeadlessAppContext, state: &str| {
+                for _ in 0..3 {
+                    app.update_window(icons.into(), |_, window, cx| window.draw(cx).clear(cx))
+                        .expect("draw visible status transition");
+                    app.run_until_parked();
+                }
+                let file = tempfile::Builder::new()
+                    .prefix(&format!("113-{state}-"))
+                    .suffix(".png")
+                    .tempfile()
+                    .expect("private status artifact");
+                let (_, path) = file.keep().expect("retain unique status image");
+                app.capture_screenshot(icons.into())
+                    .expect("native text status pixels")
+                    .save(path)
+                    .expect("save private status image");
+            };
+            if !dark {
+                capture_status(&mut app, "input");
+            }
+            app.update_window(icons.into(), |_, window, cx| {
+                let position = gpui::point(px(59.5), px(63.5));
+                window.dispatch_event(
+                    gpui::PlatformInput::MouseDown(gpui::MouseDownEvent {
+                        position,
+                        button: MouseButton::Left,
+                        ..Default::default()
+                    }),
+                    cx,
+                );
+                window.dispatch_event(
+                    gpui::PlatformInput::MouseUp(gpui::MouseUpEvent {
+                        position,
+                        button: MouseButton::Left,
+                        ..Default::default()
+                    }),
+                    cx,
+                );
+            })
+            .expect("actual Save route");
+            assert!(
+                capture_icon(&mut app) == saved,
+                "Save restores same document artwork"
+            );
+            assert_eq!(
+                std::fs::read(files.path().join("b.txt")).expect("saved tab document"),
+                "A\t中😀\r\nZX".as_bytes()
+            );
+            icons
+                .read_with(&app, |view, _| {
+                    assert_eq!(view.workspace.buffers().len(), 3);
+                    assert_eq!(view.workspace.active().id(), BufferId(3));
+                    assert!(!view.workspace.active().is_modified());
+                    assert!(view.workspace.buffers()[0].is_pinned());
+                    assert_eq!(view.workspace.buffers()[0].editor.committed_text(), "A");
+                    assert_eq!(view.workspace.buffers()[2].editor.committed_text(), "C");
+                    assert!(view.workspace.buffers()[2].is_user_read_only());
+                })
+                .expect("all tab states retain exact document identity");
+            let unchanged = |view: &MatrixWindow| {
+                (
+                    view.workspace.active().id(),
+                    view.workspace.active_view(),
+                    view.workspace
+                        .buffers()
+                        .iter()
+                        .map(|buffer| {
+                            (
+                                buffer.id(),
+                                buffer.editor.committed_text(),
+                                buffer.editor.selections(),
+                                buffer.editor.document().can_undo(),
+                                buffer.editor.document().can_redo(),
+                                buffer.is_modified(),
+                                buffer.is_pinned(),
+                                buffer.is_user_read_only(),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            };
+            let before = icons
+                .read_with(&app, |view, _| unchanged(view))
+                .expect("tab hover owner baseline");
+            if !dark {
+                app.update_window(icons.into(), |_, window, cx| {
+                    window.dispatch_action(Box::new(OpenEditMenu), cx)
+                })
+                .expect("actual Edit root for initial EOL flags");
+                for _ in 0..3 {
+                    app.update_window(icons.into(), |_, window, cx| window.draw(cx).clear(cx))
+                        .expect("draw Edit menu");
+                    app.run_until_parked();
+                }
+                app.update_window(icons.into(), |_, window, cx| {
+                    window.dispatch_event(
+                        gpui::PlatformInput::KeyDown(gpui::KeyDownEvent {
+                            keystroke: gpui::Keystroke::parse("e").expect("source EOL mnemonic"),
+                            is_held: false,
+                            prefer_character_input: false,
+                        }),
+                        cx,
+                    );
+                })
+                .expect("native EOL mnemonic");
+                capture_status(&mut app, "eol-initial-flags");
+                let popup = app
+                    .update_window(icons.into(), |_, window, _| {
+                        window
+                            .painted_quads()
+                            .iter()
+                            .find(|quad| {
+                                quad.bounds.size.width == px(240.).scale(window.scale_factor())
+                                    && quad.bounds.size.height
+                                        == px(74.).scale(window.scale_factor())
+                                    && quad.background == rgb(0xf0f0f0).into()
+                            })
+                            .expect("actual three-row EOL popup")
+                            .bounds
+                    })
+                    .expect("rendered EOL submenu region");
+                let image = app
+                    .capture_screenshot(icons.into())
+                    .expect("actual EOL marker gutter");
+                let scale = image.width() / 1080;
+                let left = popup.left().as_f32() as u32;
+                let top = popup.top().as_f32() as u32;
+                for y in 1..25 * scale {
+                    let background = image.get_pixel(left + 4 * scale, top + y).0;
+                    for x in 9 * scale..21 * scale {
+                        assert_eq!(
+                            image.get_pixel(left + x, top + y).0,
+                            background,
+                            "source current EOL has no check glyph"
+                        );
+                    }
+                }
+                app.update_window(icons.into(), |_, window, cx| {
+                    window.dispatch_action(Box::new(MenuEscape), cx);
+                    window.dispatch_action(Box::new(MenuEscape), cx);
+                    window.dispatch_action(Box::new(MenuEscape), cx);
+                })
+                .expect("dismiss source presentation without conversion");
+                icons
+                    .update(&mut app, |view, window, _| {
+                        assert_eq!(view.menu_bar.mode(), MenuMode::Closed);
+                        assert!(view.editor_focus.is_focused(window));
+                    })
+                    .expect("all normal submenu layers dismissed to the editor");
+                icons
+                    .read_with(&app, |view, _| assert_eq!(unchanged(view), before))
+                    .expect("menu presentation preserves all document owners");
+                app.update_window(icons.into(), |_, window, cx| {
+                    window.dispatch_action(Box::new(OpenEncodingMenu), cx)
+                })
+                .expect("actual Encoding root");
+                capture_status(&mut app, "encoding-initial-flags");
+                let popup = app
+                    .update_window(icons.into(), |_, window, _| {
+                        window
+                            .painted_quads()
+                            .iter()
+                            .find(|quad| {
+                                quad.bounds.size.width == px(240.).scale(window.scale_factor())
+                                    && quad.bounds.size.height
+                                        > px(100.).scale(window.scale_factor())
+                                    && quad.background == rgb(0xf0f0f0).into()
+                            })
+                            .expect("actual Encoding popup region")
+                            .bounds
+                    })
+                    .expect("rendered encoding marker fields");
+                let image = app
+                    .capture_screenshot(icons.into())
+                    .expect("actual encoding check markers");
+                let scale = image.width() / 1080;
+                let left = popup.left().as_f32() as u32;
+                let top = popup.top().as_f32() as u32;
+                for row in 0..4 {
+                    let mut ink = false;
+                    for y in (1 + row * 24) * scale..(25 + row * 24) * scale {
+                        let background = image.get_pixel(left + 4 * scale, top + y).0;
+                        for x in 9 * scale..21 * scale {
+                            ink |= image.get_pixel(left + x, top + y).0 != background;
+                        }
+                    }
+                    assert!(
+                        !ink || row == 0,
+                        "non-current source Unicode encoding choices have no marker"
+                    );
+                }
+                icons
+                    .read_with(&app, |view, _| {
+                        assert_eq!(
+                            view.workspace.active().format(),
+                            crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Plain)
+                        );
+                        assert_eq!(
+                            view.menu_bar.definitions()[view.menu_bar.active_root()].selector,
+                            "encoding-menu-trigger"
+                        );
+                        assert_eq!(unchanged(view), before);
+                    })
+                    .expect("encoding marker belongs to unchanged current document");
+                app.update_window(icons.into(), |_, window, cx| {
+                    window.dispatch_action(Box::new(MenuEscape), cx);
+                    window.dispatch_action(Box::new(MenuEscape), cx);
+                })
+                .expect("dismiss Encoding without selecting or converting");
+                icons
+                    .update(&mut app, |view, window, _| {
+                        assert_eq!(view.menu_bar.mode(), MenuMode::Closed);
+                        assert!(view.editor_focus.is_focused(window));
+                        assert_eq!(unchanged(view), before);
+                    })
+                    .expect("encoding dismissal preserves owning editor");
+            }
+            let targets = app
+                .update_window(icons.into(), |_, window, _| {
+                    let scale = window.scale_factor();
+                    let mut tabs = window
+                        .painted_quads()
+                        .into_iter()
+                        .filter(|quad| {
+                            let fill = quad.background;
+                            [
+                                if dark { 0x202020 } else { 0xc0c0c0 },
+                                if dark { 0x383838 } else { 0xf0f0f0 },
+                            ]
+                            .into_iter()
+                            .any(|colour| fill == rgb(colour).into())
+                                && [20., 24.].into_iter().any(|height| {
+                                    quad.bounds.size.height == px(height).scale(scale)
+                                })
+                                && quad.bounds.top() >= px(76.).scale(scale)
+                                && quad.bounds.top() < px(104.).scale(scale)
+                        })
+                        .map(|quad| quad.bounds)
+                        .collect::<Vec<_>>();
+                    tabs.sort_by(|left, right| {
+                        left.left()
+                            .partial_cmp(&right.left())
+                            .expect("finite shared tab positions")
+                    });
+                    assert_eq!(tabs.len(), 3);
+                    let button = if dark { 16. } else { 11. };
+                    let gap = if dark { 4. } else { 8. };
+                    let target = |index: usize, pin: bool| {
+                        let bounds = tabs[index];
+                        let right = bounds.right().as_f32() / scale;
+                        let y = bounds.center().y.as_f32() / scale;
+                        let padding = if index == 1 { 6. } else { 4. };
+                        gpui::point(
+                            px(right - padding - button / 2. - if pin { button + gap } else { 0. }),
+                            px(y),
+                        )
+                    };
+                    [
+                        gpui::point(
+                            px(tabs[0].left().as_f32() / scale + 20.),
+                            px(tabs[0].center().y.as_f32() / scale),
+                        ),
+                        target(0, true),
+                        target(1, true),
+                        target(1, false),
+                    ]
+                })
+                .expect("shared tab control pointer targets");
+            let outside = gpui::point(px(-1.), px(-1.));
+            for (name, position, down, held, release) in [
+                ("normal", outside, false, false, false),
+                ("pinned-body", targets[0], false, false, false),
+                ("pinned-hover", targets[1], false, false, false),
+                ("pinned-down", targets[1], true, false, false),
+                ("pinned-cancel", outside, false, true, true),
+                ("unpinned-hover", targets[2], false, false, false),
+                ("close-hover", targets[3], false, false, false),
+                ("close-down", targets[3], true, false, false),
+                ("close-cancel", outside, false, true, true),
+            ] {
+                app.update_window(icons.into(), |_, window, cx| {
+                    window.dispatch_event(
+                        gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
+                            position,
+                            pressed_button: held.then_some(MouseButton::Left),
+                            ..Default::default()
+                        }),
+                        cx,
+                    );
+                    if down {
+                        window.dispatch_event(
+                            gpui::PlatformInput::MouseDown(gpui::MouseDownEvent {
+                                position,
+                                button: MouseButton::Left,
+                                ..Default::default()
+                            }),
+                            cx,
+                        );
+                    }
+                    if release {
+                        window.dispatch_event(
+                            gpui::PlatformInput::MouseUp(gpui::MouseUpEvent {
+                                position,
+                                button: MouseButton::Left,
+                                ..Default::default()
+                            }),
+                            cx,
+                        );
+                    }
+                })
+                .expect("actual tab control pointer lifecycle");
+                capture_status(
+                    &mut app,
+                    &format!("controls-{}-{name}", if dark { "dark" } else { "light" }),
+                );
+                if dark && matches!(name, "pinned-hover" | "pinned-down") {
+                    let image = app
+                        .capture_screenshot(icons.into())
+                        .expect("source pin hover pixels");
+                    let scale = image.width() / 1080;
+                    let x = ((f32::from(targets[1].x) - 8. + 5.5) * scale as f32) as u32;
+                    let y = ((f32::from(targets[1].y) - 8. + 2.5) * scale as f32) as u32;
+                    assert_eq!(
+                        image.get_pixel(x, y).0[..3],
+                        [47, 47, 47],
+                        "source unpin transparent region must not retain pinned artwork"
+                    );
+                }
+                icons
+                    .read_with(&app, |view, _| {
+                        assert_eq!(
+                            unchanged(view),
+                            before,
+                            "hover/press/cancel cannot activate or mutate another tab: {name}"
+                        )
+                    })
+                    .expect("all document ownership states unchanged");
+            }
+            if dark {
+                capture_status(&mut app, "dark-captions");
+            } else {
+                let source_bar = |app: &mut gpui::HeadlessAppContext, colour| {
+                    icons
+                        .update(app, |view, window, cx| {
+                            let scale = window.scale_factor();
+                            let row = gpui::EntityInputHandler::bounds_for_range(
+                                view,
+                                9..9,
+                                Bounds::default(),
+                                window,
+                                cx,
+                            )
+                            .expect("second row native geometry");
+                            let row = window.pixel_snap_bounds(row).scale(scale);
+                            let fill: gpui::Background = rgb(colour).into();
+                            window.painted_quads().iter().any(|quad| {
+                                quad.background == fill
+                                    && quad.bounds.size.width == px(3.).scale(scale)
+                                    && quad.bounds.size.height == px(26.).scale(scale)
+                                    && quad.bounds.left() < px(72.).scale(scale)
+                                    && quad.bounds.top() == row.top()
+                            })
+                        })
+                        .expect("actual second-row source history bar")
+                };
+                icons
+                    .update(&mut app, |view, window, cx| {
+                        gpui::EntityInputHandler::replace_text_in_range(
+                            view, None, "Q", window, cx,
+                        );
+                        assert_eq!(view.editor().committed_text(), "A\t中😀\r\nZXQ");
+                        assert!(
+                            view.editor().document().is_modified()
+                                && view.workspace.active().is_modified()
+                        );
+                    })
+                    .expect("edit after actual Save baseline");
+                assert!(capture_icon(&mut app) != saved);
+                assert!(source_bar(&mut app, 0xff8000));
+                app.update_window(icons.into(), |_, window, cx| {
+                    window.dispatch_action(Box::new(EditorUndo), cx)
+                })
+                .expect("Undo TO savepoint");
+                icons
+                    .read_with(&app, |view, _| {
+                        assert_eq!(view.editor().committed_text(), "A\t中😀\r\nZX");
+                        assert_eq!(
+                            view.editor().selection(),
+                            Selection {
+                                anchor: ByteOffset(13),
+                                head: ByteOffset(13)
+                            }
+                        );
+                        assert!(!view.editor().document().is_modified());
+                        assert!(!view.workspace.active().is_modified());
+                        assert!(view.editor().document().can_redo());
+                    })
+                    .expect("engine and application cleanliness at the same savepoint");
+                assert!(capture_icon(&mut app) == saved);
+                assert!(source_bar(&mut app, 0x00a000));
+                assert!(!source_bar(&mut app, 0xff8000));
+                capture_status(&mut app, "savepoint-restored");
+                for reversed in [false, true] {
+                    icons
+                        .update(&mut app, |view, window, cx| {
+                            gpui::EntityInputHandler::set_selected_text_range(
+                                view,
+                                if reversed { 5..5 } else { 0..5 },
+                                window,
+                                cx,
+                            );
+                        })
+                        .expect("native replacement selection");
+                    if reversed {
+                        app.update_window(icons.into(), |_, window, cx| {
+                            for _ in 0..4 {
+                                window.dispatch_action(Box::new(EditorSelectLeft), cx);
+                            }
+                        })
+                        .expect("reverse Unicode selection through normal actions");
+                    }
+                    let selection = Selection {
+                        anchor: ByteOffset(if reversed { 9 } else { 0 }),
+                        head: ByteOffset(if reversed { 0 } else { 9 }),
+                    };
+                    icons
+                        .update(&mut app, |view, window, cx| {
+                            assert_eq!(view.editor().selection(), selection);
+                            gpui::EntityInputHandler::replace_text_in_range(
+                                view, None, "文", window, cx,
+                            );
+                            assert_eq!(view.editor().committed_text(), "文\r\nZX");
+                            assert_eq!(
+                                view.editor().selection(),
+                                Selection {
+                                    anchor: ByteOffset(3),
+                                    head: ByteOffset(3)
+                                }
+                            );
+                            assert_eq!(
+                                gpui::EntityInputHandler::selected_text_range(
+                                    view, false, window, cx
+                                )
+                                .expect("replacement native caret")
+                                .range,
+                                1..1
+                            );
+                            assert!(view.workspace.active().is_modified());
+                        })
+                        .expect("one native callback replaces only the selected source once");
+                    capture_status(
+                        &mut app,
+                        if reversed {
+                            "reverse-replacement"
+                        } else {
+                            "forward-replacement"
+                        },
+                    );
+                    app.update_window(icons.into(), |_, window, cx| {
+                        window.dispatch_action(Box::new(EditorUndo), cx)
+                    })
+                    .expect("restore existing baseline");
+                    icons
+                        .read_with(&app, |view, _| {
+                            assert_eq!(view.editor().committed_text(), "A\t中😀\r\nZX");
+                            assert_eq!(view.editor().selection(), selection);
+                            assert!(!view.workspace.active().is_modified());
+                        })
+                        .expect("Undo restores saved Unicode bytes and directional selection");
+                }
+                icons
+                    .update(&mut app, |view, window, cx| {
+                        gpui::EntityInputHandler::set_selected_text_range(view, 0..5, window, cx);
+                        assert_eq!(
+                            view.editor().selection(),
+                            Selection {
+                                anchor: ByteOffset(0),
+                                head: ByteOffset(9)
+                            }
+                        );
+                        assert_eq!(view.editor().committed_text(), "A\t中😀\r\nZX");
+                        assert!(!view.workspace.active().is_modified());
+                    })
+                    .expect("native Unicode selection");
+                capture_status(&mut app, "selection");
+                app.update_window(icons.into(), |_, window, cx| {
+                    window.dispatch_action(Box::new(CloneToOtherView), cx);
+                    window.dispatch_action(Box::new(EditorDocumentEnd), cx);
+                })
+                .expect("distinct secondary pane caret");
+                capture_icon(&mut app);
+                let click_tab = |app: &mut gpui::HeadlessAppContext, secondary: bool| {
+                    let position = app
+                        .update_window(icons.into(), |_, window, _| {
+                            let scale = window.scale_factor();
+                            let fill: gpui::Background =
+                                rgb(if secondary { 0xf0f0f0 } else { 0xc0c0c0 }).into();
+                            let mut tabs = window
+                                .painted_quads()
+                                .into_iter()
+                                .filter(|quad| {
+                                    quad.background == fill
+                                        && quad.bounds.size.height
+                                            == px(if secondary { 24. } else { 20. }).scale(scale)
+                                        && quad.bounds.top() >= px(76.).scale(scale)
+                                        && quad.bounds.top() < px(104.).scale(scale)
+                                        && (quad.bounds.left() > px(540.).scale(scale)) == secondary
+                                })
+                                .collect::<Vec<_>>();
+                            tabs.sort_by(|left, right| {
+                                left.bounds
+                                    .left()
+                                    .partial_cmp(&right.bounds.left())
+                                    .expect("finite tab positions")
+                            });
+                            let center = tabs.last().expect("actual target tab").bounds.center();
+                            gpui::point(
+                                px(center.x.as_f32() / scale),
+                                px(center.y.as_f32() / scale),
+                            )
+                        })
+                        .expect("painted pane tab target");
+                    app.update_window(icons.into(), |_, window, cx| {
+                        window.dispatch_event(
+                            gpui::PlatformInput::MouseDown(gpui::MouseDownEvent {
+                                position,
+                                button: MouseButton::Left,
+                                ..Default::default()
+                            }),
+                            cx,
+                        );
+                        window.dispatch_event(
+                            gpui::PlatformInput::MouseUp(gpui::MouseUpEvent {
+                                position,
+                                button: MouseButton::Left,
+                                ..Default::default()
+                            }),
+                            cx,
+                        );
+                    })
+                    .expect("actual pane tab click");
+                };
+                click_tab(&mut app, false);
+                icons
+                    .read_with(&app, |view, _| {
+                        assert_eq!(
+                            view.workspace.active_view(),
+                            crate::workspace::ViewId::Primary
+                        );
+                        assert_eq!(view.workspace.active().id(), BufferId(4));
+                        assert_eq!(view.editor().committed_text(), "C");
+                    })
+                    .expect("document switch identity");
+                capture_status(&mut app, "document-switch");
+                click_tab(&mut app, true);
+                icons
+                    .read_with(&app, |view, _| {
+                        assert_eq!(
+                            view.workspace.active_view(),
+                            crate::workspace::ViewId::Secondary
+                        );
+                        assert_eq!(view.workspace.active().id(), BufferId(3));
+                        assert_eq!(view.editor().selection().head, ByteOffset(13));
+                        assert_eq!(view.editor().committed_text(), "A\t中😀\r\nZX");
+                        assert!(!view.workspace.active().is_modified());
+                        let primary = view
+                            .workspace
+                            .editor_in_view(crate::workspace::ViewId::Primary, BufferId(3))
+                            .expect("primary B selection");
+                        assert_eq!(
+                            primary.selection(),
+                            Selection {
+                                anchor: ByteOffset(0),
+                                head: ByteOffset(9)
+                            }
+                        );
+                    })
+                    .expect("pane switch restores distinct owner selection");
+                capture_status(&mut app, "pane-switch");
+            }
+        }
     }
 
     #[gpui::test]
@@ -1183,23 +2441,109 @@ mod tests {
 
     #[gpui::test]
     fn tab_middle_click_closes_only_the_pointed_clean_document(cx: &mut gpui::TestAppContext) {
-        let (_, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
+        for target in [Some("buffer-tab-1"), Some("buffer-tab-2"), None] {
+            let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
+            cx.dispatch_action(NewFile);
+            cx.dispatch_action(NewFile);
+            let position = cx.debug_bounds("buffer-tab-1").expect("first tab").center();
+            let release = match target {
+                Some(id) => cx.debug_bounds(id).expect("release tab").center(),
+                None => cx.debug_bounds("matrix-editor").expect("editor").center(),
+            };
+            cx.simulate_event(gpui::MouseDownEvent {
+                position,
+                button: MouseButton::Middle,
+                click_count: 1,
+                ..Default::default()
+            });
+            for id in ["buffer-tab-1", "buffer-tab-2", "buffer-tab-3"] {
+                assert!(cx.debug_bounds(id).is_some());
+            }
+            view.read_with(cx, |view, _| {
+                assert_eq!(view.workspace.active().id(), BufferId(3));
+            });
+            cx.simulate_event(gpui::MouseUpEvent {
+                position: release,
+                button: MouseButton::Middle,
+                click_count: 1,
+                ..Default::default()
+            });
+            for id in ["buffer-tab-1", "buffer-tab-2", "buffer-tab-3"] {
+                assert_eq!(
+                    cx.debug_bounds(id).is_none(),
+                    target == Some(id),
+                    "only release target closes: {target:?}, tab {id}"
+                );
+            }
+            assert!(cx.debug_bounds("close-cancel").is_none());
+        }
+        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
+        cx.simulate_input("unsaved");
         cx.dispatch_action(NewFile);
-        let position = cx.debug_bounds("buffer-tab-1").expect("first tab").center();
+        let snapshot = |view: &MatrixWindow| {
+            view.workspace
+                .buffers()
+                .iter()
+                .map(|buffer| {
+                    (
+                        buffer.id(),
+                        buffer.editor.committed_text(),
+                        buffer.editor.selections(),
+                        buffer.editor.document().can_undo(),
+                        buffer.editor.document().can_redo(),
+                        buffer.is_modified(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let before = view.read_with(cx, |view, _| snapshot(view));
+        let windows = cx.windows();
+        let position = cx
+            .debug_bounds("buffer-tab-1")
+            .expect("dirty release target")
+            .center();
         cx.simulate_event(gpui::MouseDownEvent {
             position,
             button: MouseButton::Middle,
-            click_count: 1,
             ..Default::default()
+        });
+        assert_eq!(cx.windows(), windows);
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.workspace.active().id(), BufferId(2));
+            assert_eq!(snapshot(view), before);
         });
         cx.simulate_event(gpui::MouseUpEvent {
             position,
             button: MouseButton::Middle,
-            click_count: 1,
             ..Default::default()
         });
-        assert!(cx.debug_bounds("buffer-tab-1").is_none());
-        assert!(cx.debug_bounds("buffer-tab-2").is_some());
-        assert!(cx.debug_bounds("close-cancel").is_none());
+        assert_eq!(cx.windows().len(), windows.len() + 1);
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.close_target, Some(BufferId(1)));
+            assert_eq!(snapshot(view), before);
+        });
+        let confirmation = cx
+            .windows()
+            .into_iter()
+            .find(|handle| !windows.contains(handle))
+            .expect("single dirty release confirmation");
+        let mut dialog = gpui::VisualTestContext::from_window(confirmation, cx);
+        let cancel = dialog.debug_bounds("close-cancel").expect("visible Cancel");
+        dialog.simulate_click(cancel.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert_eq!(cx.windows(), windows);
+        view.update_in(cx, |view, window, _| {
+            assert_eq!(view.workspace.active().id(), BufferId(1));
+            assert_eq!(snapshot(view), before);
+            assert!(view.editor_focus.is_focused(window));
+        });
+        cx.simulate_input("!");
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.workspace.buffers()[0].editor.committed_text(),
+                "unsaved!"
+            );
+            assert_eq!(view.workspace.buffers()[1].editor.committed_text(), "");
+        });
     }
 }

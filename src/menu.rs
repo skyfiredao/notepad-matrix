@@ -2,6 +2,17 @@
 pub enum FileCommand {
     New,
     Open,
+    Reveal,
+    Terminal,
+    ContainingWorkspace,
+    FolderWorkspace,
+    DefaultViewer,
+    Rename,
+    Trash,
+    PrintNow,
+    Recent(usize),
+    OpenAllRecent,
+    ClearRecent,
     Save,
     SaveAs,
     SaveCopy,
@@ -11,13 +22,24 @@ pub enum FileCommand {
     Reload,
     CloseLeft,
     CloseRight,
+    Print,
     Exit,
 }
 
 impl FileCommand {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 23] = [
         Self::New,
         Self::Open,
+        Self::Reveal,
+        Self::Terminal,
+        Self::ContainingWorkspace,
+        Self::FolderWorkspace,
+        Self::DefaultViewer,
+        Self::Rename,
+        Self::Trash,
+        Self::PrintNow,
+        Self::OpenAllRecent,
+        Self::ClearRecent,
         Self::Save,
         Self::SaveAs,
         Self::SaveCopy,
@@ -27,22 +49,35 @@ impl FileCommand {
         Self::Reload,
         Self::CloseLeft,
         Self::CloseRight,
+        Self::Print,
         Self::Exit,
     ];
     pub fn label(self) -> &'static str {
         match self {
-            Self::New => "New",
-            Self::Open => "Open...",
-            Self::Save => "Save",
-            Self::SaveAs => "Save As...",
-            Self::SaveCopy => "Save a Copy As...",
-            Self::SaveAll => "Save All",
-            Self::Close => "Close",
-            Self::CloseAll => "Close All",
-            Self::Reload => "Reload from Disk",
-            Self::CloseLeft => "Close All to the Left",
-            Self::CloseRight => "Close All to the Right",
-            Self::Exit => "Exit",
+            Self::New => "新建(N)",
+            Self::Open => "打开(O)...",
+            Self::Reveal => "Finder",
+            Self::Terminal => "终端",
+            Self::ContainingWorkspace => "文件夹工作区",
+            Self::FolderWorkspace => "打开文件夹作为工作区(W)...",
+            Self::DefaultViewer => "使用默认程序打开(D)",
+            Self::Rename => "重命名(R)...",
+            Self::Trash => "从磁盘删除(B)",
+            Self::PrintNow => "立即打印(W)",
+            Self::Recent(_) => "近期文件",
+            Self::OpenAllRecent => "打开所有最近的文件",
+            Self::ClearRecent => "清空最近的文件列表",
+            Self::Save => "保存(S)",
+            Self::SaveAs => "另存为(A)...",
+            Self::SaveCopy => "拷贝另存为(Y)...",
+            Self::SaveAll => "全部保存(E)",
+            Self::Close => "关闭(C)",
+            Self::CloseAll => "全部关闭(E)",
+            Self::Reload => "重新读取文件(L)",
+            Self::CloseLeft => "关闭左侧所有文件",
+            Self::CloseRight => "关闭右侧所有文件",
+            Self::Print => "打印(P)...",
+            Self::Exit => "退出(X)",
         }
     }
     pub fn shortcut(self) -> &'static str {
@@ -58,7 +93,9 @@ impl FileCommand {
             Self::Reload => "Ctrl+R",
             Self::CloseLeft => "",
             Self::CloseRight => "",
+            Self::Print => "Cmd+P",
             Self::Exit => "Alt+F4",
+            _ => "",
         }
     }
 }
@@ -216,13 +253,11 @@ impl DocumentCommand {
     pub fn label(self) -> &'static str {
         use crate::workspace::TabSort;
         match self {
-            Self::Close(crate::workspace::CloseCondition::ExceptCurrent) => {
-                "Close All but Active Document"
-            }
+            Self::Close(crate::workspace::CloseCondition::ExceptCurrent) => "关闭当前以外所有文件",
             Self::Close(crate::workspace::CloseCondition::ExceptPinned) => {
-                "Close All but Pinned Documents"
+                "关闭固定标签页以外所有文件"
             }
-            Self::Close(crate::workspace::CloseCondition::Unchanged) => "Close All Unchanged",
+            Self::Close(crate::workspace::CloseCondition::Unchanged) => "关闭所有未修改的文件",
             Self::Pin => "Pin Tab",
             Self::Color(None) => "Remove Color",
             Self::Color(Some(0)) => "Apply Color 1",
@@ -245,9 +280,9 @@ impl DocumentCommand {
             Self::Vertical => "Vertical",
             Self::Mru => "Enable MRU behaviour",
             Self::Switcher => "Enable",
-            Self::RestoreLastClosed => "Restore Recent Closed File",
-            Self::SaveSession => "Save Session...",
-            Self::LoadSession => "Load Session...",
+            Self::RestoreLastClosed => "恢复最近一个关闭的文件",
+            Self::SaveSession => "保存会话(I)...",
+            Self::LoadSession => "读取会话(I)...",
         }
     }
 }
@@ -308,6 +343,8 @@ impl IntelligenceCommand {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuCommand {
+    ActivateDocument(crate::workspace::BufferId),
+    DocumentDropdown,
     Binary(crate::clipboard::BinaryCommand),
     CharacterPanel,
     CopyPath(crate::clipboard::CopyPath),
@@ -388,6 +425,10 @@ impl ChangeHistoryCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewCommand {
     ProjectPanel(usize),
+    Whitespace,
+    EndOfLine,
+    Nonprinting,
+    ControlCharacters,
     AllCharacters,
     IndentGuides,
     ZoomIn,
@@ -429,7 +470,7 @@ impl DocumentControl {
     pub fn command(self) -> MenuCommand {
         match self {
             Self::New => MenuCommand::File(FileCommand::New),
-            Self::DocumentList => MenuCommand::View(ViewCommand::DocumentList),
+            Self::DocumentList => MenuCommand::DocumentDropdown,
             Self::Close => MenuCommand::File(FileCommand::Close),
         }
     }
@@ -445,7 +486,7 @@ impl DocumentControl {
     pub fn label(self) -> &'static str {
         match self {
             Self::New => "New document",
-            Self::DocumentList => "Toggle Document List",
+            Self::DocumentList => "Document list",
             Self::Close => "Close document",
         }
     }
@@ -455,6 +496,38 @@ impl MenuCommand {
     pub fn source_id(self) -> Option<u32> {
         match self {
             Self::ChangeHistory(command) => Some(command.source_id()),
+            Self::File(command) => Some(match command {
+                FileCommand::New => 41001,
+                FileCommand::Open => 41002,
+                FileCommand::Close => 41003,
+                FileCommand::CloseAll => 41004,
+                FileCommand::Save => 41006,
+                FileCommand::SaveAll => 41007,
+                FileCommand::SaveAs => 41008,
+                FileCommand::CloseLeft => 41009,
+                FileCommand::Print => 41010,
+                FileCommand::Exit => 41011,
+                FileCommand::Reload => 41014,
+                FileCommand::SaveCopy => 41015,
+                FileCommand::Trash => 41016,
+                FileCommand::Rename => 41017,
+                FileCommand::CloseRight => 41018,
+                FileCommand::Reveal => 41019,
+                FileCommand::Terminal => 41020,
+                FileCommand::FolderWorkspace => 41022,
+                FileCommand::DefaultViewer => 41023,
+                FileCommand::ContainingWorkspace => 41025,
+                FileCommand::PrintNow => 1001,
+                FileCommand::OpenAllRecent => 42040,
+                FileCommand::ClearRecent => 42041,
+                FileCommand::Recent(index @ 0..=4) => 41028 + index as u32,
+                FileCommand::Recent(_) => return None,
+            }),
+            Self::View(ViewCommand::Whitespace) => Some(44025),
+            Self::View(ViewCommand::EndOfLine) => Some(44026),
+            Self::View(ViewCommand::Nonprinting) => Some(44130),
+            Self::View(ViewCommand::ControlCharacters) => Some(44131),
+            Self::View(ViewCommand::AllCharacters) => Some(44019),
             Self::View(ViewCommand::MoveToNewInstance) => Some(10003),
             Self::View(ViewCommand::OpenInNewInstance) => Some(10004),
             Self::Binary(command) => Some(command.source_id()),
@@ -488,6 +561,8 @@ impl MenuCommand {
     pub fn label(self) -> &'static str {
         use crate::input::LineEnding;
         match self {
+            Self::ActivateDocument(_) => "Activate document",
+            Self::DocumentDropdown => "Document list",
             Self::Binary(command) => command.label(),
             Self::CharacterPanel => "Character Panel",
             Self::CopyPath(command) => command.label(),
@@ -542,7 +617,11 @@ impl MenuCommand {
             Self::Converter(crate::converter::ConverterOperation::AsciiToHex) => "ASCII -> HEX",
             Self::Converter(crate::converter::ConverterOperation::HexToAscii) => "HEX -> ASCII",
             Self::View(ViewCommand::DocumentList) => "Document List",
-            Self::View(ViewCommand::AllCharacters) => "Show All Characters",
+            Self::View(ViewCommand::Whitespace) => "显示空格与制表符",
+            Self::View(ViewCommand::EndOfLine) => "显示换行符",
+            Self::View(ViewCommand::Nonprinting) => "显示非打印字符",
+            Self::View(ViewCommand::ControlCharacters) => "显示控制字符和 Unicode 换行符",
+            Self::View(ViewCommand::AllCharacters) => "显示所有字符",
             Self::View(ViewCommand::IndentGuides) => "Show Indent Guide",
             Self::View(ViewCommand::ZoomIn) => "Zoom In (Ctrl+Mouse Wheel Up)",
             Self::View(ViewCommand::ZoomOut) => "Zoom Out (Ctrl+Mouse Wheel Down)",
@@ -594,6 +673,7 @@ impl MenuCommand {
 
     pub fn shortcut(self) -> &'static str {
         match self {
+            Self::ActivateDocument(_) | Self::DocumentDropdown => "",
             Self::Binary(_) => "",
             Self::CharacterPanel => "",
             Self::CopyPath(_) => "",
@@ -650,6 +730,7 @@ impl MenuCommand {
 
     fn mnemonic(self) -> Option<char> {
         match self {
+            Self::ActivateDocument(_) | Self::DocumentDropdown => None,
             Self::Binary(_) => None,
             Self::CharacterPanel => Some('p'),
             Self::CopyPath(_) => None,
@@ -657,6 +738,9 @@ impl MenuCommand {
             Self::TextTransform(_) => None,
             Self::MultiSelection(_) => None,
             Self::ColumnEditor => Some('n'),
+            Self::Document(DocumentCommand::LoadSession | DocumentCommand::SaveSession) => {
+                Some('i')
+            }
             Self::Document(_) | Self::View(ViewCommand::ProjectPanel(_)) => None,
             Self::View(ViewCommand::DocumentList) => Some('o'),
             Self::View(ViewCommand::ZoomIn) => Some('i'),
@@ -678,7 +762,14 @@ impl MenuCommand {
                 | ViewCommand::MoveToOtherView,
             ) => None,
             Self::DefineUserLanguage => None,
-            Self::View(ViewCommand::AllCharacters | ViewCommand::IndentGuides) => None,
+            Self::View(
+                ViewCommand::Whitespace
+                | ViewCommand::EndOfLine
+                | ViewCommand::Nonprinting
+                | ViewCommand::ControlCharacters
+                | ViewCommand::AllCharacters
+                | ViewCommand::IndentGuides,
+            ) => None,
             Self::Bookmark(_) => None,
             Self::ChangeHistory(_) => None,
             Self::Settings(SettingsCommand::Preferences) => Some('p'),
@@ -710,12 +801,17 @@ impl MenuCommand {
                 FileCommand::Save => 's',
                 FileCommand::SaveAs => 'a',
                 FileCommand::SaveCopy => 'y',
-                FileCommand::SaveAll => 'v',
+                FileCommand::SaveAll => 'e',
                 FileCommand::Close => 'c',
                 FileCommand::CloseAll => 'e',
                 FileCommand::Reload => 'l',
+                FileCommand::Print => 'p',
                 FileCommand::Exit => 'x',
-                FileCommand::CloseLeft | FileCommand::CloseRight => return None,
+                FileCommand::FolderWorkspace | FileCommand::PrintNow => 'w',
+                FileCommand::DefaultViewer => 'd',
+                FileCommand::Rename => 'r',
+                FileCommand::Trash => 'b',
+                _ => return None,
             }),
             Self::Edit(EditCommand::Undo) => Some('u'),
             Self::Edit(EditCommand::Redo) => Some('r'),
@@ -732,7 +828,7 @@ impl MenuCommand {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuEntry {
     Action(MenuCommand),
     DynamicAction {
@@ -797,38 +893,60 @@ impl MenuDefinition {
     pub fn file_menu() -> Self {
         Self {
             selector: "file-menu-trigger",
-            label: "File",
+            label: "文件(F)",
             mnemonic: 'f',
-            entries: FileCommand::ALL
-                .into_iter()
-                .filter_map(|command| {
-                    if command == FileCommand::CloseRight {
-                        return None;
-                    }
-                    if command == FileCommand::CloseLeft {
-                        Some(MenuEntry::Submenu {
-                            selector: "file-menu-close-multiple",
-                            label: "Close Multiple Documents",
-                            mnemonic: 'm',
-                            entries: vec![
-                                MenuEntry::Action(MenuCommand::Document(DocumentCommand::Close(
-                                    crate::workspace::CloseCondition::ExceptCurrent,
-                                ))),
-                                MenuEntry::Action(MenuCommand::Document(DocumentCommand::Close(
-                                    crate::workspace::CloseCondition::ExceptPinned,
-                                ))),
-                                MenuEntry::Action(MenuCommand::File(command)),
-                                MenuEntry::Action(MenuCommand::File(FileCommand::CloseRight)),
-                                MenuEntry::Action(MenuCommand::Document(DocumentCommand::Close(
-                                    crate::workspace::CloseCondition::Unchanged,
-                                ))),
-                            ],
-                        })
-                    } else {
-                        Some(MenuEntry::Action(MenuCommand::File(command)))
-                    }
-                })
-                .collect(),
+            entries: vec![
+                MenuEntry::Action(MenuCommand::File(FileCommand::New)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::Open)),
+                MenuEntry::Submenu {
+                    selector: "file-open-folder",
+                    label: "打开所在文件夹(F)",
+                    mnemonic: 'f',
+                    entries: vec![
+                        MenuEntry::Action(MenuCommand::File(FileCommand::Reveal)),
+                        MenuEntry::Action(MenuCommand::File(FileCommand::Terminal)),
+                        MenuEntry::Separator,
+                        MenuEntry::Action(MenuCommand::File(FileCommand::ContainingWorkspace)),
+                    ],
+                },
+                MenuEntry::Action(MenuCommand::File(FileCommand::DefaultViewer)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::FolderWorkspace)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::Reload)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::Save)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::SaveAs)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::SaveCopy)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::SaveAll)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::Rename)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::Close)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::CloseAll)),
+                MenuEntry::Submenu {
+                    selector: "file-menu-close-multiple",
+                    label: "关闭多个文档(M)",
+                    mnemonic: 'm',
+                    entries: vec![
+                        MenuEntry::Action(MenuCommand::Document(DocumentCommand::Close(
+                            crate::workspace::CloseCondition::ExceptCurrent,
+                        ))),
+                        MenuEntry::Action(MenuCommand::Document(DocumentCommand::Close(
+                            crate::workspace::CloseCondition::ExceptPinned,
+                        ))),
+                        MenuEntry::Action(MenuCommand::File(FileCommand::CloseLeft)),
+                        MenuEntry::Action(MenuCommand::File(FileCommand::CloseRight)),
+                        MenuEntry::Action(MenuCommand::Document(DocumentCommand::Close(
+                            crate::workspace::CloseCondition::Unchanged,
+                        ))),
+                    ],
+                },
+                MenuEntry::Action(MenuCommand::File(FileCommand::Trash)),
+                MenuEntry::Separator,
+                MenuEntry::Action(MenuCommand::Document(DocumentCommand::LoadSession)),
+                MenuEntry::Action(MenuCommand::Document(DocumentCommand::SaveSession)),
+                MenuEntry::Separator,
+                MenuEntry::Action(MenuCommand::File(FileCommand::Print)),
+                MenuEntry::Action(MenuCommand::File(FileCommand::PrintNow)),
+                MenuEntry::Separator,
+                MenuEntry::Action(MenuCommand::File(FileCommand::Exit)),
+            ],
         }
     }
 }
@@ -843,6 +961,7 @@ pub enum MenuMode {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuEvent {
+    OpenDocuments(Vec<(crate::workspace::BufferId, String)>),
     ToggleBar,
     OpenRoot(usize),
     OpenSubmenu(&'static str),
@@ -890,6 +1009,7 @@ pub struct MenuBar {
     path: Vec<usize>,
     revision: u64,
     popup_limit: Option<(usize, usize)>,
+    documents: Option<Vec<MenuEntry>>,
 }
 
 impl Default for MenuBar {
@@ -899,7 +1019,7 @@ impl Default for MenuBar {
             MenuDefinition::file_menu(),
             MenuDefinition {
                 selector: "edit-menu-trigger",
-                label: "Edit",
+                label: "编辑(E)",
                 mnemonic: 'e',
                 entries: vec![
                     MenuEntry::Action(MenuCommand::Edit(EditCommand::Undo)),
@@ -936,7 +1056,7 @@ impl Default for MenuBar {
             },
             MenuDefinition {
                 selector: "search-menu-trigger",
-                label: "Search",
+                label: "搜索(S)",
                 mnemonic: 's',
                 entries: [
                     SearchCommand::Find,
@@ -983,14 +1103,19 @@ impl Default for MenuBar {
             },
             MenuDefinition {
                 selector: "view-menu-trigger",
-                label: "View",
+                label: "视图(V)",
                 mnemonic: 'v',
                 entries: vec![
                     MenuEntry::Submenu {
                         selector: "view-show-symbol-menu",
-                        label: "Show Symbol",
+                        label: "显示符号",
                         mnemonic: 'y',
                         entries: vec![
+                            MenuEntry::Action(MenuCommand::View(ViewCommand::Whitespace)),
+                            MenuEntry::Action(MenuCommand::View(ViewCommand::EndOfLine)),
+                            MenuEntry::Action(MenuCommand::View(ViewCommand::Nonprinting)),
+                            MenuEntry::Action(MenuCommand::View(ViewCommand::ControlCharacters)),
+                            MenuEntry::Separator,
                             MenuEntry::Action(MenuCommand::View(ViewCommand::AllCharacters)),
                             MenuEntry::Separator,
                             MenuEntry::Action(MenuCommand::View(ViewCommand::IndentGuides)),
@@ -1036,7 +1161,7 @@ impl Default for MenuBar {
             },
             MenuDefinition {
                 selector: "encoding-menu-trigger",
-                label: "Encoding",
+                label: "编码(N)",
                 mnemonic: 'n',
                 entries: [
                     crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Plain),
@@ -1061,7 +1186,7 @@ impl Default for MenuBar {
             },
             MenuDefinition {
                 selector: "language-menu-trigger",
-                label: "Language",
+                label: "语言(L)",
                 mnemonic: 'l',
                 entries: vec![
                     MenuEntry::Action(MenuCommand::Language(crate::syntax::Language::NormalText)),
@@ -1084,7 +1209,7 @@ impl Default for MenuBar {
             },
             MenuDefinition {
                 selector: "settings-menu-trigger",
-                label: "Settings",
+                label: "设置(T)",
                 mnemonic: 't',
                 entries: vec![MenuEntry::Action(MenuCommand::Settings(
                     SettingsCommand::Preferences,
@@ -1092,7 +1217,7 @@ impl Default for MenuBar {
             },
             MenuDefinition {
                 selector: "tools-menu-trigger",
-                label: "Tools",
+                label: "工具(O)",
                 mnemonic: 'o',
                 entries: [
                     crate::hashes::HashAlgorithm::Md5,
@@ -1119,7 +1244,7 @@ impl Default for MenuBar {
             },
             MenuDefinition {
                 selector: "macro-menu-trigger",
-                label: "Macro",
+                label: "宏(M)",
                 mnemonic: 'm',
                 entries: [
                     crate::macros::MacroCommand::StartRecording,
@@ -1134,13 +1259,13 @@ impl Default for MenuBar {
             },
             MenuDefinition {
                 selector: "run-menu-trigger",
-                label: "Run",
+                label: "运行(R)",
                 mnemonic: 'r',
                 entries: vec![MenuEntry::Action(MenuCommand::Run)],
             },
             MenuDefinition {
                 selector: "window-menu-trigger",
-                label: "Window",
+                label: "窗口(W)",
                 mnemonic: 'w',
                 entries: vec![
                     MenuEntry::Action(MenuCommand::Window(WindowCommand::Minimize)),
@@ -1151,8 +1276,8 @@ impl Default for MenuBar {
             },
             MenuDefinition {
                 selector: "help-menu-trigger",
-                label: "Help",
-                mnemonic: 'h',
+                label: "?",
+                mnemonic: '?',
                 entries: vec![MenuEntry::Action(MenuCommand::About)],
             },
         ]);
@@ -1291,23 +1416,6 @@ impl Default for MenuBar {
                     entries,
                 },
             );
-        }
-        if let Some(file) = menu
-            .definitions
-            .iter_mut()
-            .find(|menu| menu.selector == "file-menu-trigger")
-        {
-            let exit = file.entries.pop();
-            file.entries.extend(
-                [
-                    DocumentCommand::LoadSession,
-                    DocumentCommand::SaveSession,
-                    DocumentCommand::RestoreLastClosed,
-                ]
-                .into_iter()
-                .map(|command| MenuEntry::Action(MenuCommand::Document(command))),
-            );
-            file.entries.extend(exit);
         }
         if let Some(view) = menu
             .definitions
@@ -1688,7 +1796,7 @@ impl MenuBar {
                 position.min(self.definitions.len()),
                 MenuDefinition {
                     selector: "plugins-menu-trigger",
-                    label: "Plugins",
+                    label: "插件(P)",
                     mnemonic: 'p',
                     entries,
                 },
@@ -1708,7 +1816,56 @@ impl MenuBar {
             path: Vec::new(),
             revision: 0,
             popup_limit: None,
+            documents: None,
         }
+    }
+
+    pub fn set_recent_files(&mut self, paths: &[std::path::PathBuf]) {
+        let Some(menu) = self
+            .definitions
+            .iter_mut()
+            .find(|menu| menu.selector == "file-menu-trigger")
+        else {
+            return;
+        };
+        let mut entries = MenuDefinition::file_menu().entries;
+        if !paths.is_empty() {
+            let Some(position) = entries.iter().position(|entry| {
+                matches!(
+                    entry,
+                    MenuEntry::Action(MenuCommand::File(FileCommand::Exit))
+                )
+            }) else {
+                return;
+            };
+            let mut recent = paths
+                .iter()
+                .take(5)
+                .enumerate()
+                .map(|(index, path)| MenuEntry::DynamicAction {
+                    command: MenuCommand::File(FileCommand::Recent(index)),
+                    label: format!("{}: {}", index + 1, path.display()),
+                    shortcut: String::new(),
+                })
+                .collect::<Vec<_>>();
+            recent.push(MenuEntry::Separator);
+            recent.push(MenuEntry::Action(MenuCommand::Document(
+                DocumentCommand::RestoreLastClosed,
+            )));
+            recent.push(MenuEntry::Action(MenuCommand::File(
+                FileCommand::OpenAllRecent,
+            )));
+            recent.push(MenuEntry::Action(MenuCommand::File(
+                FileCommand::ClearRecent,
+            )));
+            recent.push(MenuEntry::Separator);
+            entries.splice(position..position, recent);
+        }
+        if menu.entries == entries {
+            return;
+        }
+        menu.entries = entries;
+        self.revision = self.revision.wrapping_add(1);
     }
     pub fn mode(&self) -> MenuMode {
         self.mode
@@ -1722,6 +1879,17 @@ impl MenuBar {
     pub fn definitions(&self) -> &[MenuDefinition] {
         &self.definitions
     }
+    pub fn document_menu_open(&self) -> bool {
+        self.mode == MenuMode::Open && self.documents.is_some()
+    }
+
+    fn root_entries(&self) -> Option<&[MenuEntry]> {
+        self.documents.as_deref().or_else(|| {
+            self.definitions
+                .get(self.root)
+                .map(|menu| menu.entries.as_slice())
+        })
+    }
     pub fn popup_count(&self) -> usize {
         if self.mode == MenuMode::Open {
             self.path.len().max(1)
@@ -1731,7 +1899,7 @@ impl MenuBar {
     }
 
     pub fn popup_entries(&self, depth: usize) -> Option<&[MenuEntry]> {
-        let mut entries = self.definitions.get(self.root)?.entries.as_slice();
+        let mut entries = self.root_entries()?;
         for &index in self.path.get(..depth)? {
             entries = match entries.get(index)? {
                 MenuEntry::Submenu { entries, .. } => entries,
@@ -1758,7 +1926,7 @@ impl MenuBar {
             return None;
         }
         let (&last, parents) = path.split_last()?;
-        let mut entries = self.definitions.get(self.root)?.entries.as_slice();
+        let mut entries = self.root_entries()?;
         for &index in parents {
             entries = match entries.get(index)? {
                 MenuEntry::Submenu { entries, .. } => entries,
@@ -1780,6 +1948,9 @@ impl MenuBar {
     }
 
     fn open_root(&mut self, root: usize, available: &impl Fn(MenuCommand) -> bool) {
+        if self.documents.take().is_some() {
+            self.revision = self.revision.wrapping_add(1);
+        }
         if self.popup_limit.take().is_some() {
             self.revision = self.revision.wrapping_add(1);
         }
@@ -1897,6 +2068,7 @@ impl MenuBar {
             if available(command) {
                 self.mode = MenuMode::Closed;
                 self.path.clear();
+                self.documents = None;
                 return MenuOutcome::Activate(command);
             }
         } else {
@@ -1933,6 +2105,24 @@ impl MenuBar {
         }
         let click = matches!(&event, MenuEvent::Click { .. });
         match event {
+            MenuEvent::OpenDocuments(documents) => {
+                self.documents = Some(
+                    documents
+                        .into_iter()
+                        .map(|(id, label)| MenuEntry::DynamicAction {
+                            command: MenuCommand::ActivateDocument(id),
+                            label,
+                            shortcut: String::new(),
+                        })
+                        .collect(),
+                );
+                self.popup_limit = None;
+                self.revision = self.revision.wrapping_add(1);
+                self.mode = MenuMode::Open;
+                self.root = 0;
+                self.path = Vec::new();
+                self.select_edge(false, available);
+            }
             MenuEvent::ToggleBar => {
                 if self.mode == MenuMode::Closed {
                     self.mode = MenuMode::BarFocused;
@@ -1960,7 +2150,7 @@ impl MenuBar {
                 }
             }
             MenuEvent::ToggleRoot(root) => {
-                if self.mode == MenuMode::Open && root == self.root {
+                if self.mode == MenuMode::Open && root == self.root && self.documents.is_none() {
                     self.mode = MenuMode::Closed;
                     self.path.clear();
                 } else {
@@ -1993,7 +2183,11 @@ impl MenuBar {
             }
             MenuEvent::Activate => return self.activate(available),
             MenuEvent::Escape => {
-                if self.mode == MenuMode::Open && self.path.len() > 1 {
+                if self.document_menu_open() {
+                    self.mode = MenuMode::Closed;
+                    self.documents = None;
+                    self.path.clear();
+                } else if self.mode == MenuMode::Open && self.path.len() > 1 {
                     self.path.pop();
                 } else if self.mode == MenuMode::Open {
                     self.mode = MenuMode::BarFocused;
@@ -2005,6 +2199,7 @@ impl MenuBar {
             }
             MenuEvent::Dismiss => {
                 self.mode = MenuMode::Closed;
+                self.documents = None;
                 self.path.clear();
             }
             MenuEvent::Hover { root, path } | MenuEvent::Click { root, path } => {

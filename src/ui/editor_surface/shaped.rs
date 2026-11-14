@@ -1,10 +1,13 @@
 use super::{DisplayRow, layout};
-use gpui::{App, Pixels, Point, ShapedLine, TextAlign, TextRun, Window, fill, point, px, size};
+use gpui::{
+    App, Pixels, Point, ShapedLine, TextAlign, TextRun, Window, fill, point, px, rgb, size,
+};
 use std::ops::Range;
 
 enum PartContent {
     Glyphs(Box<ShapedLine>),
     Tab(TextRun),
+    Representation(Box<ShapedLine>),
 }
 
 struct Part {
@@ -59,6 +62,7 @@ impl EditorShapedLine {
         runs: Vec<(TextRun, Pixels)>,
         space_width: Pixels,
         baseline: Pixels,
+        representation_font_size: Pixels,
         window: &Window,
     ) -> Self {
         let mut tabs = raw
@@ -66,6 +70,7 @@ impl EditorShapedLine {
             .filter(|(_, ch)| *ch == '\t')
             .map(|(byte, _)| projection.display_index(byte)..projection.display_index(byte + 1))
             .peekable();
+        let mut representations = projection.representations.iter().cloned().peekable();
         let mut parts = Vec::new();
         let mut group: Option<Group> = None;
         let mut byte = 0;
@@ -88,8 +93,38 @@ impl EditorShapedLine {
                     });
                     x = next;
                     byte = tab.end;
+                } else if let Some(representation) =
+                    representations.next_if(|range| range.start == byte)
+                {
+                    flush_group(&mut group, &projection, &mut parts, &mut x, window);
+                    let text = &projection.text[representation.clone()];
+                    let shape = window.text_system().shape_line(
+                        text.to_string().into(),
+                        representation_font_size,
+                        &[TextRun {
+                            len: text.len(),
+                            font: gpui::font(super::chrome::DEFAULT_EDITOR_FONT_FAMILY),
+                            color: rgb(0xffffff).into(),
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        }],
+                        None,
+                    );
+                    let width = shape.width() + px(3.);
+                    byte = representation.end;
+                    parts.push(Part {
+                        range: representation,
+                        x,
+                        width,
+                        content: PartContent::Representation(Box::new(shape)),
+                    });
+                    x += width;
                 } else {
                     let next = tabs.peek().map_or(end, |tab| end.min(tab.start));
+                    let next = representations
+                        .peek()
+                        .map_or(next, |range| next.min(range.start));
                     if group.as_ref().is_some_and(|group| group.size != font_size) {
                         flush_group(&mut group, &projection, &mut parts, &mut x, window);
                     }
@@ -124,10 +159,9 @@ impl EditorShapedLine {
 
     pub(super) fn x_for_index(&self, source: usize) -> Pixels {
         let index = self.projection.display_index(source);
+        let part = self.parts.partition_point(|part| part.range.start <= index);
         self.parts
-            .iter()
-            .rev()
-            .find(|part| part.range.start <= index)
+            .get(part.saturating_sub(1))
             .map_or(px(0.), |part| {
                 let relative = index.saturating_sub(part.range.start).min(part.range.len());
                 part.x
@@ -136,22 +170,27 @@ impl EditorShapedLine {
                         PartContent::Tab(_) => {
                             part.width * (relative as f32 / part.range.len().max(1) as f32)
                         }
+                        PartContent::Representation(_) => {
+                            if relative == 0 {
+                                px(0.)
+                            } else {
+                                part.width
+                            }
+                        }
                     }
             })
     }
 
     pub(super) fn closest_index_for_x(&self, x: Pixels) -> usize {
+        let part = self.parts.partition_point(|part| part.x <= x);
         let index = self
             .parts
-            .iter()
-            .rev()
-            .find(|part| part.x <= x)
-            .or_else(|| self.parts.first())
+            .get(part.saturating_sub(1))
             .map_or(0, |part| match &part.content {
                 PartContent::Glyphs(shape) => {
                     part.range.start + shape.closest_index_for_x(x - part.x)
                 }
-                PartContent::Tab(_) => {
+                PartContent::Tab(_) | PartContent::Representation(_) => {
                     if x - part.x < part.width / 2. {
                         part.range.start
                     } else {
@@ -160,6 +199,17 @@ impl EditorShapedLine {
                 }
             });
         self.projection.source_index(index)
+    }
+
+    fn visible_parts(&self, origin: Point<Pixels>, window: &Window) -> &[Part] {
+        let bounds = window.content_mask().bounds;
+        let start = self
+            .parts
+            .partition_point(|part| origin.x + part.x + part.width <= bounds.left());
+        let end = self
+            .parts
+            .partition_point(|part| origin.x + part.x < bounds.right());
+        &self.parts[start.min(end)..end]
     }
 
     pub(super) fn paint(
@@ -171,7 +221,7 @@ impl EditorShapedLine {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<(), String> {
-        for part in &self.parts {
+        for part in self.visible_parts(origin, window) {
             match &part.content {
                 PartContent::Glyphs(shape) => {
                     let shift = px(layout::baseline_shift(
@@ -200,6 +250,30 @@ impl EditorShapedLine {
                         );
                     }
                 }
+                PartContent::Representation(shape) => {
+                    let top = origin.y + self.baseline - shape.ascent;
+                    let blob_height = (shape.ascent + px(1.)).ceil();
+                    window.paint_quad(
+                        fill(
+                            gpui::Bounds::new(
+                                point(origin.x + part.x + px(1.), top),
+                                size(part.width - px(1.), blob_height),
+                            ),
+                            rgb(0x000000),
+                        )
+                        .corner_radii(px(1.)),
+                    );
+                    shape
+                        .paint(
+                            point(origin.x + part.x + px(2.), top),
+                            shape.ascent + shape.descent,
+                            TextAlign::Left,
+                            None,
+                            window,
+                            cx,
+                        )
+                        .map_err(|error| error.to_string())?;
+                }
             }
         }
         Ok(())
@@ -214,7 +288,7 @@ impl EditorShapedLine {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<(), String> {
-        for part in &self.parts {
+        for part in self.visible_parts(origin, window) {
             match &part.content {
                 PartContent::Glyphs(shape) => shape
                     .paint_background(
@@ -237,6 +311,7 @@ impl EditorShapedLine {
                         ));
                     }
                 }
+                PartContent::Representation(_) => {}
             }
         }
         Ok(())

@@ -209,6 +209,9 @@ impl MatrixWindow {
         }) {
             return;
         }
+        if !self.focus_editor_pane(self.pane, window, cx) {
+            return;
+        }
         self.panels.layout.hide(id);
         self.set_panel_body_visible(id, false, window, cx);
         cx.notify();
@@ -514,6 +517,7 @@ impl MatrixWindow {
                     .child(
                         div()
                             .id(format!("{}-hide", id.key()))
+                            .debug_selector(move || format!("{}-hide", id.key()))
                             .role(Role::Button)
                             .aria_label(format!("Hide {}", id.title()))
                             .tooltip(move |_, cx| {

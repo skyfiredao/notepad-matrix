@@ -18,14 +18,18 @@ fn change_marker_style(edition: u8, dark: bool) -> (u32, &'static str) {
     let (name, style, fallback) = match edition {
         1 => ("revert-origin", "Change History revert origin", 0x40a0bf),
         2 => ("saved", "Change History saved", 0x00a000),
-        3 => return (0x0078d4, "modified"),
+        3 => ("modified", "Change History modified", 0xff8000),
         _ => (
             "revert-modified",
             "Change History revert modified",
             0xa0c000,
         ),
     };
-    let colour = crate::languages::catalog()
+    (change_history_colour(style, dark, fallback), name)
+}
+
+fn change_history_colour(style: &str, dark: bool, fallback: u32) -> u32 {
+    crate::languages::catalog()
         .ok()
         .and_then(|catalog| {
             catalog
@@ -42,8 +46,7 @@ fn change_marker_style(edition: u8, dark: bool) -> (u32, &'static str) {
         })
         .and_then(|entry| entry.attributes.get("bgColor"))
         .and_then(|colour| u32::from_str_radix(colour, 16).ok())
-        .unwrap_or(fallback);
-    (colour, name)
+        .unwrap_or(fallback)
 }
 
 #[cfg(all(test, feature = "native-input-tests"))]
@@ -295,11 +298,82 @@ mod tests {
     }
 
     #[test]
-    fn change_marker_palette_keeps_requested_blue_and_source_saved_reversion_colours() {
-        assert_eq!(change_marker_style(3, false), (0x0078d4, "modified"));
-        assert_eq!(change_marker_style(2, false), (0x00a000, "saved"));
-        assert_eq!(change_marker_style(1, false), (0x40a0bf, "revert-origin"));
-        assert_eq!(change_marker_style(4, false), (0xa0c000, "revert-modified"));
+    fn change_history_palette_reaches_the_renderer_for_both_themes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for dark in [false, true] {
+            let mut app = gpui::HeadlessAppContext::with_platform(
+                std::sync::Arc::new(gpui::NoopTextSystem),
+                std::sync::Arc::new(()),
+                gpui_platform::current_headless_renderer,
+            );
+            let handle = app.open_window(size(px(640.), px(480.)), |window, cx| {
+                cx.new(|cx| {
+                    let mut view = MatrixWindow::new(dark, window, cx);
+                    *view.editor_mut() = EditorSession::new("one\ntwo");
+                    view
+                })
+            })?;
+            for (step, (name, colour)) in [
+                ("modified", [0xff, 0x80, 0x00]),
+                ("saved", [0x00, 0xa0, 0x00]),
+                ("revert-origin", [0x40, 0xa0, 0xbf]),
+                ("saved", [0x00, 0xa0, 0x00]),
+                ("modified", [0xff, 0x80, 0x00]),
+                ("revert-modified", [0xa0, 0xc0, 0x00]),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                handle.update(&mut app, |view, window, cx| {
+                    match step {
+                        0 => view.editor_mut().insert_text("x")?,
+                        1 => {
+                            let saved = view.editor().save_snapshot();
+                            view.editor_mut().acknowledge_save(&saved)?;
+                        }
+                        2 | 5 => assert!(view.editor_mut().undo()),
+                        3 => assert!(view.editor_mut().redo()),
+                        _ => {
+                            view.editor_mut().select(Selection {
+                                anchor: ByteOffset(0),
+                                head: ByteOffset(8),
+                            })?;
+                            view.editor_mut().insert_text("replacement")?;
+                        }
+                    }
+                    view.editor_changed(Ok(()), window, cx);
+                    Ok::<(), crate::editor::EditError>(())
+                })??;
+                for _ in 0..3 {
+                    app.update_window(handle.into(), |_, window, cx| window.draw(cx).clear(cx))?;
+                    app.run_until_parked();
+                }
+                let image = app.capture_screenshot(handle.into())?;
+                let scale = image.width() / 640;
+                let (x, y, _) = image
+                    .enumerate_pixels()
+                    .find(|(x, y, pixel)| {
+                        *x < 72 * scale
+                            && *y >= 110 * scale
+                            && *y < 125 * scale
+                            && pixel.0[..3] == colour
+                    })
+                    .ok_or_else(|| {
+                        format!("source {name} absent in history gutter, dark={dark}")
+                    })?;
+                let margin = if dark {
+                    [0x0c, 0x0c, 0x0c]
+                } else {
+                    [0xe0, 0xe0, 0xe0]
+                };
+                assert_eq!(
+                    image.get_pixel(x.saturating_sub(2 * scale), y).0[..3],
+                    margin,
+                    "source history margin next to {name}, dark={dark}"
+                );
+            }
+        }
+        Ok(())
     }
 
     #[gpui::test]
@@ -528,7 +602,11 @@ impl MatrixWindow {
                             .h(row_height)
                             .flex_shrink_0()
                             .relative()
-                            .bg(rgb(if self.dark { 0x303030 } else { 0xe0e0e0 }))
+                            .bg(rgb(change_history_colour(
+                                "Change History margin",
+                                self.dark,
+                                if self.dark { 0x0c0c0c } else { 0xe0e0e0 },
+                            )))
                             .children((1u8..=4).filter_map(|edition| {
                                 if changes & (1 << (edition - 1)) == 0 {
                                     return None;
@@ -562,59 +640,62 @@ impl MatrixWindow {
                                 )
                             })),
                     )
-                    .child(div().w(px(14.)).h(row_height).flex_shrink_0().when(
-                        first && fold_headers.contains(&line),
-                        |margin| {
-                            let collapsed = self.editor_fold_collapsed(line);
-                            margin.child(
-                                div()
-                                    .id(("fold-line", line))
-                                    .debug_selector(move || {
-                                        if pane == crate::workspace::ViewId::Primary {
-                                            format!("fold-line-{line}")
-                                        } else {
-                                            format!("fold-line-secondary-{line}")
-                                        }
-                                    })
-                                    .role(Role::Button)
-                                    .aria_label(format!(
-                                        "{} fold on line {}",
-                                        if collapsed { "Expand" } else { "Collapse" },
-                                        line + 1
-                                    ))
-                                    .tooltip(move |_, cx| {
-                                        icon_tooltip::view(
-                                            if collapsed {
-                                                "Expand fold"
+                    .child(
+                        div()
+                            .w(self.editor_fold_margin_width())
+                            .h(row_height)
+                            .flex_shrink_0()
+                            .when(first && fold_headers.contains(&line), |margin| {
+                                let collapsed = self.editor_fold_collapsed(line);
+                                margin.child(
+                                    div()
+                                        .id(("fold-line", line))
+                                        .debug_selector(move || {
+                                            if pane == crate::workspace::ViewId::Primary {
+                                                format!("fold-line-{line}")
                                             } else {
-                                                "Collapse fold"
-                                            },
-                                            dark,
-                                            cx,
-                                        )
-                                    })
-                                    .w(px(14.))
-                                    .h(row_height)
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .cursor_pointer()
-                                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                                        cx.stop_propagation()
-                                    })
-                                    .on_click(cx.listener(move |view, _, window, cx| {
-                                        if view.focus_editor_pane(pane, window, cx)
-                                            && view.workspace.active().id() == owner
-                                            && !view.batch_editing_blocked()
-                                        {
-                                            view.toggle_editor_fold(line, window, cx);
-                                        }
-                                        cx.stop_propagation();
-                                    }))
-                                    .child(if collapsed { "+" } else { "−" }),
-                            )
-                        },
-                    ))
+                                                format!("fold-line-secondary-{line}")
+                                            }
+                                        })
+                                        .role(Role::Button)
+                                        .aria_label(format!(
+                                            "{} fold on line {}",
+                                            if collapsed { "Expand" } else { "Collapse" },
+                                            line + 1
+                                        ))
+                                        .tooltip(move |_, cx| {
+                                            icon_tooltip::view(
+                                                if collapsed {
+                                                    "Expand fold"
+                                                } else {
+                                                    "Collapse fold"
+                                                },
+                                                dark,
+                                                cx,
+                                            )
+                                        })
+                                        .w(px(14.))
+                                        .h(row_height)
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .cursor_pointer()
+                                        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                            cx.stop_propagation()
+                                        })
+                                        .on_click(cx.listener(move |view, _, window, cx| {
+                                            if view.focus_editor_pane(pane, window, cx)
+                                                && view.workspace.active().id() == owner
+                                                && !view.batch_editing_blocked()
+                                            {
+                                                view.toggle_editor_fold(line, window, cx);
+                                            }
+                                            cx.stop_propagation();
+                                        }))
+                                        .child(if collapsed { "+" } else { "−" }),
+                                )
+                            }),
+                    )
             })
             .collect::<Vec<_>>();
         div()

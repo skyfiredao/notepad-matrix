@@ -124,6 +124,11 @@ impl SessionFile {
 
     pub fn restore_into(&self, workspace: &mut Workspace) -> io::Result<Vec<String>> {
         let keys = self.validate()?;
+        let empty = (workspace.buffers().len() == 1
+            && workspace.active().disk_file.is_none()
+            && !workspace.active().is_modified()
+            && workspace.active().editor.document().len_bytes() == 0)
+            .then(|| (workspace.active_view(), workspace.active().id()));
         let mut warnings = Vec::new();
         let (_, active) = RecoverySession::restore_document_data(
             workspace,
@@ -139,6 +144,21 @@ impl SessionFile {
             &mut warnings,
         )?;
         if let Some(id) = active {
+            let active_pane = workspace.active_view();
+            if let Some((pane, empty)) = empty
+                && empty != id
+            {
+                workspace
+                    .close_in_view(
+                        pane,
+                        empty,
+                        crate::workspace::CloseDisposition::IfUnmodified,
+                    )
+                    .map_err(|error| invalid(&error.to_string()))?;
+            }
+            workspace
+                .set_active_view(active_pane)
+                .map_err(|error| invalid(&error.to_string()))?;
             workspace
                 .activate(id)
                 .map_err(|error| invalid(&error.to_string()))?;

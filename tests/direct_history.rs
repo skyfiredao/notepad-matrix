@@ -36,6 +36,31 @@ fn direct_history_follows_adjacent_action_policy_and_save_navigation_boundaries(
 }
 
 #[test]
+fn editing_after_undo_discards_only_the_abandoned_redo_branch()
+-> Result<(), notepad_matrix::editor::EditError> {
+    let mut editor = EditorSession::new("a");
+    editor.select(caret(1))?;
+    let saved = editor.save_snapshot();
+    editor.acknowledge_save(&saved)?;
+    editor.type_text("中")?;
+    assert!(editor.undo());
+    assert_eq!(editor.committed_text(), "a");
+    assert!(!editor.is_modified());
+    editor.type_text("文")?;
+    assert_eq!(editor.committed_text(), "a文");
+    assert!(editor.is_modified());
+    assert!(!editor.redo());
+    assert!(editor.undo());
+    assert_eq!(editor.committed_text(), "a");
+    assert!(!editor.is_modified());
+    assert!(!editor.undo());
+    assert!(editor.redo());
+    assert_eq!(editor.committed_text(), "a文");
+    assert!(!editor.redo());
+    Ok(())
+}
+
+#[test]
 fn removal_coalescing_uses_source_byte_lengths_not_timer_or_grapheme_guesses() {
     let mut editor = EditorSession::new("Aé中😀");
     editor.select(caret(10)).unwrap();

@@ -72,6 +72,7 @@ impl MatrixWindow {
         let button = |id: &'static str, text: &'static str| {
             div()
                 .id(id)
+                .debug_selector(move || id.into())
                 .role(Role::Button)
                 .aria_label(text)
                 .px(px(12.))

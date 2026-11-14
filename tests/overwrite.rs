@@ -77,6 +77,25 @@ fn native_typing_matches_insert_character_and_add_wstring_scalar_vectors() -> Re
 }
 
 #[test]
+fn reversed_unicode_typing_restores_directional_selection_and_savepoint() -> Result<(), EditError> {
+    let mut editor = EditorSession::new("a中😀z");
+    editor.select(selection(8, 1))?;
+    editor.type_text("文")?;
+    assert_eq!(editor.committed_text(), "a文z");
+    assert_eq!(editor.selection(), selection(4, 4));
+    assert!(editor.is_modified());
+    assert!(editor.undo());
+    assert_eq!(editor.committed_text(), "a中😀z");
+    assert_eq!(editor.selection(), selection(8, 1));
+    assert!(!editor.is_modified());
+    assert!(!editor.undo());
+    assert!(editor.redo());
+    assert_eq!(editor.committed_text(), "a文z");
+    assert_eq!(editor.selection(), selection(4, 4));
+    Ok(())
+}
+
+#[test]
 fn overwrite_undo_replays_whole_scalars_and_respects_explicit_undo_groups() -> Result<(), EditError>
 {
     let mut editor = EditorSession::new("a😀中z");
@@ -131,6 +150,38 @@ fn empty_typing_and_read_only_failures_preserve_selection_revision_and_redo()
         editor.set_read_only(false);
         assert!(editor.redo());
         assert_eq!(editor.committed_text(), "Xa😀z");
+    }
+    Ok(())
+}
+
+#[test]
+fn read_only_deletion_collapses_stream_selection_without_editing() -> Result<(), EditError> {
+    for selected in [selection(8, 1), selection(1, 8)] {
+        for backward in [false, true] {
+            let mut editor = EditorSession::new("a中😀z");
+            editor.insert_text("X")?;
+            assert!(editor.undo());
+            let peer = editor.clone_view();
+            let peer_selection = peer.selection();
+            editor.select(selected)?;
+            editor.set_read_only(true);
+            let revision = editor.display_revision();
+            let result = if backward {
+                editor.backspace()
+            } else {
+                editor.delete_forward()
+            };
+            assert!(matches!(result, Err(EditError::ReadOnly)));
+            assert_eq!(editor.selection(), selection(1, 1));
+            assert_eq!(editor.committed_text(), "a中😀z");
+            assert_eq!(editor.display_revision(), revision);
+            assert!(!editor.is_modified());
+            assert_eq!(peer.selection(), peer_selection);
+            assert!(!editor.undo());
+            editor.set_read_only(false);
+            assert!(editor.redo());
+            assert_eq!(editor.committed_text(), "Xa中😀z");
+        }
     }
     Ok(())
 }

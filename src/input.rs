@@ -925,7 +925,7 @@ impl EditorSession {
 
     pub fn backspace_not_line(&mut self) -> Result<(), EditError> {
         if self.is_read_only() {
-            return Err(EditError::ReadOnly);
+            return self.document.backspace_not_line();
         }
         let previous = self.document.text_revision();
         let composing = self.has_composition();

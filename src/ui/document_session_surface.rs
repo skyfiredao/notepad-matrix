@@ -164,7 +164,12 @@ impl MatrixWindow {
         };
         let paths = serde_json::to_value(self.workspace.recently_closed())?;
         let settings = store.load_settings()?;
-        if settings.get("recent_files") == Some(&paths) {
+        if settings.get("recent_files") == Some(&paths)
+            && settings
+                .get("recent_files_limit")
+                .and_then(serde_json::Value::as_u64)
+                == Some(self.workspace.recent_files_limit() as u64)
+        {
             return Ok(());
         }
         store.update_settings(|settings| {

@@ -87,7 +87,9 @@ impl Language {
             Self::Builtin(id) => crate::languages::catalog()
                 .ok()
                 .and_then(|catalog| catalog.by_id(id))
-                .map_or("Unknown language file", |profile| profile.description.as_str()),
+                .map_or("Unknown language file", |profile| {
+                    profile.description.as_str()
+                }),
             Self::UserDefined(_) => "User Defined file",
         }
     }

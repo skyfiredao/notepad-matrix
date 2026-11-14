@@ -395,6 +395,39 @@ mod tests {
             assert_eq!(view.editor().display_selections(), before);
             assert_eq!(read_payload(cx).unwrap().text, "sentinel");
         });
+        cx.dispatch_action(EditorSelectAll);
+        cx.dispatch_action(EditorCopy);
+        cx.update(|_, cx| {
+            assert_eq!(
+                read_payload(cx).expect("ordinary readonly Copy").text,
+                "ab\ncd"
+            )
+        });
+        cx.dispatch_action(EditorPaste);
+        cx.simulate_input("!");
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "ab\ncd");
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(5),
+                    head: ByteOffset(0)
+                }
+            );
+            assert!(!view.editor().document().can_undo() && !view.editor().document().can_redo());
+        });
+        cx.dispatch_action(EditorDelete);
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "ab\ncd");
+            assert_eq!(
+                view.editor().selection(),
+                Selection {
+                    anchor: ByteOffset(0),
+                    head: ByteOffset(0)
+                }
+            );
+            assert!(!view.editor().document().can_undo() && !view.workspace.active().is_modified());
+        });
     }
 
     #[gpui::test]

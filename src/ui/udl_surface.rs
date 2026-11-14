@@ -219,18 +219,65 @@ mod tests {
     fn definition_and_styler_are_independent_windows_without_language_conversion(
         cx: &mut gpui::TestAppContext,
     ) {
+        cx.update(|cx| {
+            cx.bind_keys([
+                KeyBinding::new("tab", DialogFocusNext, Some("MatrixAuxiliary")),
+                KeyBinding::new("shift-tab", DialogFocusPrevious, Some("MatrixAuxiliary")),
+                KeyBinding::new("escape", CloseWindow, Some("MatrixAuxiliary")),
+            ])
+        });
         let main = cx.add_window(|window, cx| MatrixWindow::new(false, window, cx));
         cx.run_until_parked();
-        main.update(cx, |view, window, cx| {
+        main.update(cx, |view, _, _| {
             view.settings_store = None;
             view.workspace
                 .active_mut()
                 .set_language(crate::syntax::Language::Json);
-            view.show_udl(window, cx);
         })
-        .expect("open definition");
+        .expect("document fixture");
+        let mut document = gpui::VisualTestContext::from_window(main.into(), cx);
+        let toolbar = document
+            .debug_bounds("toolbar-define-user-language")
+            .expect("UDL toolbar");
+        document.simulate_click(toolbar.center(), gpui::Modifiers::default());
         cx.run_until_parked();
         assert_eq!(cx.windows().len(), 2, "UDL must be a real floating window");
+        let definition_window = cx
+            .windows()
+            .into_iter()
+            .find(|handle| *handle != main.into())
+            .expect("definition window");
+        let mut definition = gpui::VisualTestContext::from_window(definition_window, cx);
+        let registry = main
+            .read_with(cx, |view, _| {
+                (view.udl.registry.revision(), view.udl.pending_save)
+            })
+            .expect("registry snapshot");
+        definition.update(|window, cx| {
+            main.read_with(cx, |view, cx| {
+                assert!(view.udl.focus.contains_focused(window, cx))
+            })
+            .expect("UDL initial focus");
+        });
+        for key in ["tab", "shift-tab"] {
+            let before = definition.update(|window, cx| window.focused(cx));
+            definition.simulate_keystrokes(key);
+            assert_ne!(
+                definition.update(|window, cx| window.focused(cx)),
+                before,
+                "UDL traversal {key}"
+            );
+            definition.update(|window, cx| {
+                main.read_with(cx, |view, cx| {
+                    assert!(view.udl.focus.contains_focused(window, cx));
+                    assert_eq!(
+                        (view.udl.registry.revision(), view.udl.pending_save),
+                        registry
+                    );
+                })
+                .expect("navigation stays within unchanged UDL");
+            });
+        }
         main.update(cx, |view, window, cx| {
             view.udl.styler_visible = true;
             view.present_floating(floating_windows::DialogKind::UdlStyler, window, cx);
@@ -250,14 +297,61 @@ mod tests {
             assert_eq!(view.editor().committed_text(), "");
         })
         .expect("unchanged document");
-        main.update(cx, |view, window, cx| {
-            view.dismiss_floating(floating_windows::DialogKind::UdlStyler, window, cx)
-        })
-        .expect("close Styler");
+        let styler = cx
+            .windows()
+            .into_iter()
+            .find(|handle| *handle != main.into() && *handle != definition_window)
+            .expect("Styler window");
+        cx.dispatch_action(styler, CloseWindow);
         cx.run_until_parked();
         assert_eq!(cx.windows().len(), 2);
         main.read_with(cx, |view, _| assert!(view.udl.visible))
             .expect("definition remains open");
+        let mut close = definition.debug_bounds("udl-close").expect("UDL Close");
+        let viewport = definition.update(|window, _| window.viewport_size());
+        if close.bottom() > viewport.height {
+            definition.simulate_event(gpui::ScrollEvent {
+                position: gpui::point(viewport.width - px(2.), viewport.height / 2.),
+                delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), -close.bottom())),
+                ..Default::default()
+            });
+            close = definition
+                .debug_bounds("udl-close")
+                .expect("visible UDL Close");
+        }
+        assert!(close.top() >= px(0.) && close.bottom() <= viewport.height);
+        definition.simulate_click(close.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert_eq!(cx.windows(), vec![main.into()]);
+        document.simulate_click(toolbar.center(), gpui::Modifiers::default());
+        cx.run_until_parked();
+        let reopened = cx
+            .windows()
+            .into_iter()
+            .find(|handle| *handle != main.into())
+            .expect("reopened UDL");
+        gpui::VisualTestContext::from_window(reopened, cx).simulate_keystrokes("escape");
+        cx.run_until_parked();
+        assert_eq!(cx.windows(), vec![main.into()]);
+        main.update(cx, |view, window, _| {
+            assert!(view.editor_focus.is_focused(window));
+            assert_eq!(
+                view.workspace.active().language(),
+                crate::syntax::Language::Json
+            );
+            assert_eq!(view.editor().committed_text(), "");
+            assert!(!view.editor().document().can_undo());
+            assert_eq!(
+                (view.udl.registry.revision(), view.udl.pending_save),
+                registry
+            );
+        })
+        .expect("closing restores original unchanged document");
+        document.simulate_input("!");
+        main.read_with(cx, |view, _| {
+            assert_eq!(view.editor().committed_text(), "!")
+        })
+        .expect("post-dismissal editor input");
     }
 
     #[gpui::test]
@@ -679,6 +773,10 @@ impl MatrixWindow {
             return;
         }
         self.menu_input(MenuEvent::Dismiss, window, cx);
+        if self.udl.visible {
+            self.dismiss_floating(floating_windows::DialogKind::Udl, window, cx);
+            return;
+        }
         self.refresh_udl_registry(cx);
         self.udl.visible = true;
         self.present_floating(floating_windows::DialogKind::Udl, window, cx);
@@ -1259,6 +1357,7 @@ impl MatrixWindow {
         panel = panel.child(
             div()
                 .id("udl-close")
+                .debug_selector(|| "udl-close".into())
                 .role(Role::Button)
                 .aria_label("Close User Defined Language")
                 .tab_index(0)

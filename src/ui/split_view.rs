@@ -18,7 +18,7 @@ pub(super) struct PaneState {
     editor_observed_revision: crate::input::DisplayRevision,
     editor_observed_selection: Selection,
     editor_preferred_x: Option<gpui::Pixels>,
-    tab_scroll: gpui::ScrollHandle,
+    pub(super) tab_scroll: gpui::ScrollHandle,
     overwrite_mode: bool,
     syntax_cache: Option<(
         crate::input::DisplayRevision,
@@ -144,14 +144,14 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        if self.file_busy
+            || self.close_dialog
+            || self.save_all_dialog
+            || self.batch_editing_blocked()
+        {
+            return false;
+        }
         if pane != self.pane {
-            if self.file_busy
-                || self.close_dialog
-                || self.save_all_dialog
-                || self.batch_editing_blocked()
-            {
-                return false;
-            }
             if !self.cancel_view_composition(window, cx) || !self.scope_editor_pane(pane) {
                 return false;
             }
@@ -291,7 +291,11 @@ impl MatrixWindow {
         cx.notify();
     }
 
-    pub(super) fn render_split_editors(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_split_editors(
+        &mut self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let focused = self.pane;
         let panes: Vec<_> = [ViewId::Primary, ViewId::Secondary]
             .into_iter()
@@ -304,6 +308,31 @@ impl MatrixWindow {
                 continue;
             }
             let tabs = self.render_tabs(pane == focused, cx);
+            let tabs = if !self.dark && !self.tab_vertical {
+                div()
+                    .relative()
+                    .flex()
+                    .flex_col()
+                    .flex_shrink_0()
+                    .w_full()
+                    .child(tabs)
+                    .child(
+                        div()
+                            .absolute()
+                            .bottom(px(0.))
+                            .left(px(0.))
+                            .right(px(0.))
+                            .h(px(4.))
+                            .flex()
+                            .flex_col()
+                            .children([0xffffff, 0xe3e3e3, 0xa0a0a0, 0x696969].map(|color| {
+                                div().w_full().h(px(1.)).flex_shrink_0().bg(rgb(color))
+                            })),
+                    )
+                    .into_any_element()
+            } else {
+                tabs
+            };
             let editor = self.render_editor(cx);
             elements.push(
                 div()

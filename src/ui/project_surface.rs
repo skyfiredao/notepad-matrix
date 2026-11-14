@@ -16,6 +16,7 @@ pub(super) struct ProjectState {
 
 struct PanelSurface {
     name: gpui::Entity<text_field::TextField>,
+    tree_focus: FocusHandle,
     edit: Option<ProjectEdit>,
     confirm: Option<(ProjectCommand, Option<NodeId>)>,
     commands: bool,
@@ -86,6 +87,7 @@ impl ProjectState {
                         cx,
                     )
                 }),
+                tree_focus: cx.focus_handle(),
                 edit: None,
                 confirm: None,
                 commands: false,
@@ -861,6 +863,27 @@ impl MatrixWindow {
             body.child(
                 div()
                     .id(("project-tree", index))
+                    .role(Role::Tree)
+                    .aria_label("Project entries")
+                    .track_focus(&surface.tree_focus)
+                    .tab_index(0)
+                    .on_key_down(cx.listener(
+                        move |view, event: &gpui::KeyDownEvent, window, cx| {
+                            if event.keystroke.key != "enter" {
+                                return;
+                            }
+                            if let Some(id) = view
+                                .projects
+                                .model
+                                .panel(index)
+                                .ok()
+                                .and_then(|panel| panel.selected)
+                            {
+                                view.activate_project_entry(index, id, window, cx);
+                            }
+                            cx.stop_propagation();
+                        },
+                    ))
                     .flex_1()
                     .min_h(px(0.))
                     .overflow_y_scroll()
@@ -901,7 +924,15 @@ impl MatrixWindow {
                                 row.bg(rgb(if dark { 0x40546f } else { 0xd5e4f7 }))
                             })
                             .child(label)
-                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |view, _, window, cx| {
+                                    if !view.project_operations_blocked() {
+                                        view.projects.panels[index].tree_focus.focus(window, cx);
+                                    }
+                                    cx.stop_propagation();
+                                }),
+                            )
                             .on_mouse_down(
                                 MouseButton::Right,
                                 cx.listener(move |view, _, _, cx| {
@@ -913,9 +944,20 @@ impl MatrixWindow {
                                     cx.notify();
                                 }),
                             )
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                view.activate_project_entry(index, id, window, cx)
-                            }))
+                            .on_click(cx.listener(
+                                move |view, event: &gpui::ClickEvent, window, cx| {
+                                    if !view.project_operations_blocked() {
+                                        if let Ok(panel) = view.projects.model.panel_mut(index) {
+                                            panel.selected = Some(id);
+                                        }
+                                        if event.click_count() == 2 {
+                                            view.activate_project_entry(index, id, window, cx);
+                                        }
+                                        cx.notify();
+                                    }
+                                    cx.stop_propagation();
+                                },
+                            ))
                             .when(!matches!(node.kind, NodeKind::Project), |row| {
                                 row.on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))
                             })

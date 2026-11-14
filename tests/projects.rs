@@ -39,7 +39,7 @@ fn find_in_projects_searches_only_entries_and_uses_unsaved_open_text()
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn non_utf8_working_directory_returns_snapshot_error_without_panicking()
 -> Result<(), Box<dyn std::error::Error>> {

@@ -1618,6 +1618,20 @@ impl Document {
         allow_line_start: bool,
     ) -> Result<(), EditError> {
         if self.is_read_only() {
+            let selections = self.selections();
+            let selected = selections.primary();
+            if selections.ranges().len() == 1
+                && !selections.is_rectangular()
+                && selected.anchor_virtual == 0
+                && selected.head_virtual == 0
+                && !selected.is_empty()
+            {
+                let start = selected.selection.range().start;
+                self.select(Selection {
+                    anchor: start,
+                    head: start,
+                })?;
+            }
             return Err(EditError::ReadOnly);
         }
         let selections = self.selections();

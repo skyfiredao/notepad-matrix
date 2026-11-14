@@ -8,7 +8,6 @@ pub(super) enum DialogKind {
     GoTo,
     Preferences,
     About,
-    Summary,
     MarkdownPreview,
     MacroSave,
     MacroRepeat,
@@ -26,14 +25,13 @@ pub(super) enum DialogKind {
 }
 
 impl DialogKind {
-    const ALL: [Self; 21] = [
+    const ALL: [Self; 20] = [
         Self::Find,
         Self::FindInResults,
         Self::FindInResultsProgress,
         Self::GoTo,
         Self::Preferences,
         Self::About,
-        Self::Summary,
         Self::MarkdownPreview,
         Self::MacroSave,
         Self::MacroRepeat,
@@ -58,7 +56,6 @@ impl DialogKind {
             Self::GoTo => owner.goto_visible,
             Self::Preferences => owner.preferences_visible,
             Self::About => owner.about_visible,
-            Self::Summary => owner.summary_visible,
             Self::MarkdownPreview => owner.markdown_preview.visible,
             Self::MacroSave => owner.macro_dialogs.save_visible,
             Self::MacroRepeat => owner.macro_dialogs.repeat_visible,
@@ -83,10 +80,9 @@ impl DialogKind {
             Self::Find => "Find",
             Self::FindInResults => "Find in search results",
             Self::FindInResultsProgress => "Find In Files progress...",
-            Self::GoTo => "Go to",
+            Self::GoTo => "Go To...",
             Self::Preferences => "Preferences",
             Self::About => "About Notepad Matrix",
-            Self::Summary => "Summary",
             Self::MarkdownPreview => "Markdown Preview",
             Self::MacroSave => "Save Current Recorded Macro",
             Self::MacroRepeat => "Run a Macro Multiple Times",
@@ -112,7 +108,6 @@ impl DialogKind {
             Self::GoTo => size(px(360.), px(220.)),
             Self::Preferences => size(px(460.), px(560.)),
             Self::About => size(px(500.), px(280.)),
-            Self::Summary => size(px(520.), px(340.)),
             Self::MarkdownPreview => size(px(700.), px(560.)),
             Self::MacroSave => size(px(420.), px(200.)),
             Self::MacroRepeat => size(px(480.), px(360.)),
@@ -144,7 +139,6 @@ impl DialogKind {
             Self::GoTo => owner.goto_visible = false,
             Self::Preferences => owner.preferences_visible = false,
             Self::About => owner.about_visible = false,
-            Self::Summary => owner.summary_visible = false,
             Self::MarkdownPreview => owner.hide_markdown_preview(cx),
             Self::MacroSave => owner.macro_dialogs.save_visible = false,
             Self::MacroRepeat => owner.macro_dialogs.repeat_visible = false,
@@ -258,7 +252,6 @@ impl Render for FloatingWindow {
             DialogKind::GoTo => owner.render_goto(cx),
             DialogKind::Preferences => owner.render_preferences(cx),
             DialogKind::About => owner.render_about(cx),
-            DialogKind::Summary => owner.render_summary(cx),
             DialogKind::MarkdownPreview => owner.render_markdown_preview(cx),
             DialogKind::MacroSave => owner.render_save_macro(cx),
             DialogKind::MacroRepeat => owner.render_repeat_macro(cx),
@@ -549,7 +542,6 @@ impl MatrixWindow {
             DialogKind::GoTo => self.goto_visible = false,
             DialogKind::Preferences => self.preferences_visible = false,
             DialogKind::About => self.about_visible = false,
-            DialogKind::Summary => self.summary_visible = false,
             DialogKind::MarkdownPreview => self.hide_markdown_preview(cx),
             DialogKind::MacroSave => self.macro_dialogs.save_visible = false,
             DialogKind::MacroRepeat => {
@@ -658,11 +650,20 @@ impl MatrixWindow {
         for kind in DialogKind::ALL {
             if !kind.visible(self) {
                 self.floating_opening.remove(&kind);
-                if let Some(handle) = self.floating_windows.remove(&kind)
-                    && cx.windows().contains(&handle.into())
-                    && let Err(error) = handle.update(cx, |_, window, _| window.remove_window())
-                {
-                    eprintln!("could not retire auxiliary window: {error}");
+                if let Some(handle) = self.floating_windows.remove(&kind) {
+                    if cx.windows().contains(&handle.into())
+                        && let Err(error) = handle.update(cx, |_, window, _| window.remove_window())
+                    {
+                        eprintln!("could not retire auxiliary window: {error}");
+                    }
+                    if kind.confirmation()
+                        && self.close_focus.is_focused(window)
+                        && !self.close_dialog
+                        && !self.save_all_dialog
+                        && !self.reload_dialog
+                    {
+                        self.editor_focus.focus(window, cx);
+                    }
                 }
                 continue;
             }
@@ -715,6 +716,7 @@ impl MatrixWindow {
                 }),
                 is_movable: true,
                 is_minimizable: false,
+                is_resizable: kind == DialogKind::MarkdownPreview,
                 window_min_size: Some(bounds.size),
                 ..Default::default()
             };

@@ -16,7 +16,11 @@ fn format_file_time(time: SystemTime) -> String {
 
 impl MatrixWindow {
     pub(super) fn show_summary(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.file_busy
+        if self.route_to_document(window, cx, |view, window, cx| view.show_summary(window, cx)) {
+            return;
+        }
+        if self.summary_visible
+            || self.file_busy
             || self.close_dialog
             || self.save_all_dialog
             || self.batch_editing_blocked()
@@ -24,15 +28,6 @@ impl MatrixWindow {
             return;
         }
         self.menu_input(MenuEvent::Dismiss, window, cx);
-        self.summary_visible = true;
-        self.present_floating(floating_windows::DialogKind::Summary, window, cx);
-        cx.notify();
-    }
-
-    pub(super) fn render_summary(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if !self.summary_visible {
-            return None;
-        }
         let snapshot = self.editor().display_snapshot();
         let mut description = String::new();
         if let Some(file) = self.disk_file()
@@ -62,39 +57,27 @@ impl MatrixWindow {
             Ok(summary) => description.push_str(&summary.description()),
             Err(error) => description.push_str(&format!("Summary unavailable: {error}")),
         }
-        Some(
-            div()
-                .id("summary-dialog")
-                .debug_selector(|| "summary-dialog".into())
-                .role(Role::Dialog)
-                .aria_label("Summary")
-                .track_focus(&self.close_focus)
-                .w_full()
-                .p(px(16.))
-                .flex()
-                .flex_col()
-                .gap(px(12.))
-                .child(description)
-                .child(
-                    div()
-                        .id("summary-close")
-                        .debug_selector(|| "summary-close".into())
-                        .role(Role::Button)
-                        .aria_label("Close Summary")
-                        .border_1()
-                        .border_color(rgb(0x808080))
-                        .px(px(12.))
-                        .py(px(4.))
-                        .child("OK")
-                        .on_click(cx.listener(|view, _, window, cx| {
-                            view.dismiss_floating(
-                                floating_windows::DialogKind::Summary,
-                                window,
-                                cx,
-                            );
-                        })),
-                )
-                .into_any_element(),
-        )
+        self.summary_visible = true;
+        let response = window.prompt(
+            gpui::PromptLevel::Info,
+            "Summary",
+            Some(&description),
+            &[gpui::PromptButton::ok("OK")],
+            cx,
+        );
+        cx.spawn_in(window, async move |view, cx| {
+            if let Err(error) = response.await {
+                eprintln!("Summary prompt closed without a response: {error}");
+            }
+            if let Err(error) = view.update_in(cx, |view, window, cx| {
+                view.summary_visible = false;
+                view.editor_focus.focus(window, cx);
+                cx.notify();
+            }) {
+                eprintln!("Summary prompt lost its document window: {error}");
+            }
+        })
+        .detach();
+        cx.notify();
     }
 }

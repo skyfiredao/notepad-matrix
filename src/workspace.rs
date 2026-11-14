@@ -416,7 +416,7 @@ impl Workspace {
             mru: vec![(ViewId::Primary, BufferId(1))],
             mru_cycle: None,
             recently_closed: Vec::new(),
-            recent_files_limit: 10,
+            recent_files_limit: 5,
             view_states: Default::default(),
             session_ui: serde_json::json!({}),
             large_file_restriction,
@@ -610,6 +610,59 @@ impl Workspace {
         &self.recently_closed
     }
 
+    pub fn clear_recent_files(&mut self) {
+        self.recently_closed.clear();
+    }
+
+    pub fn rename_untitled(&mut self, id: BufferId, name: &str) -> std::io::Result<()> {
+        let name = name.trim();
+        if name.is_empty()
+            || name.contains(['<', '>', ':', '"', '/', '\\', '|', '?', '*', '\t', '\0'])
+            || name.encode_utf16().count() > 63
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "名称不能为空，且必须是单个文件名",
+            ));
+        }
+        if self
+            .buffers
+            .iter()
+            .any(|buffer| buffer.id != id && buffer.name().eq_ignore_ascii_case(name))
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "该名称已被其他标签页使用",
+            ));
+        }
+        let buffer = self
+            .buffers
+            .iter_mut()
+            .find(|buffer| buffer.id == id)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "文档已关闭"))?;
+        if buffer
+            .disk_file
+            .as_ref()
+            .is_some_and(|file| file.path().is_file())
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "磁盘文件需要使用文件重命名",
+            ));
+        }
+        if buffer.disk_file.take().is_some() {
+            buffer.editor.document().set_buffer_dirty(true);
+            buffer.set_user_read_only(buffer.user_read_only);
+        }
+        buffer.name = name.to_string();
+        if !buffer.language_is_explicit() {
+            buffer.set_detected_language(crate::syntax::Language::from_path(std::path::Path::new(
+                name,
+            )));
+        }
+        Ok(())
+    }
+
     pub fn recent_files_limit(&self) -> usize {
         self.recent_files_limit
     }
@@ -622,7 +675,7 @@ impl Workspace {
             None => self.recent_files_limit,
             Some(value) => value
                 .as_u64()
-                .map(|limit| limit.min(30) as usize)
+                .map(|limit| limit.min(5) as usize)
                 .ok_or(WorkspaceError::InvalidSessionState)?,
         };
         let paths = match settings.get("recent_files") {

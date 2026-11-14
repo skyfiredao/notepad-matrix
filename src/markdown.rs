@@ -447,6 +447,9 @@ pub enum RowContent {
         first: bool,
         last: bool,
     },
+    Mermaid {
+        body: Arc<str>,
+    },
     Table {
         cells: Vec<PreparedInline>,
         alignments: Arc<[Alignment]>,
@@ -653,6 +656,19 @@ pub fn render_document(
                         Some("HTML (not executed)".into())
                     };
                     let body: Arc<str> = node.plain_text().into();
+                    if language.as_deref().is_some_and(|language| {
+                        language
+                            .split_whitespace()
+                            .next()
+                            .is_some_and(|name| name.eq_ignore_ascii_case("mermaid"))
+                    }) {
+                        output.rows.push(row(
+                            RowContent::Mermaid { body },
+                            context,
+                            &source[node.source.clone()],
+                        ));
+                        continue;
+                    }
                     let mut start = 0;
                     for (index, line) in body.split_inclusive('\n').enumerate() {
                         if cancelled() {

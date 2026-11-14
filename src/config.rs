@@ -143,6 +143,12 @@ impl ConfigStore {
                 "save_all_confirm": true,
                 "function_list_sort_default": false,
                 "docPeekOnTab": false,
+                "tabCompactLabelLen": 0,
+                "recent_files_limit": 5,
+                "whiteSpaceShow": false,
+                "eolShow": false,
+                "npcShow": false,
+                "ccShow": true,
                 "muteSounds": false,
                 "features": {"html_export": true, "mime_tools": true, "converter": true}
             }),
