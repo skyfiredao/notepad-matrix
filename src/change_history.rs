@@ -804,51 +804,64 @@ impl History {
         self.save = Some(0);
     }
 
+    pub(crate) fn edition_at(&self, position: usize) -> u8 {
+        let edition = self.log.insertions.at(position);
+        if self.reversions.as_ref().is_some_and(|log| log.insertions.at(position) != 0) {
+            if edition == 0 { 1 } else { 4 }
+        } else {
+            edition
+        }
+    }
+
+    pub(crate) fn edition_end_run(&self, position: usize) -> usize {
+        let end = self.log.insertions.end(position);
+        self.reversions.as_ref().map_or(end, |log| end.min(log.insertions.end(position)))
+    }
+
+    pub(crate) fn edition_deletes_at(&self, position: usize) -> u8 {
+        let mut bits = self.log.deletions.get(&position).map_or(0, |values| {
+            values.iter().fold(0u8, |bits, value| bits | (1 << (value.edition - 1)))
+        });
+        if self.reversions.as_ref().is_some_and(|log| log.deletions.contains_key(&position)) {
+            bits |= if bits & 6 == 0 { 1 } else { 8 };
+        }
+        bits
+    }
+
+    pub(crate) fn insertions_in(&self, range: Range<usize>) -> Vec<(Range<usize>, u8)> {
+        let end = range.end.min(self.log.insertions.length());
+        let mut position = range.start;
+        let mut spans = Vec::new();
+        while position < end {
+            let next = self.edition_end_run(position).min(end);
+            let edition = self.edition_at(position);
+            if edition != 0 {
+                spans.push((position..next, edition));
+            }
+            position = next;
+        }
+        spans
+    }
+
+    pub(crate) fn deletions_in(&self, range: RangeInclusive<usize>) -> Vec<(usize, u8)> {
+        let mut positions: BTreeSet<_> = self.log.deletions.range(range.clone()).map(|(at, _)| at).collect();
+        if let Some(log) = &self.reversions {
+            positions.extend(log.deletions.range(range).map(|(at, _)| at));
+        }
+        positions.into_iter().map(|at| (at, self.edition_deletes_at(at))).collect()
+    }
+
     pub(crate) fn line_bits(&self, start: usize, next: usize, end: usize) -> u8 {
         let mut result = 0;
         let mut at = start;
         while at < next {
-            let edition = self.log.insertions.at(at);
-            let reverted = self
-                .reversions
-                .as_ref()
-                .is_some_and(|log| log.insertions.at(at) != 0);
-            let edition = if reverted {
-                if edition == 0 { 1 } else { 4 }
-            } else {
-                edition
-            };
+            let edition = self.edition_at(at);
             if edition != 0 {
                 result |= 1 << (edition - 1);
             }
-            let base_end = self.log.insertions.end(at);
-            at = self
-                .reversions
-                .as_ref()
-                .map_or(base_end, |log| base_end.min(log.insertions.end(at)));
+            at = self.edition_end_run(at);
         }
-        let mut positions: BTreeSet<_> = self
-            .log
-            .deletions
-            .range(start..=end)
-            .map(|(at, _)| at)
-            .collect();
-        if let Some(log) = &self.reversions {
-            positions.extend(log.deletions.range(start..=end).map(|(at, _)| at));
-        }
-        for at in positions {
-            let mut bits = self.log.deletions.get(&at).map_or(0, |values| {
-                values
-                    .iter()
-                    .fold(0u8, |bits, value| bits | (1 << (value.edition - 1)))
-            });
-            if self
-                .reversions
-                .as_ref()
-                .is_some_and(|log| log.deletions.contains_key(&at))
-            {
-                bits |= if bits & 6 == 0 { 1 } else { 8 };
-            }
+        for (_, bits) in self.deletions_in(start..=end) {
             result |= bits;
         }
         result

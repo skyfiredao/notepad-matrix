@@ -190,14 +190,14 @@ impl MultiSelectionCommand {
         match self {
             Self::Next(options) | Self::All(options) => {
                 match (options.match_case, options.whole_word) {
-                    (false, false) => "Ignore Case & Whole Word",
-                    (true, false) => "Match Case Only",
-                    (false, true) => "Match Whole Word Only",
-                    (true, true) => "Match Case & Whole Word",
+                    (false, false) => "忽略大小写和全词匹配",
+                    (true, false) => "只匹配大小写",
+                    (false, true) => "只匹配全词",
+                    (true, true) => "匹配大小写和全词",
                 }
             }
-            Self::Undo => "Undo the Latest Added Multi-Select",
-            Self::Skip => "Skip Current & Go to Next Multi-select",
+            Self::Undo => "撤销最近添加的多重选取",
+            Self::Skip => "跳过当前并前往下一处多重选取",
             Self::Rotate => "Rotate Selection",
             Self::Swap => "Swap Main Anchor/Caret",
         }
@@ -320,12 +320,12 @@ impl IntelligenceCommand {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Function => "Function Completion",
-            Self::Word => "Word Completion",
-            Self::Parameters => "Function Parameters Hint",
-            Self::PreviousParameters => "Function Parameters Previous Hint",
-            Self::NextParameters => "Function Parameters Next Hint",
-            Self::Path => "Path Completion",
+            Self::Function => "函数自动补全",
+            Self::Word => "单词自动补全",
+            Self::Parameters => "函数参数提示",
+            Self::PreviousParameters => "函数参数上一个提示",
+            Self::NextParameters => "函数参数下一个提示",
+            Self::Path => "路径自动补全",
         }
     }
 
@@ -343,6 +343,7 @@ impl IntelligenceCommand {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuCommand {
+    Source(u32),
     ActivateDocument(crate::workspace::BufferId),
     DocumentDropdown,
     Binary(crate::clipboard::BinaryCommand),
@@ -388,6 +389,170 @@ pub enum SearchCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsCommand {
     Preferences,
+    StyleConfigurator,
+    ShortcutMapper,
+    ImportStyleThemes,
+    EditContextMenu,
+}
+
+pub(crate) fn product_command_label(id: u32, locale: &str) -> Option<&'static str> {
+    match (id, locale == "chineseSimplified.xml") {
+        (47000, true) => Some("关于 Notepad Matrix"),
+        (47000, false) => Some("About Notepad Matrix"),
+        (47002, true) => Some("Notepad Matrix 项目主页"),
+        (47002, false) => Some("Notepad Matrix project"),
+        _ => None,
+    }
+}
+
+pub fn source_command(id: u32) -> Option<(&'static str, &'static str, &'static str)> {
+    if let Some(page) = crate::codepages::codepage(id) {
+        return Some((page.label, "", page.label));
+    }
+    Some(match id {
+        45004 => ("使用 ANSI 编码", "", "encoding-ansi"),
+        45008 => ("使用 UTF-8 编码", "", "encoding-utf8"),
+        45005 => ("使用 UTF-8-BOM 编码", "", "encoding-utf8-bom"),
+        45006 => ("使用 UTF-16 BE BOM 编码", "", "encoding-utf16-be"),
+        45007 => ("使用 UTF-16 LE BOM 编码", "", "encoding-utf16-le"),
+        45009 => ("转为 ANSI 编码", "", "encoding-convert-ansi"),
+        45010 => ("转为 UTF-8 编码", "", "encoding-convert-utf8"),
+        45011 => ("转为 UTF-8-BOM 编码", "", "encoding-convert-utf8-bom"),
+        45012 => ("转为 UTF-16 BE BOM 编码", "", "encoding-convert-utf16-be"),
+        45013 => ("转为 UTF-16 LE BOM 编码", "", "encoding-convert-utf16-le"),
+        47002 => ("Notepad Matrix 项目主页", "", "help-project"),
+        47010 => ("命令行参数...", "", "help-command-line"),
+        47012 => ("调试信息...", "", "help-debug-info"),
+        48501 => ("生成...", "", "tools-md5-text"),
+        48502 => ("从文件生成...", "", "tools-md5-files"),
+        48503 => ("从选区生成并复制到剪贴板", "", "tools-md5-selection"),
+        48504 => ("生成...", "", "tools-sha256-text"),
+        48505 => ("从文件生成...", "", "tools-sha256-files"),
+        48506 => ("从选区生成并复制到剪贴板", "", "tools-sha256-selection"),
+        48507 => ("生成...", "", "tools-sha1-text"),
+        48508 => ("从文件生成...", "", "tools-sha1-files"),
+        48509 => ("从选区生成并复制到剪贴板", "", "tools-sha1-selection"),
+        48510 => ("生成...", "", "tools-sha512-text"),
+        48511 => ("从文件生成...", "", "tools-sha512-files"),
+        48512 => ("从选区生成并复制到剪贴板", "", "tools-sha512-selection"),
+        59003 => ("Conversion Panel", "", "converter-panel"),
+        59005 => ("Edit Configuration File", "", "converter-config"),
+        59006 => ("About", "", "converter-about"),
+        11001 => ("文件窗口(W)...", "", "window-file-manager"),
+        44034 => ("总在最前", "", "view-always-on-top"),
+        44032 => ("切换全屏模式", "F11", "view-fullscreen"),
+        44009 => ("便笺模式", "F12", "view-post-it"),
+        44011 => ("沉浸模式", "", "view-distraction-free"),
+        44072 => ("激活从视图", "F8", "view-switch-pane"),
+        44042 => ("隐藏行", "Alt+H", "view-hide-lines"),
+        44010 => ("折叠所有层次", "Alt+0", "view-fold-all"),
+        44029 => ("展开所有层次", "Alt+Shift+0", "view-unfold-all"),
+        44030 => ("折叠当前层次", "Ctrl+Alt+F", "view-fold-current"),
+        44031 => ("展开当前层次", "Ctrl+Alt+Shift+F", "view-unfold-current"),
+        44051 => ("1", "Alt+1", "view-fold-1"),
+        44052 => ("2", "Alt+2", "view-fold-2"),
+        44053 => ("3", "Alt+3", "view-fold-3"),
+        44054 => ("4", "Alt+4", "view-fold-4"),
+        44055 => ("5", "Alt+5", "view-fold-5"),
+        44056 => ("6", "Alt+6", "view-fold-6"),
+        44057 => ("7", "Alt+7", "view-fold-7"),
+        44058 => ("8", "Alt+8", "view-fold-8"),
+        44061 => ("1", "Alt+Shift+1", "view-unfold-1"),
+        44062 => ("2", "Alt+Shift+2", "view-unfold-2"),
+        44063 => ("3", "Alt+Shift+3", "view-unfold-3"),
+        44064 => ("4", "Alt+Shift+4", "view-unfold-4"),
+        44065 => ("5", "Alt+Shift+5", "view-unfold-5"),
+        44066 => ("6", "Alt+Shift+6", "view-unfold-6"),
+        44067 => ("7", "Alt+Shift+7", "view-unfold-7"),
+        44068 => ("8", "Alt+Shift+8", "view-unfold-8"),
+        44100 => ("Firefox", "", "view-browser-firefox"),
+        44101 => ("Chrome", "", "view-browser-chrome"),
+        44102 => ("Edge", "", "view-browser-edge"),
+        42020 => ("开始/结束 选取(S)", "Ctrl+Shift+B", "edit-begin-end-select"),
+        42089 => (
+            "开始/结束 按列选取",
+            "Alt+Shift+B",
+            "edit-begin-end-column-select",
+        ),
+        42084 => ("日期时间(短)", "", "edit-date-short"),
+        42085 => ("日期时间(长)", "", "edit-date-long"),
+        42086 => ("日期时间(自定义)", "", "edit-date-custom"),
+        42037 => ("列选模式...", "", "edit-column-tip"),
+        42028 => ("当前文件设为只读", "", "edit-user-read-only"),
+        42033 => ("设置macOS的只读属性", "", "edit-file-read-only"),
+        42073 => ("打开文件", "", "edit-open-selected-file"),
+        42074 => (
+            "在文件管理器中打开所在文件夹",
+            "",
+            "edit-reveal-selected-file",
+        ),
+        42075 => ("在线搜索", "Alt+F2", "edit-search-online"),
+        42076 => ("更改搜索引擎...", "", "edit-change-search-engine"),
+        42102 => ("所有文件设为只读", "", "edit-all-read-only"),
+        42103 => ("清除所有文件只读状态", "", "edit-all-read-write"),
+        43048 => ("选中并查找下一个(S)", "Ctrl+F3", "search-selection-next"),
+        43011 => ("增量查找(I)", "Ctrl+Alt+I", "search-incremental"),
+        43052 => ("查找范围内的字符(E)...", "", "search-character-range"),
+        43049 => (
+            "选中并查找上一个(S)",
+            "Ctrl+Shift+F3",
+            "search-selection-previous",
+        ),
+        43014 => ("快速查找下一个(V)", "Ctrl+Alt+F3", "search-volatile-next"),
+        43015 => (
+            "快速查找上一个(V)",
+            "Ctrl+Alt+Shift+F3",
+            "search-volatile-previous",
+        ),
+        43045 => ("搜索结果窗口(W)", "F7", "search-results-focus"),
+        43046 => ("下一个搜索结果(T)", "F4", "search-result-next"),
+        43047 => ("上一个搜索结果(T)", "Shift+F4", "search-result-previous"),
+        43009 => ("转到匹配的括号(M)", "Ctrl+B", "search-brace-match"),
+        43053 => ("选中匹配括号之间的所有字符(E)", "Ctrl+Alt+B", "search-brace-select"),
+        43018 => ("剪切书签行", "", "search-bookmark-cut"),
+        43019 => ("复制书签行", "", "search-bookmark-copy"),
+        43020 => ("粘贴(替换)书签行", "", "search-bookmark-paste"),
+        43021 => ("删除书签行", "", "search-bookmark-remove"),
+        43051 => ("删除未标记书签行", "", "search-bookmark-remove-unmarked"),
+        43050 => ("反向标记书签", "", "search-bookmark-invert"),
+        43054 => ("标记(K)...", "Ctrl+M", "search-mark"),
+        43022 => ("使用格式1", "", "search-style-all-1"),
+        43024 => ("使用格式2", "", "search-style-all-2"),
+        43026 => ("使用格式3", "", "search-style-all-3"),
+        43028 => ("使用格式4", "", "search-style-all-4"),
+        43030 => ("使用格式5", "", "search-style-all-5"),
+        43062 => ("使用格式1", "", "search-style-one-1"),
+        43063 => ("使用格式2", "", "search-style-one-2"),
+        43064 => ("使用格式3", "", "search-style-one-3"),
+        43065 => ("使用格式4", "", "search-style-one-4"),
+        43066 => ("使用格式5", "", "search-style-one-5"),
+        43023 => ("清除格式1", "", "search-style-clear-1"),
+        43025 => ("清除格式2", "", "search-style-clear-2"),
+        43027 => ("清除格式3", "", "search-style-clear-3"),
+        43029 => ("清除格式4", "", "search-style-clear-4"),
+        43031 => ("清除格式5", "", "search-style-clear-5"),
+        43032 => ("清除所有格式", "", "search-style-clear-all"),
+        43033 => ("格式1", "Ctrl+Shift+1", "search-style-previous-1"),
+        43034 => ("格式2", "Ctrl+Shift+2", "search-style-previous-2"),
+        43035 => ("格式3", "Ctrl+Shift+3", "search-style-previous-3"),
+        43036 => ("格式4", "Ctrl+Shift+4", "search-style-previous-4"),
+        43037 => ("格式5", "Ctrl+Shift+5", "search-style-previous-5"),
+        43038 => ("寻找标记格式", "Ctrl+Shift+0", "search-mark-previous"),
+        43039 => ("格式1", "Ctrl+1", "search-style-next-1"),
+        43040 => ("格式2", "Ctrl+2", "search-style-next-2"),
+        43041 => ("格式3", "Ctrl+3", "search-style-next-3"),
+        43042 => ("格式4", "Ctrl+4", "search-style-next-4"),
+        43043 => ("格式5", "Ctrl+5", "search-style-next-5"),
+        43044 => ("寻找标记格式", "Ctrl+0", "search-mark-next"),
+        43055 => ("格式1", "", "search-style-copy-1"),
+        43056 => ("格式2", "", "search-style-copy-2"),
+        43057 => ("格式3", "", "search-style-copy-3"),
+        43058 => ("格式4", "", "search-style-copy-4"),
+        43059 => ("格式5", "", "search-style-copy-5"),
+        43060 => ("所有格式", "", "search-style-copy-all"),
+        43061 => ("寻找标记格式", "", "search-mark-copy"),
+        _ => return None,
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -415,9 +580,9 @@ impl ChangeHistoryCommand {
     }
     pub fn label(self) -> &'static str {
         match self {
-            Self::Next => "Go to Next Change",
-            Self::Previous => "Go to Previous Change",
-            Self::Clear => "Clear Change History",
+            Self::Next => "下一处变更",
+            Self::Previous => "上一处变更",
+            Self::Clear => "清除变更记录",
         }
     }
 }
@@ -495,7 +660,43 @@ impl DocumentControl {
 impl MenuCommand {
     pub fn source_id(self) -> Option<u32> {
         match self {
+            Self::Source(id) => (source_command(id).is_some()
+                || matches!(id, 48016 | 48017 | 21000..=21999)).then_some(id),
             Self::ChangeHistory(command) => Some(command.source_id()),
+            Self::Edit(command) => Some(match command {
+                EditCommand::Cut => 42001,
+                EditCommand::Copy => 42002,
+                EditCommand::Undo => 42003,
+                EditCommand::Redo => 42004,
+                EditCommand::Paste => 42005,
+                EditCommand::Delete => 42006,
+                EditCommand::SelectAll => 42007,
+                EditCommand::DuplicateLine => 42010,
+                EditCommand::ConvertEol(crate::input::LineEnding::CrLf) => 45001,
+                EditCommand::ConvertEol(crate::input::LineEnding::Lf) => 45002,
+                EditCommand::ConvertEol(crate::input::LineEnding::Cr) => 45003,
+            }),
+            Self::Search(command) => Some(match command {
+                SearchCommand::Find => 43001,
+                SearchCommand::Next => 43002,
+                SearchCommand::Replace => 43003,
+                SearchCommand::GoTo => 43004,
+                SearchCommand::Previous => 43010,
+                SearchCommand::FindInFiles => 43013,
+            }),
+            Self::Settings(command) => Some(match command {
+                SettingsCommand::Preferences => 48011,
+                SettingsCommand::StyleConfigurator => 46001,
+                SettingsCommand::ShortcutMapper => 48009,
+                SettingsCommand::ImportStyleThemes => 48006,
+                SettingsCommand::EditContextMenu => 48018,
+            }),
+            Self::Bookmark(command) => Some(match command {
+                BookmarkCommand::Toggle => 43005,
+                BookmarkCommand::Next => 43006,
+                BookmarkCommand::Previous => 43007,
+                BookmarkCommand::ClearAll => 43008,
+            }),
             Self::File(command) => Some(match command {
                 FileCommand::New => 41001,
                 FileCommand::Open => 41002,
@@ -520,7 +721,7 @@ impl MenuCommand {
                 FileCommand::PrintNow => 1001,
                 FileCommand::OpenAllRecent => 42040,
                 FileCommand::ClearRecent => 42041,
-                FileCommand::Recent(index @ 0..=4) => 41028 + index as u32,
+                FileCommand::Recent(index @ 0..=29) => 41028 + index as u32,
                 FileCommand::Recent(_) => return None,
             }),
             Self::View(ViewCommand::Whitespace) => Some(44025),
@@ -528,6 +729,21 @@ impl MenuCommand {
             Self::View(ViewCommand::Nonprinting) => Some(44130),
             Self::View(ViewCommand::ControlCharacters) => Some(44131),
             Self::View(ViewCommand::AllCharacters) => Some(44019),
+            Self::View(ViewCommand::IndentGuides) => Some(44020),
+            Self::View(ViewCommand::WordWrap) => Some(44022),
+            Self::View(ViewCommand::ZoomIn) => Some(44023),
+            Self::View(ViewCommand::ZoomOut) => Some(44024),
+            Self::View(ViewCommand::ZoomReset) => Some(44033),
+            Self::View(ViewCommand::SyncVertical) => Some(44035),
+            Self::View(ViewCommand::SyncHorizontal) => Some(44036),
+            Self::View(ViewCommand::Summary) => Some(44049),
+            Self::View(ViewCommand::DocumentList) => Some(44070),
+            Self::View(ViewCommand::DocumentMap) => Some(44080),
+            Self::View(ViewCommand::FunctionList) => Some(44084),
+            Self::View(ViewCommand::FolderWorkspace) => Some(44085),
+            Self::View(ViewCommand::Monitoring) => Some(44097),
+            Self::View(ViewCommand::MoveToOtherView) => Some(10001),
+            Self::View(ViewCommand::CloneToOtherView) => Some(10002),
             Self::View(ViewCommand::MoveToNewInstance) => Some(10003),
             Self::View(ViewCommand::OpenInNewInstance) => Some(10004),
             Self::Binary(command) => Some(command.source_id()),
@@ -541,6 +757,15 @@ impl MenuCommand {
             Self::ColumnEditor => Some(42034),
             Self::Document(command) => command.source_id(),
             Self::View(ViewCommand::ProjectPanel(index @ 0..=2)) => Some(44081 + index as u32),
+            Self::About => Some(47000),
+            Self::Run => Some(49000),
+            Self::Macro(command) => Some(match command {
+                crate::macros::MacroCommand::StartRecording => 42018,
+                crate::macros::MacroCommand::StopRecording => 42019,
+                crate::macros::MacroCommand::Playback => 42021,
+                crate::macros::MacroCommand::SaveCurrent => 42025,
+                crate::macros::MacroCommand::RunMultiple => 42032,
+            }),
             Self::Language(language) => {
                 let id = match language {
                     crate::syntax::Language::NormalText => 0,
@@ -561,15 +786,16 @@ impl MenuCommand {
     pub fn label(self) -> &'static str {
         use crate::input::LineEnding;
         match self {
+            Self::Source(id) => source_command(id).map_or("", |value| value.0),
             Self::ActivateDocument(_) => "Activate document",
             Self::DocumentDropdown => "Document list",
             Self::Binary(command) => command.label(),
-            Self::CharacterPanel => "Character Panel",
+            Self::CharacterPanel => "字符面板(P)",
             Self::CopyPath(command) => command.label(),
             Self::Intelligence(command) => command.label(),
             Self::TextTransform(id) => transform_label(id),
             Self::MultiSelection(command) => command.label(),
-            Self::ColumnEditor => "Column Editor...",
+            Self::ColumnEditor => "列编辑器(N)...",
             Self::Document(command) => command.label(),
             Self::View(ViewCommand::ProjectPanel(0)) => "Project Panel 1",
             Self::View(ViewCommand::ProjectPanel(1)) => "Project Panel 2",
@@ -640,31 +866,35 @@ impl MenuCommand {
             Self::View(ViewCommand::MoveToNewInstance) => "Move to New Instance",
             Self::View(ViewCommand::OpenInNewInstance) => "Open in New Instance",
             Self::DefineUserLanguage => "Define your language...",
-            Self::Bookmark(BookmarkCommand::Toggle) => "Toggle Bookmark",
+            Self::Bookmark(BookmarkCommand::Toggle) => "设置/取消书签",
             Self::ChangeHistory(command) => command.label(),
-            Self::Bookmark(BookmarkCommand::Next) => "Next Bookmark",
-            Self::Bookmark(BookmarkCommand::Previous) => "Previous Bookmark",
-            Self::Bookmark(BookmarkCommand::ClearAll) => "Clear All Bookmarks",
+            Self::Bookmark(BookmarkCommand::Next) => "下一个书签",
+            Self::Bookmark(BookmarkCommand::Previous) => "上一个书签",
+            Self::Bookmark(BookmarkCommand::ClearAll) => "清除所有书签",
             Self::Mime(crate::mime::MimeOperation::Base64Encode) => "Base64 Encode",
             Self::Mime(crate::mime::MimeOperation::Base64EncodePadded) => {
                 "Base64 Encode with padding"
             }
             Self::Mime(crate::mime::MimeOperation::Base64Decode) => "Base64 Decode",
-            Self::Settings(SettingsCommand::Preferences) => "Preferences...",
-            Self::Search(SearchCommand::Find) => "Find...",
-            Self::Search(SearchCommand::FindInFiles) => "Find in Files...",
-            Self::Search(SearchCommand::Next) => "Find Next",
-            Self::Search(SearchCommand::Previous) => "Find Previous",
-            Self::Search(SearchCommand::GoTo) => "Go to...",
-            Self::Search(SearchCommand::Replace) => "Replace...",
-            Self::Edit(EditCommand::Undo) => "Undo",
-            Self::Edit(EditCommand::Redo) => "Redo",
-            Self::Edit(EditCommand::Cut) => "Cut",
-            Self::Edit(EditCommand::Copy) => "Copy",
-            Self::Edit(EditCommand::Paste) => "Paste",
-            Self::Edit(EditCommand::Delete) => "Delete",
-            Self::Edit(EditCommand::SelectAll) => "Select All",
-            Self::Edit(EditCommand::DuplicateLine) => "Duplicate Current Line",
+            Self::Settings(SettingsCommand::Preferences) => "首选项...",
+            Self::Settings(SettingsCommand::StyleConfigurator) => "语言样式配置器...",
+            Self::Settings(SettingsCommand::ShortcutMapper) => "管理快捷键...",
+            Self::Settings(SettingsCommand::ImportStyleThemes) => "导入主题...",
+            Self::Settings(SettingsCommand::EditContextMenu) => "编辑弹出菜单",
+            Self::Search(SearchCommand::Find) => "查找(F)...",
+            Self::Search(SearchCommand::FindInFiles) => "在文件中查找(L)",
+            Self::Search(SearchCommand::Next) => "查找下一个(N)",
+            Self::Search(SearchCommand::Previous) => "查找上一个(P)",
+            Self::Search(SearchCommand::GoTo) => "定位(G)...",
+            Self::Search(SearchCommand::Replace) => "替换(R)...",
+            Self::Edit(EditCommand::Undo) => "撤消(U)",
+            Self::Edit(EditCommand::Redo) => "恢复(R)",
+            Self::Edit(EditCommand::Cut) => "剪切(T)",
+            Self::Edit(EditCommand::Copy) => "复制(C)",
+            Self::Edit(EditCommand::Paste) => "粘贴(P)",
+            Self::Edit(EditCommand::Delete) => "删除(D)",
+            Self::Edit(EditCommand::SelectAll) => "全选(S)",
+            Self::Edit(EditCommand::DuplicateLine) => "重复当前行",
             Self::Edit(EditCommand::ConvertEol(LineEnding::CrLf)) => "Windows (CR LF)",
             Self::Edit(EditCommand::ConvertEol(LineEnding::Lf)) => "Unix (LF)",
             Self::Edit(EditCommand::ConvertEol(LineEnding::Cr)) => "Macintosh (CR)",
@@ -673,12 +903,28 @@ impl MenuCommand {
 
     pub fn shortcut(self) -> &'static str {
         match self {
+            Self::Source(id) => source_command(id).map_or("", |value| value.1),
             Self::ActivateDocument(_) | Self::DocumentDropdown => "",
             Self::Binary(_) => "",
             Self::CharacterPanel => "",
             Self::CopyPath(_) => "",
             Self::Intelligence(command) => command.shortcut(),
-            Self::TextTransform(42010) => "Ctrl+D",
+            Self::TextTransform(42012) => "Ctrl+I",
+            Self::TextTransform(42013) => "Ctrl+J",
+            Self::TextTransform(42014) => "Ctrl+Shift+Up",
+            Self::TextTransform(42015) => "Ctrl+Shift+Down",
+            Self::TextTransform(42016) => "Ctrl+Shift+U",
+            Self::TextTransform(42017) => "Ctrl+U",
+            Self::TextTransform(42022) => "Ctrl+Q",
+            Self::TextTransform(42023) => "Ctrl+Shift+Q",
+            Self::TextTransform(42035) => "Ctrl+K",
+            Self::TextTransform(42036) => "Ctrl+Shift+K",
+            Self::TextTransform(42057) => "Ctrl+Alt+Enter",
+            Self::TextTransform(42058) => "Ctrl+Alt+Shift+Enter",
+            Self::TextTransform(42067) => "Alt+U",
+            Self::TextTransform(42068) => "Alt+Shift+U",
+            Self::TextTransform(42069) => "Ctrl+Alt+U",
+            Self::TextTransform(42070) => "Ctrl+Alt+Shift+U",
             Self::TextTransform(_) => "",
             Self::MultiSelection(_) => "",
             Self::ColumnEditor => "Alt+C",
@@ -700,7 +946,7 @@ impl MenuCommand {
             Self::ExportHtml => "",
             Self::Window(WindowCommand::Minimize) => "Cmd+M",
             Self::Window(_) => "",
-            Self::About => "",
+            Self::About => "F1",
             Self::Run => "F5",
             Self::HashSelection(_) => "",
             Self::Language(_) => "",
@@ -714,8 +960,8 @@ impl MenuCommand {
             Self::Search(SearchCommand::Previous) => "Shift+F3",
             Self::Search(SearchCommand::GoTo) => "Ctrl+G",
             Self::Search(SearchCommand::Replace) => "Ctrl+H",
-            Self::Edit(EditCommand::Undo) => "Ctrl+Z",
-            Self::Edit(EditCommand::Redo) => "Ctrl+Y",
+            Self::Edit(EditCommand::Undo) => "Ctrl+Z / Alt+Backspace",
+            Self::Edit(EditCommand::Redo) => "Ctrl+Y / Ctrl+Shift+Z",
             Self::Edit(EditCommand::Cut) => "Ctrl+X",
             Self::Edit(EditCommand::Copy) => "Ctrl+C",
             Self::Edit(EditCommand::Paste) => "Ctrl+V",
@@ -730,11 +976,23 @@ impl MenuCommand {
 
     fn mnemonic(self) -> Option<char> {
         match self {
+            Self::Source(_) => self
+                .label()
+                .rsplit_once('(')
+                .and_then(|(_, suffix)| suffix.chars().next())
+                .filter(char::is_ascii_alphabetic)
+                .map(|ch| ch.to_ascii_lowercase()),
             Self::ActivateDocument(_) | Self::DocumentDropdown => None,
             Self::Binary(_) => None,
             Self::CharacterPanel => Some('p'),
             Self::CopyPath(_) => None,
             Self::Intelligence(_) => None,
+            Self::TextTransform(42016) => Some('u'),
+            Self::TextTransform(42017) => Some('l'),
+            Self::TextTransform(42067) => Some('p'),
+            Self::TextTransform(42069) => Some('s'),
+            Self::TextTransform(42071) => Some('i'),
+            Self::TextTransform(42072) => Some('r'),
             Self::TextTransform(_) => None,
             Self::MultiSelection(_) => None,
             Self::ColumnEditor => Some('n'),
@@ -772,7 +1030,7 @@ impl MenuCommand {
             ) => None,
             Self::Bookmark(_) => None,
             Self::ChangeHistory(_) => None,
-            Self::Settings(SettingsCommand::Preferences) => Some('p'),
+            Self::Settings(_) => None,
             Self::Mime(_) => None,
             Self::Converter(_) => None,
             Self::ExportHtml => Some('e'),
@@ -790,7 +1048,7 @@ impl MenuCommand {
             Self::Macro(crate::macros::MacroCommand::RunMultiple) => Some('r'),
             Self::SavedMacro(_) => None,
             Self::Search(SearchCommand::Find) => Some('f'),
-            Self::Search(SearchCommand::FindInFiles) => Some('i'),
+            Self::Search(SearchCommand::FindInFiles) => Some('l'),
             Self::Search(SearchCommand::Next) => Some('n'),
             Self::Search(SearchCommand::Previous) => Some('p'),
             Self::Search(SearchCommand::GoTo) => Some('g'),
@@ -842,6 +1100,12 @@ pub enum MenuEntry {
         mnemonic: char,
         entries: Vec<MenuEntry>,
     },
+    DynamicSubmenu {
+        selector: String,
+        label: String,
+        mnemonic: Option<char>,
+        entries: Vec<MenuEntry>,
+    },
     Separator,
 }
 
@@ -851,6 +1115,7 @@ impl MenuEntry {
             Self::Action(command) => command.label(),
             Self::DynamicAction { label, .. } => label,
             Self::Submenu { label, .. } => label,
+            Self::DynamicSubmenu { label, .. } => label,
             Self::Separator => "",
         }
     }
@@ -866,7 +1131,9 @@ impl MenuEntry {
     pub fn enabled(&self, available: &impl Fn(MenuCommand) -> bool) -> bool {
         match self {
             Self::Action(command) | Self::DynamicAction { command, .. } => available(*command),
+            Self::Submenu { selector, .. } if selector.starts_with("edit-") => true,
             Self::Submenu { entries, .. } => entries.iter().any(|entry| entry.enabled(available)),
+            Self::DynamicSubmenu { entries, .. } => entries.iter().any(|entry| entry.enabled(available)),
             Self::Separator => false,
         }
     }
@@ -874,10 +1141,43 @@ impl MenuEntry {
     fn mnemonic(&self) -> Option<char> {
         match self {
             Self::Action(command) => command.mnemonic(),
-            Self::DynamicAction { .. } => None,
+            Self::DynamicAction { label, .. } => Self::label_mnemonic(label),
             Self::Submenu { mnemonic, .. } => Some(*mnemonic),
+            Self::DynamicSubmenu { mnemonic, .. } => *mnemonic,
             Self::Separator => None,
         }
+    }
+
+    pub fn command(&self) -> Option<MenuCommand> {
+        match self {
+            Self::Action(command) | Self::DynamicAction { command, .. } => Some(*command),
+            _ => None,
+        }
+    }
+
+    pub fn submenu_entries(&self) -> Option<&[MenuEntry]> {
+        match self {
+            Self::Submenu { entries, .. } | Self::DynamicSubmenu { entries, .. } => Some(entries),
+            _ => None,
+        }
+    }
+
+    pub fn submenu_selector(&self) -> Option<&str> {
+        match self {
+            Self::Submenu { selector, .. } => Some(selector),
+            Self::DynamicSubmenu { selector, .. } => Some(selector),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn label_mnemonic(label: &str) -> Option<char> {
+        let mut chars = label.chars();
+        while let Some(ch) = chars.next() {
+            if ch == '&' && let Some(next) = chars.next() && next != '&' {
+                return Some(next.to_ascii_lowercase());
+            }
+        }
+        None
     }
 }
 
@@ -962,6 +1262,7 @@ pub enum MenuMode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuEvent {
     OpenDocuments(Vec<(crate::workspace::BufferId, String)>),
+    OpenContext(usize, Vec<MenuEntry>),
     ToggleBar,
     OpenRoot(usize),
     OpenSubmenu(&'static str),
@@ -1002,6 +1303,59 @@ pub enum MenuOutcome {
     Activate(MenuCommand),
 }
 
+fn source_entries(ids: &[u32]) -> Vec<MenuEntry> {
+    ids.iter().map(|id| if *id == 0 { MenuEntry::Separator } else { MenuEntry::Action(MenuCommand::Source(*id)) }).collect()
+}
+
+fn encoding_entries() -> Vec<MenuEntry> {
+    let groups = crate::codepages::GROUPS.iter().map(|group| {
+        let (selector, label) = match group.label {
+            "Arabic" => ("encoding-arabic", "阿拉伯语"),
+            "Baltic" => ("encoding-baltic", "波罗的海语"),
+            "Celtic" => ("encoding-celtic", "凯尔特语"),
+            "Cyrillic" => ("encoding-cyrillic", "西里尔语"),
+            "Central European" => ("encoding-central-european", "中欧"),
+            "Chinese" => ("encoding-chinese", "中文"),
+            "Eastern European" => ("encoding-eastern-european", "东欧"),
+            "Greek" => ("encoding-greek", "希腊语"),
+            "Hebrew" => ("encoding-hebrew", "希伯来语"),
+            "Japanese" => ("encoding-japanese", "日语"),
+            "Korean" => ("encoding-korean", "韩语"),
+            "North European" => ("encoding-north-european", "北欧"),
+            "Thai" => ("encoding-thai", "泰语"),
+            "Turkish" => ("encoding-turkish", "土耳其语"),
+            "Western European" => ("encoding-western-european", "西欧"),
+            "Vietnamese" => ("encoding-vietnamese", "越南语"),
+            _ => (group.label, group.label),
+        };
+        MenuEntry::Submenu { selector, label, mnemonic: '\0', entries: group.entries.iter()
+            .map(|page| MenuEntry::Action(MenuCommand::Source(page.id))).collect() }
+    }).collect();
+    crate::codepages::SOURCE_ENCODINGS.iter()
+        .map(|entry| MenuEntry::Action(MenuCommand::Source(entry.id)))
+        .chain([MenuEntry::Submenu { selector: "encoding-character-sets", label: "编码字符集", mnemonic: '\0', entries: groups }, MenuEntry::Separator])
+        .chain(crate::codepages::CONVERT_ENCODINGS.iter().map(|entry| MenuEntry::Action(MenuCommand::Source(entry.id))))
+        .collect()
+}
+
+fn source_group(
+    selector: &'static str,
+    label: &'static str,
+    mnemonic: char,
+    ids: &[u32],
+) -> MenuEntry {
+    MenuEntry::Submenu {
+        selector,
+        label,
+        mnemonic,
+        entries: ids
+            .iter()
+            .copied()
+            .map(|id| MenuEntry::Action(MenuCommand::Source(id)))
+            .collect(),
+    }
+}
+
 pub struct MenuBar {
     definitions: Vec<MenuDefinition>,
     mode: MenuMode,
@@ -1010,6 +1364,7 @@ pub struct MenuBar {
     revision: u64,
     popup_limit: Option<(usize, usize)>,
     documents: Option<Vec<MenuEntry>>,
+    configured_popup: Option<Vec<MenuEntry>>,
 }
 
 impl Default for MenuBar {
@@ -1033,17 +1388,17 @@ impl Default for MenuBar {
                     MenuEntry::Separator,
                     MenuEntry::Submenu {
                         selector: "edit-line-operations",
-                        label: "Line Operations",
+                        label: "行操作(L)",
                         mnemonic: 'l',
                         entries: transform_entries(&[
-                            42010, 42011, 42079, 42077, 42012, 42013, 42014, 42015, 42055, 42056,
-                            42057, 42058, 42083, 42078, 0, 42059, 42080, 42100, 42061, 42063,
-                            42065, 42104, 0, 42060, 42081, 42101, 42062, 42064, 42066, 42105,
+                            42010, 42079, 42077, 42012, 42013, 42014, 42015, 42055, 42056, 42057,
+                            42058, 42083, 42078, 0, 42059, 42080, 42100, 42061, 42063, 42065,
+                            42104, 0, 42060, 42081, 42101, 42062, 42064, 42066, 42105,
                         ]),
                     },
                     MenuEntry::Submenu {
                         selector: "edit-menu-eol",
-                        label: "EOL Conversion",
+                        label: "文档格式转换(E)",
                         mnemonic: 'e',
                         entries: [LineEnding::CrLf, LineEnding::Lf, LineEnding::Cr]
                             .into_iter()
@@ -1059,21 +1414,31 @@ impl Default for MenuBar {
                 label: "搜索(S)",
                 mnemonic: 's',
                 entries: [
-                    SearchCommand::Find,
-                    SearchCommand::Next,
-                    SearchCommand::Previous,
-                    SearchCommand::Replace,
-                    SearchCommand::FindInFiles,
-                    SearchCommand::GoTo,
+                    MenuEntry::Action(MenuCommand::Search(SearchCommand::Find)),
+                    MenuEntry::Action(MenuCommand::Search(SearchCommand::FindInFiles)),
+                    MenuEntry::Action(MenuCommand::Search(SearchCommand::Next)),
+                    MenuEntry::Action(MenuCommand::Search(SearchCommand::Previous)),
+                    MenuEntry::Action(MenuCommand::Source(43048)),
+                    MenuEntry::Action(MenuCommand::Source(43049)),
+                    MenuEntry::Action(MenuCommand::Source(43014)),
+                    MenuEntry::Action(MenuCommand::Source(43015)),
+                    MenuEntry::Action(MenuCommand::Search(SearchCommand::Replace)),
+                    MenuEntry::Action(MenuCommand::Source(43011)),
+                    MenuEntry::Action(MenuCommand::Source(43045)),
+                    MenuEntry::Action(MenuCommand::Source(43046)),
+                    MenuEntry::Action(MenuCommand::Source(43047)),
+                    MenuEntry::Action(MenuCommand::Search(SearchCommand::GoTo)),
+                    MenuEntry::Action(MenuCommand::Source(43009)),
+                    MenuEntry::Action(MenuCommand::Source(43053)),
                 ]
                 .into_iter()
-                .map(|command| MenuEntry::Action(MenuCommand::Search(command)))
                 .chain([
+                    MenuEntry::Action(MenuCommand::Source(43054)),
                     MenuEntry::Separator,
                     MenuEntry::Submenu {
                         selector: "search-change-history-menu",
-                        label: "Change History",
-                        mnemonic: 'c',
+                        label: "变更记录",
+                        mnemonic: '\0',
                         entries: [
                             ChangeHistoryCommand::Next,
                             ChangeHistoryCommand::Previous,
@@ -1084,9 +1449,46 @@ impl Default for MenuBar {
                         .collect(),
                     },
                     MenuEntry::Separator,
+                    source_group(
+                        "search-style-all",
+                        "用格式标记全部(A)",
+                        'a',
+                        &[43022, 43024, 43026, 43028, 43030],
+                    ),
+                    source_group(
+                        "search-style-one",
+                        "用格式标记选定的文本(O)",
+                        'o',
+                        &[43062, 43063, 43064, 43065, 43066],
+                    ),
+                    source_group(
+                        "search-style-clear",
+                        "清除格式标记",
+                        '\0',
+                        &[43023, 43025, 43027, 43029, 43031, 43032],
+                    ),
+                    source_group(
+                        "search-style-previous",
+                        "到上一个格式标记(J)",
+                        'j',
+                        &[43033, 43034, 43035, 43036, 43037, 43038],
+                    ),
+                    source_group(
+                        "search-style-next",
+                        "到下一个格式标记(D)",
+                        'd',
+                        &[43039, 43040, 43041, 43042, 43043, 43044],
+                    ),
+                    source_group(
+                        "search-style-copy",
+                        "复制格式标记文本(C)",
+                        'c',
+                        &[43055, 43056, 43057, 43058, 43059, 43060, 43061],
+                    ),
+                    MenuEntry::Separator,
                     MenuEntry::Submenu {
                         selector: "search-bookmark-menu",
-                        label: "Bookmark",
+                        label: "书签(B)",
                         mnemonic: 'b',
                         entries: [
                             BookmarkCommand::Toggle,
@@ -1096,8 +1498,12 @@ impl Default for MenuBar {
                         ]
                         .into_iter()
                         .map(|command| MenuEntry::Action(MenuCommand::Bookmark(command)))
+                        .chain([43018, 43019, 43020, 43021, 43051, 43050]
+                            .map(|id| MenuEntry::Action(MenuCommand::Source(id))))
                         .collect(),
                     },
+                    MenuEntry::Separator,
+                    MenuEntry::Action(MenuCommand::Source(43052)),
                 ])
                 .collect(),
             },
@@ -1163,26 +1569,7 @@ impl Default for MenuBar {
                 selector: "encoding-menu-trigger",
                 label: "编码(N)",
                 mnemonic: 'n',
-                entries: [
-                    crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Plain),
-                    crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Bom),
-                    crate::files::UnicodeFormat::Utf16BeBom,
-                    crate::files::UnicodeFormat::Utf16LeBom,
-                ]
-                .into_iter()
-                .map(|format| MenuEntry::Action(MenuCommand::SelectEncoding(format)))
-                .chain(std::iter::once(MenuEntry::Separator))
-                .chain(
-                    [
-                        crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Plain),
-                        crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Bom),
-                        crate::files::UnicodeFormat::Utf16BeBom,
-                        crate::files::UnicodeFormat::Utf16LeBom,
-                    ]
-                    .into_iter()
-                    .map(|format| MenuEntry::Action(MenuCommand::ConvertEncoding(format))),
-                )
-                .collect(),
+                entries: encoding_entries(),
             },
             MenuDefinition {
                 selector: "language-menu-trigger",
@@ -1211,9 +1598,20 @@ impl Default for MenuBar {
                 selector: "settings-menu-trigger",
                 label: "设置(T)",
                 mnemonic: 't',
-                entries: vec![MenuEntry::Action(MenuCommand::Settings(
-                    SettingsCommand::Preferences,
-                ))],
+                entries: vec![
+                    MenuEntry::Action(MenuCommand::Settings(SettingsCommand::Preferences)),
+                    MenuEntry::Action(MenuCommand::Settings(SettingsCommand::StyleConfigurator)),
+                    MenuEntry::Action(MenuCommand::Settings(SettingsCommand::ShortcutMapper)),
+                    MenuEntry::Separator,
+                    MenuEntry::Submenu {
+                        selector: "settings-import-submenu",
+                        label: "导入",
+                        mnemonic: 'i',
+                        entries: vec![MenuEntry::Action(MenuCommand::Settings(SettingsCommand::ImportStyleThemes))],
+                    },
+                    MenuEntry::Separator,
+                    MenuEntry::Action(MenuCommand::Settings(SettingsCommand::EditContextMenu)),
+                ],
             },
             MenuDefinition {
                 selector: "tools-menu-trigger",
@@ -1238,7 +1636,12 @@ impl Default for MenuBar {
                         crate::hashes::HashAlgorithm::Md5 => 'm',
                         _ => 's',
                     },
-                    entries: vec![MenuEntry::Action(MenuCommand::HashSelection(algorithm))],
+                    entries: source_entries(match algorithm {
+                        crate::hashes::HashAlgorithm::Md5 => &[48501, 48502, 48503],
+                        crate::hashes::HashAlgorithm::Sha1 => &[48507, 48508, 48509],
+                        crate::hashes::HashAlgorithm::Sha256 => &[48504, 48505, 48506],
+                        crate::hashes::HashAlgorithm::Sha512 => &[48510, 48511, 48512],
+                    }),
                 })
                 .collect(),
             },
@@ -1267,18 +1670,14 @@ impl Default for MenuBar {
                 selector: "window-menu-trigger",
                 label: "窗口(W)",
                 mnemonic: 'w',
-                entries: vec![
-                    MenuEntry::Action(MenuCommand::Window(WindowCommand::Minimize)),
-                    MenuEntry::Action(MenuCommand::Window(WindowCommand::Zoom)),
-                    MenuEntry::Separator,
-                    MenuEntry::Action(MenuCommand::Window(WindowCommand::BringAllToFront)),
-                ],
+                entries: Vec::new(),
             },
             MenuDefinition {
                 selector: "help-menu-trigger",
                 label: "?",
                 mnemonic: '?',
-                entries: vec![MenuEntry::Action(MenuCommand::About)],
+                entries: source_entries(&[47010, 0, 47002, 0, 47012])
+                    .into_iter().chain([MenuEntry::Action(MenuCommand::About)]).collect(),
             },
         ]);
         if let Some(edit) = menu
@@ -1288,13 +1687,13 @@ impl Default for MenuBar {
         {
             edit.entries.insert(
                 9,
-                transform_group("edit-indent", "Indent", 'i', &[42008, 42009]),
+                transform_group("edit-indent", "缩进(I)", 'i', &[42008, 42009]),
             );
             edit.entries.insert(
                 10,
                 transform_group(
                     "edit-convert-case",
-                    "Convert Case to",
+                    "转换大小写(V)",
                     'v',
                     &[42016, 42017, 42067, 42068, 42069, 42070, 42071, 42072],
                 ),
@@ -1303,14 +1702,14 @@ impl Default for MenuBar {
                 12,
                 transform_group(
                     "edit-comment",
-                    "Comment/Uncomment",
+                    "注释/取消注释(M)",
                     'm',
                     &[42022, 42035, 42036, 42023, 42047],
                 ),
             );
             edit.entries.push(transform_group(
                 "edit-blank",
-                "Blank Operations",
+                "空白字符操作(B)",
                 'b',
                 &[42024, 42042, 42043, 42044, 42045, 0, 42046, 42054, 42053],
             ));
@@ -1318,7 +1717,7 @@ impl Default for MenuBar {
                 13,
                 MenuEntry::Submenu {
                     selector: "edit-menu-auto-completion",
-                    label: "Auto-Completion",
+                    label: "自动补全(A)",
                     mnemonic: 'a',
                     entries: IntelligenceCommand::ALL
                         .into_iter()
@@ -1328,7 +1727,7 @@ impl Default for MenuBar {
             );
             edit.entries.push(transform_group(
                 "edit-on-selection",
-                "On Selection",
+                "对选中内容操作(O)",
                 'o',
                 &[42106],
             ));
@@ -1345,7 +1744,7 @@ impl Default for MenuBar {
                     index + 1,
                     MenuEntry::Submenu {
                         selector: "edit-paste-special",
-                        label: "Paste Special",
+                        label: "选择性粘贴(P)",
                         mnemonic: 'p',
                         entries: [
                             crate::clipboard::BinaryCommand::Copy,
@@ -1358,6 +1757,7 @@ impl Default for MenuBar {
                     },
                 );
             }
+            edit.entries.push(MenuEntry::Separator);
             for all in [true, false] {
                 edit.entries.push(MenuEntry::Submenu {
                     selector: if all {
@@ -1366,11 +1766,11 @@ impl Default for MenuBar {
                         "edit-multiselect-next"
                     },
                     label: if all {
-                        "Multi-select All"
+                        "多重选取（全部）"
                     } else {
-                        "Multi-select Next"
+                        "多重选取（下一处）"
                     },
-                    mnemonic: if all { 'a' } else { 'n' },
+                    mnemonic: '\0',
                     entries: [(false, false), (true, false), (false, true), (true, true)]
                         .into_iter()
                         .map(|(match_case, whole_word)| {
@@ -1388,14 +1788,9 @@ impl Default for MenuBar {
                 });
             }
             edit.entries.extend(
-                [
-                    MultiSelectionCommand::Undo,
-                    MultiSelectionCommand::Skip,
-                    MultiSelectionCommand::Rotate,
-                    MultiSelectionCommand::Swap,
-                ]
-                .into_iter()
-                .map(|command| MenuEntry::Action(MenuCommand::MultiSelection(command))),
+                [MultiSelectionCommand::Undo, MultiSelectionCommand::Skip]
+                    .into_iter()
+                    .map(|command| MenuEntry::Action(MenuCommand::MultiSelection(command))),
             );
             edit.entries.push(MenuEntry::Separator);
             edit.entries
@@ -1411,11 +1806,81 @@ impl Default for MenuBar {
                 9,
                 MenuEntry::Submenu {
                     selector: "edit-copy-to-clipboard",
-                    label: "Copy to Clipboard",
+                    label: "复制到剪贴板(Y)",
                     mnemonic: 'y',
                     entries,
                 },
             );
+        }
+        if let Some(edit) = menu
+            .definitions
+            .iter_mut()
+            .find(|menu| menu.selector == "edit-menu-trigger")
+        {
+            if let Some(at) = edit
+                .entries
+                .iter()
+                .position(|entry| {
+                    matches!(
+                        entry,
+                        MenuEntry::Action(MenuCommand::Edit(EditCommand::SelectAll))
+                    )
+                })
+            {
+            let at = at + 1;
+            let end = at + usize::from(matches!(edit.entries.get(at), Some(MenuEntry::Separator)));
+            edit.entries.splice(
+                at..end,
+                [
+                    MenuEntry::Action(MenuCommand::Source(42020)),
+                    MenuEntry::Action(MenuCommand::Source(42089)),
+                    MenuEntry::Separator,
+                    source_group("edit-date-time", "插入", '\0', &[42084, 42085, 42086]),
+                ],
+            );
+            }
+            if let Some(column) = edit
+                .entries
+                .iter()
+                .position(|entry| matches!(entry, MenuEntry::Action(MenuCommand::ColumnEditor))) {
+            edit.entries
+                .insert(column, MenuEntry::Action(MenuCommand::Source(42037)));
+            }
+            edit.entries.extend([
+                MenuEntry::Separator,
+                source_group(
+                    "edit-read-only",
+                    "在 Notepad++ 中只读",
+                    '\0',
+                    &[42028, 42102, 42103],
+                ),
+                MenuEntry::Action(MenuCommand::Source(42033)),
+            ]);
+            if let Some(MenuEntry::Submenu { entries, .. }) =
+                edit.entries.iter_mut().find(|entry| {
+                    matches!(
+                        entry,
+                        MenuEntry::Submenu {
+                            selector: "edit-on-selection",
+                            ..
+                        }
+                    )
+                })
+            {
+                entries.splice(
+                    0..0,
+                    [
+                        MenuEntry::Action(MenuCommand::Source(42073)),
+                        MenuEntry::Action(MenuCommand::Source(42074)),
+                        MenuEntry::Separator,
+                    ],
+                );
+                entries.extend([
+                    MenuEntry::Separator,
+                    MenuEntry::Action(MenuCommand::Source(42075)),
+                    MenuEntry::Action(MenuCommand::Source(42076)),
+                ]);
+            }
         }
         if let Some(view) = menu
             .definitions
@@ -1482,20 +1947,39 @@ impl Default for MenuBar {
                 .collect(),
             });
         }
-        if let Some(settings) = menu
+        if let Some(view) = menu.definitions.iter_mut().find(|menu| menu.selector == "view-menu-trigger") {
+            let mut entries = source_entries(&[44034, 44032, 44009, 44011, 0]);
+            entries.push(source_group("view-browser-menu", "在浏览器中查看当前文件", '\0', &[44100, 44101, 44102]));
+            entries.push(MenuEntry::Separator);
+            for selector in ["view-show-symbol-menu", "view-zoom-menu", "view-move-clone-menu", "view-tab-menu"] {
+                if let Some(entry) = view.entries.iter().find(|entry| entry.submenu_selector() == Some(selector)) {
+                    entries.push(entry.clone());
+                }
+            }
+            entries.push(MenuEntry::Action(MenuCommand::View(ViewCommand::WordWrap)));
+            entries.extend(source_entries(&[44072, 44042, 0, 44010, 44029, 44030, 44031]));
+            entries.push(source_group("view-fold-level", "折叠层次", '\0', &[44051, 44052, 44053, 44054, 44055, 44056, 44057, 44058]));
+            entries.push(source_group("view-unfold-level", "展开层次", '\0', &[44061, 44062, 44063, 44064, 44065, 44066, 44067, 44068]));
+            entries.push(MenuEntry::Separator);
+            entries.push(MenuEntry::Action(MenuCommand::View(ViewCommand::Summary)));
+            entries.push(MenuEntry::Separator);
+            if let Some(entry) = view.entries.iter().find(|entry| matches!(entry, MenuEntry::Submenu { selector: "view-project-panels", .. })) {
+                entries.push(entry.clone());
+            }
+            entries.extend([ViewCommand::FolderWorkspace, ViewCommand::DocumentMap, ViewCommand::DocumentList, ViewCommand::FunctionList, ViewCommand::MarkdownPreview]
+                .into_iter().map(|command| MenuEntry::Action(MenuCommand::View(command))));
+            entries.push(MenuEntry::Separator);
+            entries.extend([ViewCommand::SyncVertical, ViewCommand::SyncHorizontal].into_iter().map(|command| MenuEntry::Action(MenuCommand::View(command))));
+            entries.push(MenuEntry::Separator);
+            entries.push(MenuEntry::Action(MenuCommand::View(ViewCommand::Monitoring)));
+            view.entries = entries;
+        }
+        if let Some(window) = menu
             .definitions
             .iter_mut()
-            .find(|menu| menu.selector == "settings-menu-trigger")
+            .find(|menu| menu.selector == "window-menu-trigger")
         {
-            settings.entries.push(MenuEntry::Submenu {
-                selector: "settings-document-switcher",
-                label: "Document Switcher",
-                mnemonic: 'd',
-                entries: [DocumentCommand::Switcher, DocumentCommand::Mru]
-                    .into_iter()
-                    .map(|command| MenuEntry::Action(MenuCommand::Document(command)))
-                    .collect(),
-            });
+            window.entries.push(MenuEntry::Action(MenuCommand::Source(11001)));
         }
         menu.set_embedded_tools_enabled(true, true, true);
         if let Ok(catalog) = crate::languages::catalog() {
@@ -1539,64 +2023,81 @@ fn transform_group(
 
 fn transform_label(id: u32) -> &'static str {
     match id {
-        42008 => "Increase Line Indent",
-        42009 => "Decrease Line Indent",
-        42010 => "Duplicate Current Line",
+        42008 => "插入制表符(缩进)",
+        42009 => "删除制表符(退格)",
+        42010 => "重复当前行",
         42011 => "Transpose Current Line",
-        42012 => "Split Lines",
-        42013 => "Join Lines",
-        42014 => "Move Up Current Line",
-        42015 => "Move Down Current Line",
-        42016 => "UPPERCASE",
-        42017 => "lowercase",
-        42022 => "Toggle Single Line Comment",
-        42023 => "Block Comment",
-        42024 => "Trim Trailing Space",
-        42035 => "Single Line Comment",
-        42036 => "Single Line Uncomment",
-        42042 => "Trim Leading Space",
-        42043 => "Trim Leading and Trailing Space",
-        42044 => "EOL to Space",
-        42045 => "Trim both and EOL to Space",
-        42046 => "TAB to Space",
-        42047 => "Block Uncomment",
-        42053 => "Space to TAB (Leading)",
-        42054 => "Space to TAB (All)",
-        42055 => "Remove Empty Lines",
-        42056 => "Remove Empty Lines (Containing Blank characters)",
-        42057 => "Insert Blank Line Above Current",
-        42058 => "Insert Blank Line Below Current",
-        42059 => "Sort Lines Lexicographically Ascending",
-        42060 => "Sort Lines Lexicographically Descending",
-        42061 => "Sort Lines As Integers Ascending",
-        42062 => "Sort Lines As Integers Descending",
-        42063 => "Sort Lines As Decimals (Comma) Ascending",
-        42064 => "Sort Lines As Decimals (Comma) Descending",
-        42065 => "Sort Lines As Decimals (Dot) Ascending",
-        42066 => "Sort Lines As Decimals (Dot) Descending",
-        42067 => "Proper Case",
-        42068 => "Proper Case (blend)",
-        42069 => "Sentence case",
-        42070 => "Sentence case (blend)",
-        42071 => "iNVERT cASE",
-        42072 => "ranDOm CasE",
-        42077 => "Remove Consecutive Duplicate Lines",
-        42078 => "Randomize Line Order",
-        42079 => "Remove Duplicate Lines",
-        42080 => "Sort Lines Lex. Ascending Ignoring Case",
-        42081 => "Sort Lines Lex. Descending Ignoring Case",
-        42083 => "Reverse Line Order",
-        42100 => "Sort Lines In Locale Order Ascending",
-        42101 => "Sort Lines In Locale Order Descending",
-        42104 => "Sort Lines By Length Ascending",
-        42105 => "Sort Lines By Length Descending",
-        42106 => "Redact Selection █ (Shift: ●)",
+        42012 => "分割行",
+        42013 => "合并行",
+        42014 => "上移当前行",
+        42015 => "下移当前行",
+        42016 => "转成大写(U)",
+        42017 => "转成小写(L)",
+        42022 => "添加/删除单行注释",
+        42023 => "区块注释",
+        42024 => "移除行尾空格",
+        42035 => "设置行注释",
+        42036 => "取消行注释",
+        42042 => "移除行首空格",
+        42043 => "移除行首和行尾空格",
+        42044 => "换行符转空格",
+        42045 => "移除行首尾空格并且行尾转空格",
+        42046 => "TAB 转空格",
+        42047 => "清除区块注释",
+        42053 => "空格转 TAB (行首)",
+        42054 => "空格转 TAB (全部)",
+        42055 => "移除空行",
+        42056 => "移除空行(包括空白字符)",
+        42057 => "在当前行上方插入空行",
+        42058 => "在当前行下方插入空行",
+        42059 => "升序排列文本行",
+        42060 => "降序排列文本行",
+        42061 => "升序排列整数",
+        42062 => "降序排列整数",
+        42063 => "升序排列小数（逗号作为小数点）",
+        42064 => "降序排列小数（逗号作为小数点）",
+        42065 => "升序排列小数（句点作为小数点）",
+        42066 => "降序排列小数（句点作为小数点）",
+        42067 => "每词首字母大写，其他小写(P)",
+        42068 => "每词首字母大写，其他不变",
+        42069 => "每句首字母大写，其他小写(S)",
+        42070 => "每句首字母大写，其他不变",
+        42071 => "大小写互换(I)",
+        42072 => "随机大小写(R)",
+        42077 => "删除连续的重复行",
+        42078 => "随机排列行",
+        42079 => "删除重复行",
+        42080 => "升序排列文本行（忽略大小写）",
+        42081 => "降序排列文本行（忽略大小写）",
+        42083 => "逆序排列行",
+        42100 => "按区域设置升序排列文本行",
+        42101 => "按区域设置降序排列文本行",
+        42104 => "按行长升序排序",
+        42105 => "按行长降序排列",
+        42106 => "隐藏选定内容 █（Shift：●）)",
         _ => "Unknown Text Transformation",
     }
 }
 
 impl MenuBar {
-    pub fn set_builtin_languages(&mut self, languages: Vec<(u16, String)>) {
+    pub fn set_window_documents(&mut self, documents: Vec<(crate::workspace::BufferId, String)>) {
+        let Some(menu) = self.definitions.iter_mut().find(|menu| menu.selector == "window-menu-trigger") else { return; };
+        let mut entries: Vec<_> = menu.entries.iter().filter(|entry| !matches!(entry,
+            MenuEntry::DynamicAction { command: MenuCommand::ActivateDocument(_), .. } | MenuEntry::Separator)).cloned().collect();
+        if !documents.is_empty() {
+            entries.push(MenuEntry::Separator);
+            entries.extend(documents.into_iter().enumerate().map(|(index, (id, name))| MenuEntry::DynamicAction {
+                command: MenuCommand::ActivateDocument(id), label: format!("{}: {}", index + 1, name), shortcut: String::new(),
+            }));
+        }
+        if menu.entries != entries { menu.entries = entries; self.revision = self.revision.wrapping_add(1); }
+    }
+
+    pub fn set_builtin_languages(&mut self, mut languages: Vec<(u16, String)>) {
+        if !languages.iter().any(|(id, _)| *id == 57) { languages.push((57, "JSON".into())); }
+        self.set_builtin_languages_with_layout(languages, true);
+    }
+    pub fn set_builtin_languages_with_layout(&mut self, languages: Vec<(u16, String)>, compact: bool) {
         let Some(menu) = self
             .definitions
             .iter_mut()
@@ -1626,7 +2127,7 @@ impl MenuBar {
             for &(id, _, label) in BUILTIN_LANGUAGE_MENU {
                 if id == 0
                     || !label[..1].eq_ignore_ascii_case(letter)
-                    || (id != 57 && !languages.iter().any(|(candidate, _)| *candidate == id))
+                    || !languages.iter().any(|(candidate, _)| *candidate == id)
                 {
                     continue;
                 }
@@ -1640,7 +2141,7 @@ impl MenuBar {
                     shortcut: String::new(),
                 });
             }
-            if letter == "K" {
+            if letter == "K" || !compact {
                 entries.extend(group);
             } else if !group.is_empty() {
                 entries.push(MenuEntry::Submenu {
@@ -1656,6 +2157,7 @@ impl MenuBar {
         menu.entries = entries;
         self.revision = self.revision.wrapping_add(1);
         self.mode = MenuMode::Closed;
+        self.configured_popup = None;
         self.path.clear();
     }
 
@@ -1674,9 +2176,9 @@ impl MenuBar {
                     command: MenuCommand::SavedMacro(_),
                     ..
                 }
-            )
+            ) && !matches!(entry, MenuEntry::DynamicAction { command: MenuCommand::Source(48016), .. })
         });
-        if matches!(menu.entries.last(), Some(MenuEntry::Separator)) {
+        while matches!(menu.entries.last(), Some(MenuEntry::Separator)) {
             menu.entries.pop();
         }
         if !names.is_empty() {
@@ -1690,8 +2192,13 @@ impl MenuBar {
                     }
                 }));
         }
+        if !matches!(menu.entries.last(), Some(MenuEntry::Action(MenuCommand::Macro(_)))) {
+            menu.entries.push(MenuEntry::Separator);
+            menu.entries.push(MenuEntry::DynamicAction { command: MenuCommand::Source(48016), label: "管理宏快捷键...".into(), shortcut: String::new() });
+        }
         self.revision = self.revision.wrapping_add(1);
         self.mode = MenuMode::Closed;
+        self.configured_popup = None;
         self.path.clear();
     }
 
@@ -1733,6 +2240,7 @@ impl MenuBar {
         );
         self.revision = self.revision.wrapping_add(1);
         self.mode = MenuMode::Closed;
+        self.configured_popup = None;
         self.path.clear();
     }
 
@@ -1780,6 +2288,8 @@ impl MenuBar {
                 ]
                 .into_iter()
                 .map(|operation| MenuEntry::Action(MenuCommand::Converter(operation)))
+                .chain([MenuEntry::Separator, MenuEntry::Action(MenuCommand::Source(59003)), MenuEntry::Separator,
+                    MenuEntry::Action(MenuCommand::Source(59005)), MenuEntry::Action(MenuCommand::Source(59006))])
                 .collect(),
             });
         }
@@ -1803,6 +2313,7 @@ impl MenuBar {
             );
         }
         self.mode = MenuMode::Closed;
+        self.configured_popup = None;
         self.root = 0;
         self.path.clear();
         self.revision = self.revision.wrapping_add(1);
@@ -1817,6 +2328,7 @@ impl MenuBar {
             revision: 0,
             popup_limit: None,
             documents: None,
+            configured_popup: None,
         }
     }
 
@@ -1840,7 +2352,7 @@ impl MenuBar {
             };
             let mut recent = paths
                 .iter()
-                .take(5)
+                .take(30)
                 .enumerate()
                 .map(|(index, path)| MenuEntry::DynamicAction {
                     command: MenuCommand::File(FileCommand::Recent(index)),
@@ -1870,6 +2382,27 @@ impl MenuBar {
     pub fn mode(&self) -> MenuMode {
         self.mode
     }
+    pub fn set_recent_file_entries(&mut self, recent: Vec<MenuEntry>) {
+        let Some(menu) = self.definitions.iter_mut().find(|menu| menu.selector == "file-menu-trigger") else { return; };
+        let mut entries = MenuDefinition::file_menu().entries;
+        if let Some(position) = entries.iter().position(|entry| matches!(entry, MenuEntry::Action(MenuCommand::File(FileCommand::Exit)))) {
+            entries.splice(position..position, recent);
+        }
+        if menu.entries != entries { menu.entries = entries; self.revision = self.revision.wrapping_add(1); }
+    }
+    pub fn set_saved_run_commands(&mut self, commands: Vec<(String, String)>) {
+        let Some(menu) = self.definitions.iter_mut().find(|menu| menu.selector == "run-menu-trigger") else { return; };
+        let mut entries = vec![MenuEntry::Action(MenuCommand::Run)];
+        if !commands.is_empty() {
+            entries.push(MenuEntry::Separator);
+            entries.extend(commands.into_iter().enumerate().map(|(index, (label, shortcut))| MenuEntry::DynamicAction {
+                command: MenuCommand::Source(21000 + index as u32), label, shortcut,
+            }));
+        }
+        entries.push(MenuEntry::Separator);
+        entries.push(MenuEntry::DynamicAction { command: MenuCommand::Source(48017), label: "管理运行命令快捷键...".into(), shortcut: String::new() });
+        if menu.entries != entries { menu.entries = entries; self.revision = self.revision.wrapping_add(1); }
+    }
     pub fn active_root(&self) -> usize {
         self.root
     }
@@ -1883,8 +2416,12 @@ impl MenuBar {
         self.mode == MenuMode::Open && self.documents.is_some()
     }
 
+    pub fn configured_context_menu_open(&self) -> bool {
+        self.mode == MenuMode::Open && self.configured_popup.is_some()
+    }
+
     fn root_entries(&self) -> Option<&[MenuEntry]> {
-        self.documents.as_deref().or_else(|| {
+        self.configured_popup.as_deref().or(self.documents.as_deref()).or_else(|| {
             self.definitions
                 .get(self.root)
                 .map(|menu| menu.entries.as_slice())
@@ -1901,10 +2438,7 @@ impl MenuBar {
     pub fn popup_entries(&self, depth: usize) -> Option<&[MenuEntry]> {
         let mut entries = self.root_entries()?;
         for &index in self.path.get(..depth)? {
-            entries = match entries.get(index)? {
-                MenuEntry::Submenu { entries, .. } => entries,
-                _ => return None,
-            };
+            entries = entries.get(index)?.submenu_entries()?;
         }
         Some(
             if let Some((_, count)) = self
@@ -1928,10 +2462,7 @@ impl MenuBar {
         let (&last, parents) = path.split_last()?;
         let mut entries = self.root_entries()?;
         for &index in parents {
-            entries = match entries.get(index)? {
-                MenuEntry::Submenu { entries, .. } => entries,
-                _ => return None,
-            };
+            entries = entries.get(index)?.submenu_entries()?;
         }
         entries.get(last)
     }
@@ -1948,6 +2479,9 @@ impl MenuBar {
     }
 
     fn open_root(&mut self, root: usize, available: &impl Fn(MenuCommand) -> bool) {
+        if self.configured_popup.take().is_some() {
+            self.revision = self.revision.wrapping_add(1);
+        }
         if self.documents.take().is_some() {
             self.revision = self.revision.wrapping_add(1);
         }
@@ -2041,7 +2575,7 @@ impl MenuBar {
     }
 
     fn open_submenu(&mut self, available: &impl Fn(MenuCommand) -> bool) -> bool {
-        let Some(MenuEntry::Submenu { entries, .. }) = self.entry_at(&self.path) else {
+        let Some(entries) = self.entry_at(&self.path).and_then(MenuEntry::submenu_entries) else {
             return false;
         };
         let first = entries.iter().position(|entry| entry.enabled(available));
@@ -2069,6 +2603,9 @@ impl MenuBar {
                 self.mode = MenuMode::Closed;
                 self.path.clear();
                 self.documents = None;
+                self.configured_popup = None;
+                self.popup_limit = None;
+                self.revision = self.revision.wrapping_add(1);
                 return MenuOutcome::Activate(command);
             }
         } else {
@@ -2105,7 +2642,22 @@ impl MenuBar {
         }
         let click = matches!(&event, MenuEvent::Click { .. });
         match event {
+            MenuEvent::OpenContext(root, entries) => {
+                if entries.is_empty() {
+                    self.open_root(root, available);
+                } else if root < self.definitions.len() {
+                    self.configured_popup = Some(entries);
+                    self.documents = None;
+                    self.popup_limit = None;
+                    self.revision = self.revision.wrapping_add(1);
+                    self.mode = MenuMode::Open;
+                    self.root = root;
+                    self.path.clear();
+                    self.select_edge(false, available);
+                }
+            }
             MenuEvent::OpenDocuments(documents) => {
+                self.configured_popup = None;
                 self.documents = Some(
                     documents
                         .into_iter()
@@ -2124,6 +2676,10 @@ impl MenuBar {
                 self.select_edge(false, available);
             }
             MenuEvent::ToggleBar => {
+                self.configured_popup = None;
+                self.documents = None;
+                self.popup_limit = None;
+                self.revision = self.revision.wrapping_add(1);
                 if self.mode == MenuMode::Closed {
                     self.mode = MenuMode::BarFocused;
                     self.root = 0;
@@ -2138,7 +2694,7 @@ impl MenuBar {
             MenuEvent::OpenSubmenu(selector) => {
                 let target = self.definitions.iter().enumerate().find_map(|(root, definition)| {
                     definition.entries.iter().enumerate().find_map(|(index, entry)| {
-                        matches!(entry, MenuEntry::Submenu { selector: candidate, .. } if *candidate == selector)
+                        (entry.submenu_selector() == Some(selector))
                             .then_some((root, index))
                             .filter(|_| entry.enabled(available))
                     })
@@ -2150,7 +2706,7 @@ impl MenuBar {
                 }
             }
             MenuEvent::ToggleRoot(root) => {
-                if self.mode == MenuMode::Open && root == self.root && self.documents.is_none() {
+                if self.mode == MenuMode::Open && root == self.root && self.documents.is_none() && self.configured_popup.is_none() {
                     self.mode = MenuMode::Closed;
                     self.path.clear();
                 } else {
@@ -2171,21 +2727,26 @@ impl MenuBar {
             MenuEvent::Left => {
                 if self.mode == MenuMode::Open && self.path.len() > 1 {
                     self.path.pop();
-                } else {
+                } else if !self.configured_context_menu_open() {
                     self.switch_root(false, available);
                 }
             }
             MenuEvent::Right => {
                 if self.mode == MenuMode::Open && self.open_submenu(available) {
-                } else if self.path.len() <= 1 {
+                } else if self.path.len() <= 1 && !self.configured_context_menu_open() {
                     self.switch_root(true, available);
                 }
             }
             MenuEvent::Activate => return self.activate(available),
             MenuEvent::Escape => {
-                if self.document_menu_open() {
+                if self.configured_context_menu_open() && self.path.len() > 1 {
+                    self.path.pop();
+                } else if self.document_menu_open() || self.configured_context_menu_open() {
                     self.mode = MenuMode::Closed;
                     self.documents = None;
+                    self.configured_popup = None;
+                    self.popup_limit = None;
+                    self.revision = self.revision.wrapping_add(1);
                     self.path.clear();
                 } else if self.mode == MenuMode::Open && self.path.len() > 1 {
                     self.path.pop();
@@ -2200,6 +2761,9 @@ impl MenuBar {
             MenuEvent::Dismiss => {
                 self.mode = MenuMode::Closed;
                 self.documents = None;
+                self.configured_popup = None;
+                self.popup_limit = None;
+                self.revision = self.revision.wrapping_add(1);
                 self.path.clear();
             }
             MenuEvent::Hover { root, path } | MenuEvent::Click { root, path } => {

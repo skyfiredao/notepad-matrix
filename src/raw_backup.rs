@@ -74,7 +74,7 @@ fn validate_file(path: &Path) -> io::Result<Option<fs::Metadata>> {
 
 pub(super) fn write(
     path: &Path,
-    text: &str,
+    bytes: &[u8],
     format: UnicodeFormat,
     untitled: bool,
 ) -> io::Result<()> {
@@ -108,10 +108,10 @@ pub(super) fn write(
     }
     let mut file = io::BufWriter::new(options.open(&target)?);
     match format {
-        UnicodeFormat::Utf8(Utf8Format::Plain) => file.write_all(text.as_bytes())?,
+        UnicodeFormat::Utf8(Utf8Format::Plain) => file.write_all(bytes)?,
         UnicodeFormat::Utf8(Utf8Format::Bom) => {
             file.write_all(b"\xef\xbb\xbf")?;
-            file.write_all(text.as_bytes())?;
+            file.write_all(bytes)?;
         }
         UnicodeFormat::Utf16LeBom | UnicodeFormat::Utf16BeBom => {
             file.write_all(if format == UnicodeFormat::Utf16LeBom {
@@ -120,7 +120,7 @@ pub(super) fn write(
                 b"\xfe\xff"
             })?;
             crate::unicode_writer::write_utf16(
-                text.bytes(),
+                bytes.iter().copied(),
                 format == UnicodeFormat::Utf16BeBom,
                 &mut file,
             )?;
@@ -135,8 +135,7 @@ pub(super) fn write(
 }
 
 pub(super) fn read(path: &Path, format: UnicodeFormat) -> io::Result<String> {
-    validate_file(path)?;
-    let bytes = fs::read(path)?;
+    let bytes = read_bytes(path)?;
     let (bom, utf16) = match format {
         UnicodeFormat::Utf8(Utf8Format::Plain) => (b"".as_slice(), false),
         UnicodeFormat::Utf8(Utf8Format::Bom) => (b"\xef\xbb\xbf".as_slice(), false),
@@ -152,4 +151,9 @@ pub(super) fn read(path: &Path, format: UnicodeFormat) -> io::Result<String> {
     let decoded = crate::unicode_reader::Utf16Reader::default()
         .convert(bytes, format == UnicodeFormat::Utf16BeBom);
     String::from_utf8(decoded).map_err(|error| invalid(&error.to_string()))
+}
+
+pub(super) fn read_bytes(path: &Path) -> io::Result<Vec<u8>> {
+    validate_file(path)?;
+    fs::read(path)
 }

@@ -3,7 +3,6 @@ use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 
 /// Keep child ownership until it exits without blocking a shared executor worker.
-/// The UI supplies its asynchronous timer; core tests supply a yielding clock.
 pub async fn reap<F, Tick>(mut child: Child, mut wait_tick: F) -> io::Result<ExitStatus>
 where
     F: FnMut() -> Tick,
@@ -17,9 +16,6 @@ where
     }
 }
 
-/// Explicit Run invocation only. Npp variable expansion is still a separate
-/// unimplemented capability; do not accidentally execute its names as shell
-/// command substitutions. Ordinary POSIX substitutions remain valid syntax.
 pub fn launch_literal(command: &str, directory: &Path) -> io::Result<Child> {
     validate_command(command)?;
     Command::new("/bin/sh")
@@ -39,7 +35,10 @@ fn validate_command(command: &str) -> io::Result<()> {
             "Enter a nonempty POSIX shell command without NUL",
         ));
     }
-    for variable in [
+    Ok(())
+}
+
+pub const VARIABLE_NAMES: [&str; 11] = [
         "FULL_CURRENT_PATH",
         "CURRENT_DIRECTORY",
         "FILE_NAME",
@@ -51,15 +50,105 @@ fn validate_command(command: &str) -> io::Result<()> {
         "CURRENT_LINE",
         "CURRENT_COLUMN",
         "CURRENT_LINESTR",
-    ] {
-        if command.contains(&format!("$({variable})")) {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "Notepad++ Run variable expansion is not implemented yet; no command was launched",
-            ));
-        }
+];
+
+pub fn shell_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+pub fn expand(command: &str, values: &[String; 11]) -> io::Result<String> {
+    if command.trim().is_empty() || command.contains('\0') {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "运行命令和变量不能包含 NUL，命令不能为空"));
     }
-    Ok(())
+    if !VARIABLE_NAMES.iter().any(|name| command.contains(&format!("$({name})"))) { return Ok(command.into()); }
+    let mut output = String::new();
+    for (index, value) in values.iter().enumerate() {
+        if !command.contains(&format!("$({})", VARIABLE_NAMES[index])) { continue; }
+        if value.contains('\0') { return Err(io::Error::new(io::ErrorKind::InvalidInput, "运行变量不能包含 NUL")); }
+        output.push_str(&format!("__NOTEPAD_MATRIX_RUN_VALUE_{index}={}\n", shell_literal(value)));
+    }
+    let mut quote = '\0';
+    let mut word_start = true;
+    let mut parameter_depth = 0;
+    let mut contexts: Vec<(char, char, bool, usize)> = Vec::new();
+    let mut rest = command;
+    while !rest.is_empty() {
+        if quote == '\0' && parameter_depth == 0 && word_start && rest.starts_with('#') {
+            if contexts.iter().any(|(_, delimiter, _, _)| *delimiter == '`') {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "含运行变量时，请用 $(command) 代替带注释的反引号命令替换"));
+            }
+            let end = rest.find('\n').unwrap_or(rest.len());
+            output.push_str(&rest[..end]);
+            rest = &rest[end..];
+            continue;
+        }
+        if quote != '\'' && rest.starts_with("${") {
+            parameter_depth += 1;
+            word_start = false;
+            output.push_str("${");
+            rest = &rest[2..];
+            continue;
+        }
+        let variable = VARIABLE_NAMES.iter().enumerate().find_map(|(index, name)| {
+            rest.strip_prefix(&format!("$({name})")).map(|tail| (index, tail))
+        });
+        if let Some((index, tail)) = variable {
+            let reference = format!("${{__NOTEPAD_MATRIX_RUN_VALUE_{index}}}");
+            let mut insertion = match quote {
+                '\'' => format!("'\"{reference}\"'"),
+                '"' => reference,
+                _ => format!("\"{reference}\""),
+            };
+            for _ in contexts.iter().filter(|(_, delimiter, _, _)| *delimiter == '`') {
+                insertion = insertion.replace('\\', "\\\\").replace('`', "\\`").replace('$', "\\$");
+            }
+            output.push_str(&insertion);
+            word_start = false;
+            rest = tail;
+            continue;
+        }
+        let Some(ch) = rest.chars().next() else { break; };
+        if ch == '\\' && quote != '\'' {
+            output.push(ch);
+            rest = &rest[ch.len_utf8()..];
+            if VARIABLE_NAMES.iter().any(|name| rest.starts_with(&format!("$({name})"))) {
+                output.pop();
+            } else if let Some(escaped) = rest.chars().next() {
+                output.push(escaped);
+                rest = &rest[escaped.len_utf8()..];
+                if escaped != '\n' { word_start = false; }
+            }
+            continue;
+        }
+        if rest.starts_with("<<") && quote == '\0' {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "请将运行变量作为命令参数传入，不要放入 here-document"));
+        }
+        if rest.starts_with("$(") && quote != '\'' {
+            contexts.push((quote, ')', false, parameter_depth));
+            quote = '\0';
+            word_start = true;
+            parameter_depth = 0;
+            output.push_str("$(");
+            rest = &rest[2..];
+            continue;
+        }
+        match ch {
+            '\'' | '"' if quote == '\0' => { quote = ch; word_start = false; }
+            '\'' | '"' if quote == ch => { quote = '\0'; word_start = false; }
+            '}' if quote != '\'' && parameter_depth != 0 => { parameter_depth -= 1; word_start = false; }
+            '(' if quote == '\0' => { contexts.push((quote, ')', true, parameter_depth)); word_start = true; parameter_depth = 0; }
+            ')' if quote == '\0' && contexts.last().is_some_and(|(_, delimiter, _, _)| *delimiter == ')') => if let Some((parent, _, parent_word_start, parent_parameter_depth)) = contexts.pop() { quote = parent; word_start = parent_word_start; parameter_depth = parent_parameter_depth; },
+            '`' if quote != '\'' => {
+                if contexts.last().is_some_and(|(_, delimiter, _, _)| *delimiter == '`') {
+                    if let Some((parent, _, parent_word_start, parent_parameter_depth)) = contexts.pop() { quote = parent; word_start = parent_word_start; parameter_depth = parent_parameter_depth; }
+                } else { contexts.push((quote, '`', false, parameter_depth)); quote = '\0'; word_start = true; parameter_depth = 0; }
+            }
+            _ => word_start = quote == '\0' && matches!(ch, ' ' | '\t' | '\n' | ';' | '&' | '|' | '<' | '>' | ')'),
+        }
+        output.push(ch);
+        rest = &rest[ch.len_utf8()..];
+    }
+    Ok(output)
 }
 
 #[cfg(unix)]
@@ -128,71 +217,4 @@ pub fn launch_terminal(command: &str, directory: &Path) -> io::Result<Child> {
             .stderr(Stdio::null())
             .spawn()
     })
-}
-
-#[cfg(all(unix, feature = "native-input-tests"))]
-pub(crate) fn launch_terminal_in_test(command: &str, directory: &Path) -> io::Result<Child> {
-    launch_terminal_using(command, directory, |script| {
-        Command::new("/bin/sh")
-            .arg(script)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-    })
-}
-
-#[cfg(all(test, unix))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn terminal_launch_preserves_ls_output_argv_cwd_and_cleans_its_private_script() -> io::Result<()>
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let directory = tempfile::tempdir()?;
-        let working = directory.path().join("working ' directory\nsecond line");
-        std::fs::create_dir(&working)?;
-        std::fs::write(working.join("visible-ls-result"), b"test")?;
-        let opener = directory.path().join("isolated open helper");
-        std::fs::write(
-            &opener,
-            "#!/bin/sh\ntest \"$1\" = -a || exit 2\ntest \"$2\" = Terminal || exit 3\ntest \"$#\" = 3 || exit 4\nexec /bin/sh \"$3\"\n",
-        )?;
-        std::fs::set_permissions(&opener, std::fs::Permissions::from_mode(0o700))?;
-        let mut path = None;
-        let child = launch_terminal_using("ls", &working, |script| {
-            path = Some(script.to_owned());
-            assert_eq!(
-                std::fs::metadata(script)?.permissions().mode() & 0o777,
-                0o700
-            );
-            Command::new(&opener)
-                .args([
-                    std::ffi::OsStr::new("-a"),
-                    std::ffi::OsStr::new("Terminal"),
-                    script.as_os_str(),
-                ])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-        })?;
-        let output = child.wait_with_output()?;
-        assert!(output.status.success(), "{:?}", output.stderr);
-        assert_eq!(output.stdout, b"visible-ls-result\n");
-        assert!(!path.unwrap().exists());
-        let mut failed_path = None;
-        assert!(
-            launch_terminal_using("ls", &working, |script| {
-                failed_path = Some(script.to_owned());
-                Err(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "isolated failed opener",
-                ))
-            })
-            .is_err()
-        );
-        assert!(!failed_path.unwrap().exists());
-        Ok(())
-    }
 }

@@ -9,6 +9,8 @@ use std::os::unix::fs::MetadataExt;
 
 use crate::editor::SaveSnapshot;
 
+mod oem_codepages;
+
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 const UTF16_LE_BOM: &[u8] = b"\xff\xfe";
 const UTF16_BE_BOM: &[u8] = b"\xfe\xff";
@@ -66,6 +68,165 @@ pub enum UnicodeFormat {
     Utf16BeBom,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ByteFormatCodePage {
+    Unspecified,
+    CodePage(u32),
+}
+
+impl ByteFormatCodePage {
+    pub fn from_value(value: &serde_json::Value) -> io::Result<Option<Self>> {
+        if value.is_null() { return Ok(None); }
+        let value = value.as_i64().ok_or_else(|| io::Error::other("byte codepage must be an integer"))?;
+        if value == -1 { return Ok(Some(Self::Unspecified)); }
+        let value = u32::try_from(value).map_err(|_| io::Error::other("byte codepage is out of range"))?;
+        if value == 0 { return Err(io::Error::other("Windows ACP is excluded; select an explicit codepage")); }
+        Ok(Some(Self::CodePage(value)))
+    }
+
+    pub fn value(self) -> serde_json::Value {
+        match self { Self::Unspecified => (-1).into(),Self::CodePage(value) => value.into() }
+    }
+
+    pub fn decode(self, bytes: &[u8]) -> io::Result<String> {
+        if let Self::CodePage(codepage) = self {
+            if let Some(encoding) = oem_codepages::for_codepage(codepage) {
+                return Ok(encoding.decode(bytes));
+            }
+        }
+        match self {
+            Self::Unspecified => String::from_utf8(bytes.to_vec()).map_err(io::Error::other),
+            Self::CodePage(codepage) => String::from_utf8(transcode_codepage(bytes,codepage,65001)?).map_err(io::Error::other),
+        }
+    }
+
+    pub fn encode(self, text: &str) -> io::Result<Vec<u8>> {
+        if let Self::CodePage(codepage) = self {
+            if let Some(encoding) = oem_codepages::for_codepage(codepage) {
+                return Ok(encoding.encode(text));
+            }
+        }
+        match self {
+            Self::Unspecified => Ok(text.as_bytes().to_vec()),
+            Self::CodePage(codepage) => transcode_codepage(text.as_bytes(),65001,codepage),
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn transcode_codepage(bytes: &[u8], from: u32, to: u32) -> io::Result<Vec<u8>> {
+    use std::ffi::c_void;
+    #[repr(C)]
+    struct CFRange { location: isize,length: isize }
+    #[link(name = "CoreFoundation",kind = "framework")]
+    unsafe extern "C" {
+        fn CFStringConvertWindowsCodepageToEncoding(codepage: u32) -> u32;
+        fn CFStringIsEncodingAvailable(encoding: u32) -> u8;
+        fn CFStringCreateWithBytes(allocator: *const c_void,bytes: *const u8,length: isize,encoding: u32,external: u8) -> *const c_void;
+        fn CFStringGetLength(value: *const c_void) -> isize;
+        fn CFStringGetMaximumSizeForEncoding(length: isize,encoding: u32) -> isize;
+        fn CFStringGetBytes(value: *const c_void,range: CFRange,encoding: u32,loss_byte: u8,external: u8,buffer: *mut u8,size: isize,used: *mut isize) -> isize;
+        fn CFRelease(value: *const c_void);
+    }
+    let length = isize::try_from(bytes.len()).map_err(|_| io::Error::other("encoded text is too large"))?;
+    unsafe {
+        let input_encoding = CFStringConvertWindowsCodepageToEncoding(from);
+        let output_encoding = CFStringConvertWindowsCodepageToEncoding(to);
+        if input_encoding == u32::MAX || output_encoding == u32::MAX
+            || CFStringIsEncodingAvailable(input_encoding) == 0 || CFStringIsEncodingAvailable(output_encoding) == 0
+        { return Err(io::Error::other(format!("macOS cannot convert codepage {from} to {to}"))); }
+        let text = CFStringCreateWithBytes(std::ptr::null(),bytes.as_ptr(),length,input_encoding,0);
+        if text.is_null() && from != 65001 && to == 65001 {
+            let mut result = Vec::new();
+            let mut offset = 0;
+            while offset < bytes.len() {
+                let mut character_length = None;
+                for size in 1..=4.min(bytes.len() - offset) {
+                    let size_native = isize::try_from(size).map_err(io::Error::other)?;
+                    let character = CFStringCreateWithBytes(std::ptr::null(),bytes[offset..].as_ptr(),size_native,input_encoding,0);
+                    if !character.is_null() {
+                        CFRelease(character);
+                        character_length = Some(size);
+                        break;
+                    }
+                }
+                if let Some(size) = character_length {
+                    result.extend(transcode_codepage(&bytes[offset..offset + size],from,to)?);
+                    offset += size;
+                } else {
+                    result.extend_from_slice("\u{fffd}".as_bytes());
+                    offset += 1;
+                }
+            }
+            return Ok(result);
+        }
+        if text.is_null() { return Err(io::Error::other(format!("input is not valid codepage {from}"))); }
+        let characters = CFStringGetLength(text);
+        let capacity = CFStringGetMaximumSizeForEncoding(characters,output_encoding);
+        let capacity_usize = match usize::try_from(capacity) {
+            Ok(capacity) => capacity,
+            Err(error) => { CFRelease(text); return Err(io::Error::other(error)); }
+        };
+        let mut result = vec![0u8;capacity_usize];
+        let mut used = 0isize;
+        let converted = CFStringGetBytes(text,CFRange { location:0,length:characters },output_encoding,b'?',0,result.as_mut_ptr(),capacity,&mut used);
+        CFRelease(text);
+        if converted != characters { return Err(io::Error::other(format!("text cannot be represented in codepage {to}"))); }
+        let used = usize::try_from(used).map_err(io::Error::other)?;
+        result.truncate(used);
+        Ok(result)
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "native-ui"))]
+fn detect_native_codepage(bytes: &[u8]) -> io::Result<Option<u32>> {
+    use objc2::{class,msg_send};
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::{NSData,NSString};
+    #[link(name = "CoreFoundation",kind = "framework")]
+    unsafe extern "C" {
+        fn CFStringConvertNSStringEncodingToEncoding(encoding: usize) -> u32;
+        fn CFStringConvertEncodingToWindowsCodepage(encoding: u32) -> u32;
+    }
+    if bytes.is_ascii() || std::str::from_utf8(bytes).is_ok() { return Ok(None); }
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let data = NSData::with_bytes(bytes);
+        let options: *mut AnyObject = msg_send![class!(NSDictionary), dictionary];
+        let mut converted: *mut NSString = std::ptr::null_mut();
+        let mut lossy = objc2::runtime::Bool::NO;
+        let encoding: usize = msg_send![class!(NSString), stringEncodingForData: &*data, encodingOptions: options, convertedString: &mut converted, usedLossyConversion: &mut lossy];
+        if encoding == 0 || lossy.as_bool() || converted.is_null() { return Ok(None); }
+        let codepage = CFStringConvertEncodingToWindowsCodepage(CFStringConvertNSStringEncodingToEncoding(encoding));
+        if codepage == 0 || matches!(codepage,65001 | 20127 | 874) { return Ok(None); }
+        Ok(Some(codepage))
+    })
+}
+
+#[cfg(not(all(target_os = "macos", feature = "native-ui")))]
+fn detect_native_codepage(_bytes: &[u8]) -> io::Result<Option<u32>> {
+    Ok(None)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn transcode_codepage(bytes: &[u8], from: u32, to: u32) -> io::Result<Vec<u8>> {
+    fn encoding(codepage: u32) -> io::Result<&'static encoding_rs::Encoding> {
+        let name = match codepage {
+            65001 => "UTF-8",1250 => "windows-1250",1251 => "windows-1251",1252 => "windows-1252",
+            1253 => "windows-1253",1254 => "windows-1254",1255 => "windows-1255",1256 => "windows-1256",1257 => "windows-1257",1258 => "windows-1258",
+            874 => "windows-874",932 => "shift_jis",936 => "gbk",949 => "euc-kr",950 => "big5",866 => "ibm866",
+            20866 => "koi8-r",21866 => "koi8-u",10007 => "x-mac-cyrillic",51949 => "euc-kr",
+            28591 => "windows-1252",28592 => "iso-8859-2",28593 => "iso-8859-3",28594 => "iso-8859-4",28595 => "iso-8859-5",28596 => "iso-8859-6",28597 => "iso-8859-7",28598 => "iso-8859-8",28599 => "windows-1254",28603 => "iso-8859-13",28604 => "iso-8859-14",28605 => "iso-8859-15",
+            _ => return Err(io::Error::other(format!("codepage {codepage} requires the macOS native converter"))),
+        };
+        encoding_rs::Encoding::for_label(name.as_bytes()).ok_or_else(|| io::Error::other("codepage is unavailable"))
+    }
+    let input = encoding(from)?;
+    let text = input.decode_without_bom_handling_and_without_replacement(bytes).ok_or_else(|| io::Error::other("encoded input is invalid"))?;
+    let (output,_,errors) = encoding(to)?.encode(&text);
+    if errors { return Err(io::Error::other("text is not representable in the selected codepage")); }
+    Ok(output.into_owned())
+}
+
 impl UnicodeFormat {
     fn detect(bytes: &[u8]) -> Self {
         if bytes.starts_with(UTF16_BE_BOM) {
@@ -106,6 +267,18 @@ fn encode_snapshot(snapshot: &SaveSnapshot, format: UnicodeFormat) -> io::Result
     Ok(bytes)
 }
 
+fn encode_byte_snapshot(snapshot: &SaveSnapshot, format: UnicodeFormat, codepage: Option<ByteFormatCodePage>) -> io::Result<Vec<u8>> {
+    match codepage {
+        None => encode_snapshot(snapshot,format),
+        Some(ByteFormatCodePage::Unspecified) => { let mut bytes = Vec::new(); snapshot.write_to(&mut bytes)?; Ok(bytes) }
+        Some(codepage) => {
+            let mut bytes = Vec::new(); snapshot.write_to(&mut bytes)?;
+            let text = std::str::from_utf8(&bytes).map_err(io::Error::other)?;
+            codepage.encode(text)
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OverwritePolicy {
     Refuse,
@@ -119,11 +292,51 @@ pub struct DiskFile {
     format: UnicodeFormat,
     read_only: bool,
     original_modified: Option<SystemTime>,
+    externally_deleted: bool,
+    byte_code_page: Option<ByteFormatCodePage>,
     #[cfg(unix)]
     identity: (u64, u64),
 }
 
 impl DiskFile {
+    pub(crate) fn placeholder(path: &Path) -> io::Result<Self> {
+        if !path.is_absolute() { return Err(io::Error::other("placeholder path must be absolute")); }
+        Ok(Self {
+            path: path.to_path_buf(),
+            bytes: Arc::from([]),
+            format: UnicodeFormat::Utf8(Utf8Format::Plain),
+            read_only: true,
+            original_modified: None,
+            externally_deleted: false,
+            byte_code_page: None,
+            #[cfg(unix)]
+            identity: (0,0),
+        })
+    }
+
+    pub fn is_placeholder(&self) -> bool {
+        #[cfg(unix)]
+        { self.identity == (0,0) && self.original_modified.is_none() }
+        #[cfg(not(unix))]
+        { self.original_modified.is_none() && self.bytes.is_empty() && self.read_only }
+    }
+
+    pub(crate) fn mark_deleted(&mut self) {
+        self.externally_deleted = true;
+        self.read_only = false;
+    }
+
+    pub fn byte_code_page(&self) -> Option<ByteFormatCodePage> { self.byte_code_page }
+
+    pub fn set_byte_code_page(&mut self,value: Option<ByteFormatCodePage>) { self.byte_code_page = value; }
+
+    pub(crate) fn identity(&self) -> Option<(u64,u64)> {
+        #[cfg(unix)]
+        { Some(self.identity) }
+        #[cfg(not(unix))]
+        { None }
+    }
+
     pub(crate) fn loaded_len(&self) -> usize {
         self.bytes.len()
     }
@@ -151,6 +364,26 @@ impl DiskFile {
 
     pub fn is_read_only(&self) -> bool {
         self.read_only
+    }
+
+    #[cfg(unix)]
+    pub fn toggle_read_only_attribute(&mut self) -> io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let file = fs::File::open(&self.path)?;
+        let metadata = file.metadata()?;
+        if (metadata.dev(), metadata.ino()) != self.identity {
+            return Err(io::Error::other("文件已被替换，未更改只读属性"));
+        }
+        let mode = metadata.permissions().mode();
+        let read_only = mode & 0o222 == 0;
+        let next = if read_only {
+            mode | 0o200
+        } else {
+            mode & !0o222
+        };
+        file.set_permissions(fs::Permissions::from_mode(next))?;
+        self.read_only = !read_only;
+        Ok(())
     }
 
     pub(crate) fn original_modified(&self) -> Option<SystemTime> {
@@ -182,6 +415,7 @@ impl DiskFile {
             "bytes": self.bytes.as_ref(),
             "read_only": self.read_only,
             "original_modified": self.original_modified.map(encode_modification_time),
+            "codepage": self.byte_code_page.map(ByteFormatCodePage::value),
         });
         #[cfg(unix)]
         {
@@ -191,7 +425,7 @@ impl DiskFile {
         Ok(state)
     }
 
-    pub(crate) fn from_recovery_state(state: &serde_json::Value) -> io::Result<Self> {
+    pub(crate) fn from_recovery_state(state: &serde_json::Value, raw_utf8: bool) -> io::Result<Self> {
         let invalid =
             || io::Error::new(io::ErrorKind::InvalidData, "invalid recovery disk baseline");
         let path: PathBuf = serde_json::from_value(state.get("path").ok_or_else(invalid)?.clone())?;
@@ -215,6 +449,8 @@ impl DiskFile {
                     .get("original_modified")
                     .unwrap_or(&serde_json::Value::Null),
             )?,
+            externally_deleted: false,
+            byte_code_page: ByteFormatCodePage::from_value(&state["codepage"] )?,
             #[cfg(unix)]
             identity: (
                 state
@@ -227,7 +463,9 @@ impl DiskFile {
                     .ok_or_else(invalid)?,
             ),
         };
-        file.decode_text()?;
+        let raw_baseline = raw_utf8 && file.byte_code_page.is_none()
+            && file.format == UnicodeFormat::Utf8(Utf8Format::Plain);
+        if !raw_baseline && file.byte_code_page != Some(ByteFormatCodePage::Unspecified) { file.decode_text()?; }
         Ok(file)
     }
 
@@ -259,6 +497,17 @@ impl DiskFile {
         }
     }
 
+    pub fn save_as_with_byte_format(path: &Path,snapshot: &SaveSnapshot,format: UnicodeFormat,codepage: Option<ByteFormatCodePage>,overwrite: OverwritePolicy) -> io::Result<Self> {
+        match fs::symlink_metadata(path) {
+            Ok(_) if overwrite == OverwritePolicy::Refuse => Err(io::Error::new(io::ErrorKind::AlreadyExists,"overwrite requires explicit confirmation")),
+            Ok(_) => Self::capture(path)?.save_with_byte_format(snapshot,format,codepage),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                Self::create_encoded(path,encode_byte_snapshot(snapshot,format,codepage)?,format,codepage)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     /// Save a new explicit UTF-8 document; an existing path is never overwritten here.
     pub fn create_utf8(path: &Path, snapshot: &SaveSnapshot) -> io::Result<Self> {
         Self::create_unicode(path, snapshot, UnicodeFormat::Utf8(Utf8Format::Plain))
@@ -269,6 +518,10 @@ impl DiskFile {
         snapshot: &SaveSnapshot,
         format: UnicodeFormat,
     ) -> io::Result<Self> {
+        Self::create_encoded(path,encode_snapshot(snapshot,format)?,format,None)
+    }
+
+    fn create_encoded(path: &Path,bytes: Vec<u8>,format: UnicodeFormat,codepage: Option<ByteFormatCodePage>) -> io::Result<Self> {
         let name = path.file_name().ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -284,7 +537,6 @@ impl DiskFile {
         let mut output = tempfile::Builder::new()
             .prefix(".notepad-matrix-save-")
             .tempfile_in(&parent)?;
-        let bytes = encode_snapshot(snapshot, format)?;
         output.write_all(&bytes)?;
         output.as_file().sync_all()?;
         let file = output
@@ -297,6 +549,8 @@ impl DiskFile {
             format,
             read_only: saved.permissions().readonly(),
             original_modified: Some(saved.modified()?),
+            externally_deleted: false,
+            byte_code_page: codepage,
             #[cfg(unix)]
             identity: (saved.dev(), saved.ino()),
         })
@@ -322,6 +576,34 @@ impl DiskFile {
         Ok((file, text))
     }
 
+    pub fn load_with_preferences(path: &Path,settings: &serde_json::Value) -> io::Result<(Self,String)> {
+        let file = Self::capture_with_preferences(path, settings)?;
+        let text = file.decode_text()?;
+        Ok((file,text))
+    }
+
+    pub(crate) fn load_buffer_with_preferences(path: &Path, settings: &serde_json::Value) -> io::Result<(Self, crate::byte_buffer::ByteBuffer)> {
+        let file = Self::capture_with_preferences(path, settings)?;
+        let buffer = file.editor_buffer()?;
+        Ok((file, buffer))
+    }
+
+    pub fn load_with_code_page(path: &Path,codepage: Option<ByteFormatCodePage>) -> io::Result<(Self,String)> {
+        let mut file = Self::capture(path)?;
+        if file.format == UnicodeFormat::Utf8(Utf8Format::Plain) { file.byte_code_page = codepage; }
+        let text = file.decode_text()?;
+        Ok((file,text))
+    }
+
+    pub fn load_selected_encoding(path: &Path, codepage: Option<ByteFormatCodePage>) -> io::Result<(Self, crate::byte_buffer::ByteBuffer)> {
+        let mut file = Self::capture(path)?;
+        if file.format == UnicodeFormat::Utf8(Utf8Format::Plain) {
+            file.byte_code_page = codepage;
+        }
+        let buffer = file.editor_buffer()?;
+        Ok((file, buffer))
+    }
+
     pub fn load_unicode_bytes(path: &Path) -> io::Result<(Self, Vec<u8>)> {
         let file = Self::capture(path)?;
         let bytes = file.decoded_bytes();
@@ -342,6 +624,7 @@ impl DiskFile {
     }
 
     fn decode_text(&self) -> io::Result<String> {
+        if let Some(codepage) = self.byte_code_page { return codepage.decode(&self.bytes); }
         String::from_utf8(self.decoded_bytes())
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
     }
@@ -355,6 +638,22 @@ impl DiskFile {
                     .convert(content, self.format == UnicodeFormat::Utf16BeBom)
             }
         }
+    }
+
+    fn editor_buffer(&self) -> io::Result<crate::byte_buffer::ByteBuffer> {
+        let bytes = match self.byte_code_page {
+            Some(ByteFormatCodePage::CodePage(_)) => self.decode_text()?.into_bytes(),
+            _ => self.decoded_bytes(),
+        };
+        Ok(crate::byte_buffer::ByteBuffer::from_bytes(&bytes))
+    }
+
+    fn capture_with_preferences(path: &Path, settings: &serde_json::Value) -> io::Result<Self> {
+        let mut file = Self::capture(path)?;
+        if file.format == UnicodeFormat::Utf8(Utf8Format::Plain) && settings["DetectEncoding"].as_bool().unwrap_or(true) {
+            if let Some(codepage) = detect_native_codepage(&file.bytes)? { file.byte_code_page = Some(ByteFormatCodePage::CodePage(codepage)); }
+        }
+        Ok(file)
     }
 
     fn capture(path: &Path) -> io::Result<Self> {
@@ -384,6 +683,8 @@ impl DiskFile {
             format,
             read_only: after.permissions().readonly(),
             original_modified: Some(after.modified()?),
+            externally_deleted: false,
+            byte_code_page: None,
             #[cfg(unix)]
             identity: (after.dev(), after.ino()),
         })
@@ -434,7 +735,13 @@ impl DiskFile {
         snapshot: &SaveSnapshot,
         format: UnicodeFormat,
     ) -> io::Result<Self> {
-        self.save_encoded(format, || encode_snapshot(snapshot, format))
+        self.save_with_byte_format(snapshot,format,self.byte_code_page)
+    }
+
+    pub fn save_with_byte_format(&self,snapshot: &SaveSnapshot,format: UnicodeFormat,codepage: Option<ByteFormatCodePage>) -> io::Result<Self> {
+        let mut selected = self.clone();
+        selected.byte_code_page = codepage;
+        selected.save_encoded(format,|| encode_byte_snapshot(snapshot,format,codepage))
     }
 
     pub fn save_byte_buffer(
@@ -443,6 +750,11 @@ impl DiskFile {
         format: UnicodeFormat,
     ) -> io::Result<Self> {
         self.save_encoded(format, || {
+            if let Some(codepage) = self.byte_code_page {
+                let mut input = Vec::new(); buffer.write_to(&mut input)?;
+                if codepage == ByteFormatCodePage::Unspecified { return Ok(input); }
+                return codepage.encode(std::str::from_utf8(&input).map_err(io::Error::other)?);
+            }
             let mut bytes = format.bom().to_vec();
             match format {
                 UnicodeFormat::Utf8(_) => buffer.write_to(&mut bytes)?,
@@ -463,6 +775,13 @@ impl DiskFile {
         format: UnicodeFormat,
         encode: impl FnOnce() -> io::Result<Vec<u8>>,
     ) -> io::Result<Self> {
+        if self.externally_deleted {
+            let bytes = encode()?;
+            let mut output = fs::OpenOptions::new().write(true).create_new(true).open(&self.path)?;
+            output.write_all(&bytes)?;
+            output.sync_all()?;
+            return self.saved_baseline(bytes,format,output.metadata()?);
+        }
         let metadata = self.check_current()?;
         let bytes = encode()?;
         #[cfg(unix)]
@@ -529,6 +848,8 @@ impl DiskFile {
             format,
             read_only: saved.permissions().readonly(),
             original_modified: Some(saved.modified()?),
+            externally_deleted: false,
+            byte_code_page: self.byte_code_page,
             #[cfg(unix)]
             identity: (saved.dev(), saved.ino()),
         })

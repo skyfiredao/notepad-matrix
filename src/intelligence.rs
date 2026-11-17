@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::{Arc, OnceLock};
 
 use serde_json::Value;
+
+include!(concat!(env!("OUT_DIR"), "/intelligence_generated.rs"));
 
 pub mod auto_insert;
 pub mod events;
@@ -87,6 +90,56 @@ pub struct ApiDefinition {
     pub language: Option<String>,
     pub environment: ApiEnvironment,
     pub keywords: Vec<ApiKeyword>,
+}
+
+impl ApiDefinition {
+    fn from_node(key: &str, mut node: DefinitionNode) -> Result<Self, IntelligenceError> {
+        let mut environment = ApiEnvironment::default();
+        if let Some(env) = node.child("Environment") {
+            environment.ignore_case = env.attr("ignoreCase") != "no";
+            environment.start_function = env.attr("startFunc").chars().next().unwrap_or('(');
+            environment.stop_function = env.attr("stopFunc").chars().next().unwrap_or(')');
+            environment.parameter_separator =
+                env.attr("paramSeparator").chars().next().unwrap_or(',');
+            environment.terminal = env.attr("terminal").chars().next().or(Some(';'));
+            environment.additional_word_chars = env.attr("additionalWordChar").to_owned();
+        }
+        let mut keywords = Vec::new();
+        for mut word in node.children.into_iter().filter(|n| n.tag == "KeyWord") {
+            let name = word.attributes.remove("name").unwrap_or_default();
+            if name.is_empty() {
+                return Err(IntelligenceError(format!("missing API keyword name: {key}")));
+            }
+            let is_function = word.attr("func") == "yes";
+            let mut overloads = Vec::new();
+            for mut overload in word.children.into_iter().filter(|n| n.tag == "Overload") {
+                let parameters = overload
+                    .children
+                    .into_iter()
+                    .filter(|n| n.tag == "Param")
+                    .map(|mut parameter| ApiParameter {
+                        name: parameter.attributes.remove("name").unwrap_or_default(),
+                    })
+                    .collect();
+                overloads.push(ApiOverload {
+                    return_value: overload.attributes.remove("retVal").unwrap_or_default(),
+                    description: overload.attributes.remove("descr").unwrap_or_default(),
+                    parameters,
+                });
+            }
+            keywords.push(ApiKeyword {
+                name,
+                is_function,
+                overloads,
+            });
+        }
+        Ok(Self {
+            source_key: key.to_owned(),
+            language: node.attributes.remove("language"),
+            environment,
+            keywords,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -194,20 +247,54 @@ impl DefinitionNode {
 
 #[derive(Clone, Debug)]
 pub struct IntelligenceCatalog {
-    apis: BTreeMap<String, ApiDefinition>,
+    apis: BTreeMap<String, Arc<ApiEntry>>,
     parsers: BTreeMap<String, DefinitionNode>,
     associations: BTreeMap<String, String>,
 }
 
+#[derive(Debug)]
+struct ApiEntry {
+    payload: Option<&'static str>,
+    definition: OnceLock<Result<ApiDefinition, IntelligenceError>>,
+}
+
+impl ApiEntry {
+    fn get(&self, key: &str) -> Result<&ApiDefinition, IntelligenceError> {
+        self.definition
+            .get_or_init(|| {
+                let payload = self
+                    .payload
+                    .ok_or_else(|| IntelligenceError(format!("missing API payload: {key}")))?;
+                let node = {
+                    let value: Value = serde_json::from_str(payload).map_err(|error| {
+                        IntelligenceError(format!("API {key}: {error}"))
+                    })?;
+                    DefinitionNode::from_json(&value)?
+                };
+                ApiDefinition::from_node(key, node)
+            })
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+}
+
 impl IntelligenceCatalog {
     pub fn bundled() -> Result<Self, IntelligenceError> {
-        let mut catalog = Self::from_json(
-            include_str!("../assets/intelligence/apis.json"),
-            include_str!("../assets/intelligence/parsers.json"),
-        )?;
-        let value: Value =
-            serde_json::from_str(include_str!("../assets/intelligence/overrides.json"))
-                .map_err(|error| IntelligenceError(error.to_string()))?;
+        let mut catalog = Self::from_json("{}", BUNDLED_PARSERS)?;
+        catalog.apis = BUNDLED_APIS
+            .iter()
+            .map(|&(key, payload)| {
+                (
+                    key.to_owned(),
+                    Arc::new(ApiEntry {
+                        payload: Some(payload),
+                        definition: OnceLock::new(),
+                    }),
+                )
+            })
+            .collect();
+        let value: Value = serde_json::from_str(BUNDLED_ASSOCIATIONS)
+            .map_err(|error| IntelligenceError(error.to_string()))?;
         let node = DefinitionNode::from_json(&value)?;
         if node.tag != "associationMap" {
             return Err(IntelligenceError("invalid parser association map".into()));
@@ -241,53 +328,12 @@ impl IntelligenceCatalog {
         let mut apis = BTreeMap::new();
         for (key, value) in api_map {
             let node = DefinitionNode::from_json(value)?;
-            let mut environment = ApiEnvironment::default();
-            if let Some(env) = node.child("Environment") {
-                environment.ignore_case = env.attr("ignoreCase") != "no";
-                environment.start_function = env.attr("startFunc").chars().next().unwrap_or('(');
-                environment.stop_function = env.attr("stopFunc").chars().next().unwrap_or(')');
-                environment.parameter_separator =
-                    env.attr("paramSeparator").chars().next().unwrap_or(',');
-                environment.terminal = env.attr("terminal").chars().next().or(Some(';'));
-                environment.additional_word_chars = env.attr("additionalWordChar").to_owned();
-            }
-            let mut keywords = Vec::new();
-            for word in node.children.iter().filter(|n| n.tag == "KeyWord") {
-                if word.attr("name").is_empty() {
-                    return Err(IntelligenceError(format!(
-                        "missing API keyword name: {key}"
-                    )));
-                }
-                let mut overloads = Vec::new();
-                for overload in word.children.iter().filter(|n| n.tag == "Overload") {
-                    let parameters = overload
-                        .children
-                        .iter()
-                        .filter(|n| n.tag == "Param")
-                        .map(|p| ApiParameter {
-                            name: p.attr("name").to_owned(),
-                        })
-                        .collect();
-                    overloads.push(ApiOverload {
-                        return_value: overload.attr("retVal").to_owned(),
-                        description: overload.attr("descr").to_owned(),
-                        parameters,
-                    });
-                }
-                keywords.push(ApiKeyword {
-                    name: word.attr("name").to_owned(),
-                    is_function: word.attr("func") == "yes",
-                    overloads,
-                });
-            }
             apis.insert(
                 key.clone(),
-                ApiDefinition {
-                    source_key: key.clone(),
-                    language: node.attributes.get("language").cloned(),
-                    environment,
-                    keywords,
-                },
+                Arc::new(ApiEntry {
+                    payload: None,
+                    definition: OnceLock::from(Ok(ApiDefinition::from_node(key, node)?)),
+                }),
             );
         }
         let mut parsers = BTreeMap::new();
@@ -346,13 +392,14 @@ impl IntelligenceCatalog {
             .map(|(key, _)| key.as_str())
     }
 
-    pub fn api(&self, source_key: &str) -> Option<&ApiDefinition> {
+    pub fn try_api(&self, source_key: &str) -> Result<Option<&ApiDefinition>, IntelligenceError> {
         let key = canonical_key(source_key);
-        self.apis.get(if key == "javascript.js" {
+        let key = if key == "javascript.js" {
             "javascript"
         } else {
             &key
-        })
+        };
+        self.apis.get(key).map(|entry| entry.get(key)).transpose()
     }
 
     pub fn parse_functions(

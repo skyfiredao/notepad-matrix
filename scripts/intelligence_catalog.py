@@ -37,21 +37,6 @@ def load_committed(directory):
     return {key: json.loads((directory / (key + '.json')).read_text()) for key in ('apis', 'parsers', 'overrides')}
 
 
-def fixtures(source):
-    result = {}
-    for path in sorted((source.parent / 'Test/FunctionList').iterdir()):
-        expected = path / 'unitTest.expected.result'
-        if not path.is_dir() or not expected.exists():
-            continue
-        inputs = [p for p in path.iterdir() if p.name.lower() == 'unittest']
-        if len(inputs) != 1:
-            raise ValueError(f'expected one test input: {path}')
-        result['javascript.js' if path.name == 'javascript' else path.name] = {
-            'text': inputs[0].read_bytes().decode('utf-8-sig'),
-            'expected': json.loads(expected.read_text(encoding='utf-8-sig'))}
-    return result
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source', type=pathlib.Path, required=True)
@@ -67,7 +52,6 @@ def main():
         args.output.mkdir(parents=True, exist_ok=True)
         for key, value in catalog.items():
             (args.output / (key + '.json')).write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
-        (args.output / 'fixtures.json').write_text(json.dumps(fixtures(args.source), ensure_ascii=False, indent=2) + '\n')
         print(f"generated {len(catalog['apis'])} API catalogs and {len(catalog['parsers'])} parser definitions")
 
 

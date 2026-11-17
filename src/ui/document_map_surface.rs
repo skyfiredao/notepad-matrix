@@ -6,7 +6,7 @@ use gpui::{
 
 #[path = "document_map_geometry.rs"]
 pub(super) mod geometry;
-use geometry::{MapGeometry, miniature_text};
+use geometry::{MapGeometry, MiniatureText, miniature_text};
 
 #[derive(Default)]
 pub(super) struct DocumentMapState {
@@ -15,23 +15,139 @@ pub(super) struct DocumentMapState {
     geometry: Option<MapGeometry>,
     painted_buffer: Option<crate::workspace::BufferId>,
     painted_view: Option<crate::workspace::ViewId>,
+    painted_key: Option<MapKey>,
+    cache: Option<(MapKey, usize, usize, Pixels, std::rc::Rc<Vec<(ShapedLine, Pixels)>>)>,
     drag: Option<MapDrag>,
+    peek: Option<DocumentMapPeek>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
+struct DocumentMapPeek {
+    buffer: crate::workspace::BufferId,
+    key: MapKey,
+    first_line: usize,
+    name: String,
+    text: ropey::Rope,
+    dark: bool,
+}
+
+impl Render for DocumentMapPeek {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let last = (self.first_line + 12).min(self.text.len_lines(ropey::LineType::LF_CR));
+        let font = gpui::font("Menlo");
+        let font_size = px(11.);
+        let font_id = window.text_system().resolve_font(&font);
+        let space_width = f32::from(window.text_system().layout_width(font_id, font_size, ' '));
+        div()
+            .id("document-map-peek")
+            .role(Role::Tooltip)
+            .aria_label(format!("Read-only preview of {}", self.name))
+            .w(px(360.))
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .border_1()
+            .border_color(rgb(0x808080))
+            .bg(rgb(if self.dark { 0x202020 } else { 0xffffff }))
+            .text_color(rgb(if self.dark { 0xd4d4d4 } else { 0x202020 }))
+            .child(div().h(px(24.)).px(px(6.)).child(format!("{} · Preview (read-only)", self.name)))
+            .children((self.first_line..last).map(|index| {
+                let line = miniature_text(self.text.line(index, ropey::LineType::LF_CR).chars(), self.key.tab_width, space_width, 318. + f32::from(font_size), 17.,
+                    |ch| f32::from(window.text_system().layout_width(font_id, font_size, ch)), |miniature| {
+                    let segment = &miniature.text;
+                    f32::from(window.text_system().shape_line(segment.to_owned().into(), font_size, &[TextRun {
+                        len: segment.len(), font: font.clone(), color: rgb(if self.dark { 0xd4d4d4 } else { 0x202020 }).into(),
+                        background_color: None, underline: None, strikethrough: None,
+                    }], None).width())
+                }).text;
+                div()
+                    .id(("document-map-peek-line", index))
+                    .h(px(17.))
+                    .flex()
+                    .font_family("Menlo")
+                    .text_size(px(11.))
+                    .whitespace_nowrap()
+                    .child(div().w(px(42.)).flex_shrink_0().text_color(rgb(0x808080)).child(format!("{}", index + 1)))
+                    .child(line)
+            }))
+    }
+}
+
+#[derive(Clone, PartialEq)]
+struct MapKey {
+    buffer: crate::workspace::BufferId,
+    pane: crate::workspace::ViewId,
+    revision: crate::input::DisplayRevision,
+    editor_size: Option<gpui::Size<Pixels>>,
+    wrap: bool,
+    rows: usize,
+    capacity: usize,
+    font: String,
+    font_size: Pixels,
+    style_revision: u64,
+    dark: bool,
+    tab_width: usize,
+    language: crate::syntax::Language,
+    collapsed: Vec<usize>,
+    hidden: Vec<(usize, usize)>,
+    links: crate::links::LinkOptions,
+    clickable_links: bool,
+    syntax_highlighting: bool,
+}
+
+#[derive(Clone)]
 struct MapDrag {
     bounds: Bounds<Pixels>,
     geometry: MapGeometry,
     buffer: crate::workspace::BufferId,
     pane: crate::workspace::ViewId,
+    key: MapKey,
 }
 
 struct MapPaint {
     geometry: MapGeometry,
-    lines: Vec<(ShapedLine, Pixels)>,
+    lines: std::rc::Rc<Vec<(ShapedLine, Pixels)>>,
 }
 
 impl MatrixWindow {
+    fn document_map_runs(&self, miniature: &MiniatureText, start: usize, run: TextRun) -> Vec<TextRun> {
+        let end = start + miniature.source_len;
+        let prefix = self.editor().display_snapshot().slice(start..end).to_string();
+        let links = self.editor_link_spans_in_text(&prefix, start, 0..prefix.len());
+        let mut offset = 0;
+        let mut runs = Vec::new();
+        for (mut style, _) in self.editor_style_runs_with_links(start, end, None, run.clone(), &links) {
+            let end = (offset + style.len).min(miniature.source_len);
+            style.len = miniature.display_offset(end).saturating_sub(miniature.display_offset(offset));
+            if style.len > 0 { runs.push(style); }
+            offset = end;
+        }
+        if runs.is_empty() { runs.push(run); }
+        runs
+    }
+
+    pub(super) fn set_document_map_visible(&mut self, visible: bool) {
+        self.document_map = DocumentMapState { visible, ..Default::default() };
+    }
+
+    fn document_map_key(&self) -> MapKey {
+        MapKey {
+            buffer: self.workspace.active().id(), pane: self.workspace.active_view(),
+            revision: self.editor().display_revision(),
+            editor_size: self.editor_bounds.map(|bounds| bounds.size),
+            wrap: self.editor_word_wrap_enabled(), rows: self.editor_visual_row_count(),
+            capacity: self.editor_visible_capacity(), font: self.editor_font_family(),
+            font_size: self.editor_font_size(), style_revision: self.style_config.revision(),
+            dark: self.dark, tab_width: usize::from(self.workspace.active_tab_width()),
+            language: self.workspace.active().language(),
+            collapsed: self.editor_collapsed_headers(),
+            hidden: self.editor_hidden_lines(),
+            links: self.preferences.files.links.clone(),
+            clickable_links: self.workspace.clickable_links_allowed(),
+            syntax_highlighting: self.workspace.syntax_highlighting_allowed(),
+        }
+    }
+
     pub(super) fn document_map_visible(&self) -> bool {
         self.document_map.visible
     }
@@ -128,6 +244,7 @@ impl MatrixWindow {
         };
         if buffer != self.workspace.active().id()
             || pane != self.workspace.active_view()
+            || self.document_map.painted_key.as_ref() != Some(&self.document_map_key())
             || !bounds.contains(&event.position)
         {
             return;
@@ -137,6 +254,7 @@ impl MatrixWindow {
             geometry,
             buffer,
             pane,
+            key: self.document_map_key(),
         });
         self.document_map_navigate(
             geometry.top_line_at(f32::from(event.position.y - bounds.top())),
@@ -153,12 +271,40 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(drag) = self.document_map.drag else {
+        let Some(drag) = self.document_map.drag.clone() else {
+            let target = if self.pref_bool("docPeekOnMap", false) {
+                self.document_map.bounds.zip(self.document_map.geometry)
+                    .filter(|_| self.document_map.painted_key.as_ref() == Some(&self.document_map_key()))
+                    .filter(|(bounds, _)| bounds.contains(&event.position))
+                    .map(|(bounds, geometry)| {
+                        let row = geometry.first_line() + (f32::from(event.position.y - bounds.top()) / geometry.line_height())
+                            .floor().max(0.) as usize;
+                        let row = row.min(geometry.first_line() + geometry.rows().saturating_sub(1));
+                        (self.workspace.active().id(), self.editor_logical_line_for_visual_row(row))
+                    })
+            } else {
+                None
+            };
+            if self.document_map.peek.as_ref().map(|peek| (peek.buffer, peek.first_line)) != target
+                || self.document_map.peek.as_ref().is_some_and(|peek| peek.key != self.document_map_key())
+            {
+                self.document_map.peek = target.map(|(buffer, first_line)| DocumentMapPeek {
+                    buffer,
+                    key: self.document_map_key(),
+                    first_line,
+                    name: self.workspace.active().name(),
+                    text: self.editor().display_snapshot(),
+                    dark: self.dark,
+                });
+                cx.notify();
+            }
             return;
         };
         if event.pressed_button != Some(MouseButton::Left)
             || drag.buffer != self.workspace.active().id()
             || drag.pane != self.workspace.active_view()
+            || drag.key != self.document_map_key()
+            || self.document_map.bounds != Some(drag.bounds)
         {
             self.document_map.drag = None;
             return;
@@ -173,7 +319,7 @@ impl MatrixWindow {
         }
         let y = f32::from(event.position.y - drag.bounds.top());
         self.document_map_navigate(
-            drag.geometry.top_line_at(y),
+            self.document_map.geometry.unwrap_or(drag.geometry).top_line_at(y),
             drag.pane,
             drag.buffer,
             window,
@@ -188,51 +334,88 @@ impl MatrixWindow {
         }
         let owner = cx.entity();
         let dark = self.dark;
+        let focus_colour = self.style_colour("Document map", "fgColor", 0xff8000);
+        let frost_colour = self.style_colour("Document map", "bgColor", 0xffffff);
+        let peek = self.document_map.peek.clone().filter(|peek| peek.key == self.document_map_key());
         let preview = canvas(
             move |bounds, window, cx| {
                 owner.update(cx, |view, _| {
+                    view.refresh_scintilla_shortcut_geometry(window);
                     let snapshot = view.editor().display_snapshot();
+                    let key = view.document_map_key();
+                    let base_size = f32::from(key.font_size) - view.editor_zoom_delta() as f32;
+                    let font_size = px((base_size - 10.).max(1.));
+                    let font = gpui::font(key.font.clone());
+                    let font_id = window.text_system().resolve_font(&font);
+                    let line_height = (f32::from(window.text_system().ascent(font_id, font_size)).floor()
+                        + f32::from(window.text_system().descent(font_id, font_size)).abs().floor()).max(1.);
+                    let previous_first = view.document_map.geometry
+                        .filter(|_| view.document_map.painted_key.as_ref() == Some(&key))
+                        .map_or(0, MapGeometry::first_line);
                     let geometry = MapGeometry::new(
                         view.editor_visual_row_count(),
                         view.editor_visible_capacity(),
                         view.editor_top_line,
                         f32::from(bounds.size.height),
+                        line_height,
+                        previous_first,
+                        f32::from(bounds.size.width),
                     );
                     view.document_map.bounds = Some(bounds);
                     view.document_map.geometry = geometry;
                     view.document_map.painted_buffer = Some(view.workspace.active().id());
                     view.document_map.painted_view = Some(view.workspace.active_view());
+                    view.document_map.painted_key = Some(key.clone());
                     geometry.map(|geometry| {
-                        let columns =
-                            ((f32::from(bounds.size.width) / 1.5).ceil() as usize).min(512);
-                        let lines = (geometry.first_line()
+                        if let Some((cached_key, first, rows, width, lines)) = &view.document_map.cache
+                            && *cached_key == key && *first == geometry.first_line() && *rows == geometry.rows() && *width == bounds.size.width
+                        { return MapPaint { geometry, lines: lines.clone() }; }
+                        let lines: Vec<_> = (geometry.first_line()
                             ..geometry.first_line() + geometry.rows())
                             .map(|row| {
-                                let range =
-                                    view.editor_visual_row_source_range(row).unwrap_or(0..0);
-                                let text = miniature_text(snapshot.slice(range).chars(), columns);
+                                let range = if key.wrap {
+                                    view.editor_visual_row_source_range(row).unwrap_or(0..0)
+                                } else {
+                                    let logical = view.editor_logical_line_for_visual_row(row);
+                                    let start = snapshot.line_to_byte_idx(logical, ropey::LineType::LF_CR);
+                                    start..start + snapshot.line(logical, ropey::LineType::LF_CR).len()
+                                };
                                 let indent = view.editor_visual_row_indent(row)
-                                    * (geometry.line_height() * 0.85
-                                        / f32::from(view.editor_font_size()));
-                                let run = TextRun {
-                                    len: text.len(),
-                                    font: gpui::font("Menlo"),
-                                    color: rgb(if dark { 0xd4d4d4 } else { 0x303030 }).into(),
+                                    * (f32::from(font_size) / f32::from(view.editor_font_size()));
+                                   let space_width = f32::from(window.text_system().layout_width(font_id, font_size, ' '));
+                                   let width = geometry.text_width(f32::from(indent));
+                                   let miniature = miniature_text(snapshot.slice(range.clone()).chars(), key.tab_width, space_width, if width > 0. { width + f32::from(font_size) } else { 0. }, geometry.line_height(),
+                                       |ch| f32::from(window.text_system().layout_width(font_id, font_size, ch)), |miniature| {
+                                       let run = TextRun {
+                                           len: miniature.text.len(), font: font.clone(),
+                                           color: rgb(view.editor_style_profile().foreground).into(),
+                                           background_color: None, underline: None, strikethrough: None,
+                                       };
+                                       let runs = view.document_map_runs(miniature, range.start, run);
+                                       f32::from(window.text_system().shape_line(miniature.text.clone().into(), font_size, &runs, None).width())
+                                  });
+                                 let run = TextRun {
+                                    len: miniature.text.len(),
+                                     font: font.clone(),
+                                    color: rgb(view.editor_style_profile().foreground).into(),
                                     background_color: None,
                                     underline: None,
                                     strikethrough: None,
                                 };
+                                let projected_runs = view.document_map_runs(&miniature, range.start, run);
                                 (
                                     window.text_system().shape_line(
-                                        text.into(),
-                                        px(geometry.line_height() * 0.85),
-                                        &[run],
+                                        miniature.text.into(),
+                                         font_size,
+                                        &projected_runs,
                                         None,
                                     ),
                                     indent,
                                 )
                             })
-                            .collect();
+                             .collect();
+                         let lines = std::rc::Rc::new(lines);
+                         view.document_map.cache = Some((key, geometry.first_line(), geometry.rows(), bounds.size.width, lines.clone()));
                         MapPaint { geometry, lines }
                     })
                 })
@@ -247,11 +430,10 @@ impl MatrixWindow {
                         point(bounds.left(), bounds.top() + px(top)),
                         size(bounds.size.width, px(height)),
                     );
-                    window.paint_quad(fill(zone, rgba(if dark { 0xff800050 } else { 0xff800038 })));
-                    for (index, (line, indent)) in lines.into_iter().enumerate() {
+                    for (index, (line, indent)) in lines.iter().enumerate() {
                         if let Err(error) = line.paint(
                             point(
-                                bounds.left() + px(2.) + indent,
+                                bounds.left() + *indent,
                                 bounds.top() + px(index as f32 * geometry.line_height()),
                             ),
                             px(geometry.line_height()),
@@ -263,17 +445,14 @@ impl MatrixWindow {
                             eprintln!("Document Map text paint failed: {error}");
                         }
                     }
-                    let edge = rgb(0xff8000);
                     window.paint_quad(fill(
-                        Bounds::new(zone.origin, size(zone.size.width, px(1.))),
-                        edge,
+                        Bounds::new(bounds.origin, size(bounds.size.width, (zone.top() - bounds.top()).max(px(0.)))),
+                        rgba((frost_colour << 8) | 50),
                     ));
+                    window.paint_quad(fill(zone, rgba((focus_colour << 8) | 50)));
                     window.paint_quad(fill(
-                        Bounds::new(
-                            point(zone.left(), zone.bottom() - px(1.)),
-                            size(zone.size.width, px(1.)),
-                        ),
-                        edge,
+                        Bounds::new(point(bounds.left(), zone.bottom()), size(bounds.size.width, (bounds.bottom() - zone.bottom()).max(px(0.)))),
+                        rgba((frost_colour << 8) | 50),
                     ));
                 });
             },
@@ -290,36 +469,11 @@ impl MatrixWindow {
                 .h_full()
                 .flex()
                 .flex_col()
-                .bg(rgb(if dark { 0x282828 } else { 0xf6f6f6 }))
+                .bg(rgb(
+                    self.appearance_colour("DarkMode.customColorMain", 0xf6f6f6)
+                ))
                 .border_l_1()
                 .border_color(rgb(0x808080))
-                .child(
-                    div()
-                        .h(px(26.))
-                        .flex_shrink_0()
-                        .px(px(6.))
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child("Document Map")
-                        .child(
-                            div()
-                                .id("document-map-close")
-                                .debug_selector(|| "document-map-close".into())
-                                .role(Role::Button)
-                                .aria_label("Close Document Map")
-                                .tooltip(move |_, cx| {
-                                    icon_tooltip::view("Close Document Map", dark, cx)
-                                })
-                                .cursor_pointer()
-                                .child("×")
-                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                                .on_click(cx.listener(|view, _, window, cx| {
-                                    view.close_document_map(window, cx);
-                                    cx.stop_propagation();
-                                })),
-                        ),
-                )
                 .child(
                     div()
                         .id("document-map-preview")
@@ -333,12 +487,23 @@ impl MatrixWindow {
                         .w_full()
                         .overflow_hidden()
                         .cursor_pointer()
+                        .when_some(peek.filter(|_| self.pref_bool("docPeekOnMap", false)), |element, peek| {
+                            element.tooltip(move |_, cx| {
+                                let peek = peek.clone();
+                                cx.new(move |_| peek).into()
+                            })
+                        })
                         .bg(rgb(if dark { 0x1e1e1e } else { 0xffffff }))
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(Self::document_map_pointer_down),
                         )
                         .on_mouse_move(cx.listener(Self::document_map_pointer_move))
+                        .on_hover(cx.listener(|view, hovered: &bool, _, cx| {
+                            if !hovered && view.document_map.peek.take().is_some() {
+                                cx.notify();
+                            }
+                        }))
                         .on_mouse_up(
                             MouseButton::Left,
                             cx.listener(|view, _, _, cx| {
@@ -385,182 +550,5 @@ impl MatrixWindow {
                 )
                 .into_any_element(),
         )
-    }
-}
-
-#[cfg(all(test, feature = "native-input-tests", debug_assertions))]
-mod tests {
-    use super::*;
-    use gpui::{EntityInputHandler, MouseDownEvent, MouseMoveEvent, MouseUpEvent, point};
-
-    #[gpui::test]
-    fn document_map_uses_wrapped_rows_for_preview_and_scroll(cx: &mut gpui::TestAppContext) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        let source = (0..100)
-            .map(|row| format!("{row} {}\n", "word ".repeat(80)))
-            .collect::<String>();
-        view.update_in(cx, |view, window, cx| {
-            EntityInputHandler::replace_text_in_range(view, None, &source, window, cx);
-            view.toggle_editor_word_wrap(window, cx);
-            view.editor_top_line = 0;
-            view.editor_follow_caret = false;
-            view.toggle_document_map(window, cx);
-        });
-        cx.run_until_parked();
-        view.read_with(cx, |view, _| {
-            assert!(
-                view.document_map.geometry.expect("map projection").rows() > 101,
-                "the wrapped miniature must include continuation rows, not just logical lines"
-            );
-        });
-        let map = cx
-            .debug_bounds("document-map-preview")
-            .expect("document miniature");
-        cx.simulate_click(
-            point(map.center().x, map.bottom() - px(2.)),
-            gpui::Modifiers::default(),
-        );
-        view.read_with(cx, |view, _| {
-            assert!(
-                view.editor_top_line > 100,
-                "map scrolling must not clamp visual rows to the logical line count"
-            );
-            assert_eq!(view.editor().committed_text(), source);
-        });
-    }
-
-    #[gpui::test]
-    fn document_map_click_drag_and_close_preserve_document_selection_and_undo(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        let source = (0..400)
-            .map(|row| format!("line {row}: real 中 text\n"))
-            .collect::<String>();
-        view.update_in(cx, |view, window, cx| {
-            EntityInputHandler::replace_text_in_range(view, None, &source, window, cx);
-            view.editor_mut()
-                .select(Selection {
-                    anchor: ByteOffset(4),
-                    head: ByteOffset(1),
-                })
-                .expect("backward selection");
-            view.editor_top_line = 0;
-            view.editor_follow_caret = false;
-            view.toggle_document_map(window, cx);
-        });
-        cx.run_until_parked();
-        let selection = view.read_with(cx, |view, _| view.editor().selection());
-        let count = view.read_with(cx, |view, _| view.workspace.buffers().len());
-        let owner = view.read_with(cx, |view, _| {
-            (view.workspace.active().id(), view.workspace.active_view())
-        });
-        let map = cx
-            .debug_bounds("document-map-preview")
-            .expect("bounded map");
-        let click = point(map.center().x, map.top() + map.size.height * 0.6);
-        cx.simulate_click(click, gpui::Modifiers::default());
-        let clicked_top = view.read_with(cx, |view, _| view.editor_top_line);
-        assert!(clicked_top > 0, "click scrolls rather than selecting text");
-        cx.simulate_event(MouseDownEvent {
-            position: click,
-            button: MouseButton::Left,
-            ..Default::default()
-        });
-        cx.simulate_event(MouseMoveEvent {
-            position: point(click.x, map.bottom() - px(2.)),
-            pressed_button: Some(MouseButton::Left),
-            ..Default::default()
-        });
-        cx.simulate_event(MouseUpEvent {
-            position: point(click.x, map.bottom() - px(2.)),
-            button: MouseButton::Left,
-            ..Default::default()
-        });
-        view.read_with(cx, |view, _| {
-            assert!(view.editor_top_line > clicked_top, "drag scrolls farther");
-            assert_eq!(
-                (view.workspace.active().id(), view.workspace.active_view()),
-                owner
-            );
-            assert_eq!(view.editor().selection(), selection);
-            assert_eq!(view.editor().committed_text(), source);
-            assert!(view.editor().document().can_undo());
-            assert!(!view.editor().document().can_redo());
-            assert!(
-                !view.editor_follow_caret,
-                "repaint must not snap back to caret"
-            );
-        });
-        let close = cx
-            .debug_bounds("document-map-close")
-            .expect("panel close")
-            .center();
-        let top = view.read_with(cx, |view, _| view.editor_top_line);
-        cx.simulate_click(close, gpui::Modifiers::default());
-        cx.run_until_parked();
-        assert!(cx.debug_bounds("document-map-panel").is_none());
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.workspace.buffers().len(), count);
-            assert_eq!(view.editor().selection(), selection);
-            assert_eq!(view.editor().committed_text(), source);
-        });
-        let reopen = cx
-            .debug_bounds("toolbar-document-map")
-            .expect("Map reopen toolbar");
-        cx.simulate_click(reopen.center(), gpui::Modifiers::default());
-        assert!(cx.debug_bounds("document-map-panel").is_some());
-        view.read_with(cx, |view, _| {
-            assert_eq!(
-                (view.workspace.active().id(), view.workspace.active_view()),
-                owner
-            );
-            assert_eq!(view.editor_top_line, top);
-            assert_eq!(view.editor().selection(), selection);
-            assert_eq!(view.editor().committed_text(), source);
-            assert!(view.editor().document().can_undo() && !view.editor().document().can_redo());
-        });
-        cx.dispatch_action(EditorUndo);
-        view.read_with(cx, |view, _| {
-            assert_eq!(
-                view.editor().committed_text(),
-                "",
-                "one undo removes the original edit"
-            );
-        });
-        let before = view.read_with(cx, |view, _| {
-            (
-                view.workspace.active().id(),
-                view.workspace.active_view(),
-                view.editor().selections(),
-                view.editor().document().can_undo(),
-                view.editor().document().can_redo(),
-                view.workspace.active().is_modified(),
-            )
-        });
-        let close = cx
-            .debug_bounds("document-map-close")
-            .expect("reopened Map Close");
-        cx.simulate_click(close.center(), gpui::Modifiers::default());
-        assert!(cx.debug_bounds("document-map-panel").is_none());
-        view.update_in(cx, |view, window, _| {
-            assert_eq!(
-                (
-                    view.workspace.active().id(),
-                    view.workspace.active_view(),
-                    view.editor().selections(),
-                    view.editor().document().can_undo(),
-                    view.editor().document().can_redo(),
-                    view.workspace.active().is_modified()
-                ),
-                before
-            );
-            assert_eq!(view.editor().committed_text(), "");
-            assert!(view.editor_focus.is_focused(window));
-        });
-        cx.simulate_input("!");
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "!")
-        });
     }
 }

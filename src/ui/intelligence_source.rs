@@ -22,22 +22,12 @@ pub fn source_key(language: Language, udl_name: Option<&str>) -> Result<String, 
             let Some(name) = udl_name else {
                 return Ok(String::new());
             };
-            let overrides: serde_json::Value =
-                serde_json::from_str(include_str!("../../assets/intelligence/overrides.json"))
-                    .map_err(|error| {
-                        IntelligenceError(format!("Function List associations: {error}"))
-                    })?;
-            let associations = overrides["children"].as_array().ok_or_else(|| {
-                IntelligenceError("Function List associationMap has no associations".into())
-            })?;
-            Ok(associations
-                .iter()
-                .find(|association| {
-                    association["attributes"]["userDefinedLangName"].as_str() == Some(name)
-                })
-                .and_then(|association| association["attributes"]["id"].as_str())
+            let catalog = catalog()?;
+            Ok(catalog
+                .parser_associations()
+                .find(|(association, _)| *association == name)
+                .map(|(_, key)| key)
                 .unwrap_or("")
-                .trim_end_matches(".xml")
                 .to_owned())
         }
     }

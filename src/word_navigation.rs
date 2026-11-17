@@ -1,8 +1,8 @@
 use super::{ByteOffset, Document, EditError, Selection, SelectionRange, SelectionSet};
 use ropey::{LineType, Rope};
+use crate::byte_buffer::ByteBuffer;
 
-#[path = "unicode_class.rs"]
-mod unicode_class;
+use crate::unicode_class::{CharacterClass, classify as class};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WordBoundary {
@@ -10,26 +10,6 @@ pub enum WordBoundary {
     End,
     Part,
     Line,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum CharacterClass {
-    Space,
-    NewLine,
-    Word,
-    Punctuation,
-}
-
-fn class(ch: char) -> CharacterClass {
-    if super::selection::word(ch) {
-        CharacterClass::Word
-    } else if matches!(ch, '\r' | '\n' | '\u{2028}' | '\u{2029}') {
-        CharacterClass::NewLine
-    } else if unicode_class::is_punctuation(ch) {
-        CharacterClass::Punctuation
-    } else {
-        CharacterClass::Space
-    }
 }
 
 pub(crate) fn whole_word_at(text: &str, start: usize, end: usize) -> bool {
@@ -118,30 +98,6 @@ pub(crate) fn selection_in_snapshot(
     })
 }
 
-pub(crate) fn word_range_in_snapshot(
-    text: &Rope,
-    position: ByteOffset,
-) -> Result<Selection, EditError> {
-    if position.0 > text.len() {
-        return Err(EditError::InvalidRange);
-    }
-    if !text.is_char_boundary(position.0) {
-        return Err(EditError::InvalidBoundary);
-    }
-    let mut start = position.0;
-    let mut end = position.0;
-    while start > 0 && super::selection::word(text.char(previous(text, start))) {
-        start = previous(text, start);
-    }
-    while end < text.len() && super::selection::word(text.char(end)) {
-        end += text.char(end).len_utf8();
-    }
-    Ok(Selection {
-        anchor: ByteOffset(start),
-        head: ByteOffset(end),
-    })
-}
-
 pub(crate) fn extend_selection_in_snapshot(
     text: &Rope,
     anchored: Selection,
@@ -184,24 +140,28 @@ pub(crate) fn boundary_in_snapshot(
     forward: bool,
     boundary: WordBoundary,
 ) -> Result<ByteOffset, EditError> {
+    boundary_in_bytes(&ByteBuffer::from_bytes(text.to_string().as_bytes()), position, forward, boundary)
+}
+
+fn boundary_in_bytes(
+    text: &ByteBuffer,
+    position: ByteOffset,
+    forward: bool,
+    boundary: WordBoundary,
+) -> Result<ByteOffset, EditError> {
     if position.0 > text.len() {
         return Err(EditError::InvalidRange);
     }
-    if !text.is_char_boundary(position.0) {
-        return Err(EditError::InvalidBoundary);
-    }
-    let mut at = position.0;
+    let mut at = text.move_position_outside_char(position.0, forward, false)
+        .map_err(|error| EditError::Storage(error.to_string()))?;
     match (forward, boundary) {
         (_, WordBoundary::Line) => {
-            let line = text.byte_to_line_idx(at, LineType::LF_CR);
-            let start = text.line_to_byte_idx(line, LineType::LF_CR);
+            let line = text.line_index(at).map_err(|error| EditError::Storage(error.to_string()))?;
+            let start = text.line_start(line).map_err(|error| EditError::Storage(error.to_string()))?;
             at = if forward {
-                start
-                    + text
-                        .line(line, LineType::LF_CR)
-                        .to_string()
-                        .trim_end_matches(['\r', '\n'])
-                        .len()
+                let mut end = start;
+                while end < text.len() && !text.is_line_end(end) { end += 1; }
+                end
             } else {
                 start
             };
@@ -210,48 +170,48 @@ pub(crate) fn boundary_in_snapshot(
             at = word_part(text, at, forward);
         }
         (false, WordBoundary::Start) => {
-            while at > 0 && class(text.char(previous(text, at))) == CharacterClass::Space {
-                at = previous(text, at);
+            while at > 0 && class(text.character_at(text.previous_position(at)).0) == CharacterClass::Space {
+                at = text.previous_position(at);
             }
             if at > 0 {
-                let initial = class(text.char(previous(text, at)));
-                while at > 0 && class(text.char(previous(text, at))) == initial {
-                    at = previous(text, at);
+                let initial = class(text.character_at(text.previous_position(at)).0);
+                while at > 0 && class(text.character_at(text.previous_position(at)).0) == initial {
+                    at = text.previous_position(at);
                 }
             }
         }
         (true, WordBoundary::Start) => {
             if at < text.len() {
-                let initial = class(text.char(at));
-                while at < text.len() && class(text.char(at)) == initial {
-                    at += text.char(at).len_utf8();
+                let initial = class(text.character_at(at).0);
+                while at < text.len() && class(text.character_at(at).0) == initial {
+                    at += text.character_at(at).1;
                 }
             }
-            while at < text.len() && class(text.char(at)) == CharacterClass::Space {
-                at += text.char(at).len_utf8();
+            while at < text.len() && class(text.character_at(at).0) == CharacterClass::Space {
+                at += text.character_at(at).1;
             }
         }
         (false, WordBoundary::End) => {
             if at > 0 {
-                let initial = class(text.char(previous(text, at)));
+                let initial = class(text.character_at(text.previous_position(at)).0);
                 if initial != CharacterClass::Space {
-                    while at > 0 && class(text.char(previous(text, at))) == initial {
-                        at = previous(text, at);
+                    while at > 0 && class(text.character_at(text.previous_position(at)).0) == initial {
+                        at = text.previous_position(at);
                     }
                 }
             }
-            while at > 0 && class(text.char(previous(text, at))) == CharacterClass::Space {
-                at = previous(text, at);
+            while at > 0 && class(text.character_at(text.previous_position(at)).0) == CharacterClass::Space {
+                at = text.previous_position(at);
             }
         }
         (true, WordBoundary::End) => {
-            while at < text.len() && class(text.char(at)) == CharacterClass::Space {
-                at += text.char(at).len_utf8();
+            while at < text.len() && class(text.character_at(at).0) == CharacterClass::Space {
+                at += text.character_at(at).1;
             }
             if at < text.len() {
-                let initial = class(text.char(at));
-                while at < text.len() && class(text.char(at)) == initial {
-                    at += text.char(at).len_utf8();
+                let initial = class(text.character_at(at).0);
+                while at < text.len() && class(text.character_at(at).0) == initial {
+                    at += text.character_at(at).1;
                 }
             }
         }
@@ -259,16 +219,17 @@ pub(crate) fn boundary_in_snapshot(
     Ok(ByteOffset(at))
 }
 
-fn word_part(text: &Rope, mut at: usize, forward: bool) -> usize {
+fn word_part(text: &ByteBuffer, mut at: usize, forward: bool) -> usize {
     let after = |position| {
         if position < text.len() {
-            text.char(position)
+            text.character_at(position).0
         } else {
             '\0'
         }
     };
     let separator = |ch| super::selection::word(ch) && ch.is_ascii_punctuation();
-    let step = |at| at + after(at).len_utf8();
+    let step = |at| at + text.character_at(at).1;
+    let previous = |at| text.previous_position(at);
     if forward {
         if separator(after(at)) {
             while at < text.len() && separator(after(at)) {
@@ -297,9 +258,9 @@ fn word_part(text: &Rope, mut at: usize, forward: bool) -> usize {
             }
             if after(at).is_ascii_lowercase()
                 && at > 0
-                && after(previous(text, at)).is_ascii_uppercase()
+                && after(previous(at)).is_ascii_uppercase()
             {
-                at = previous(text, at);
+                at = previous(at);
             }
         } else if initial.is_ascii_digit() {
             while at < text.len() && after(at).is_ascii_digit() {
@@ -317,53 +278,53 @@ fn word_part(text: &Rope, mut at: usize, forward: bool) -> usize {
             at = step(at);
         }
     } else if at > 0 {
-        at = previous(text, at);
+        at = previous(at);
         if separator(after(at)) {
             while at > 0 && separator(after(at)) {
-                at = previous(text, at);
+                at = previous(at);
             }
         }
         if at > 0 {
             let initial = after(at);
-            at = previous(text, at);
+            at = previous(at);
             if initial.is_ascii_lowercase() {
                 while at > 0 && after(at).is_ascii_lowercase() {
-                    at = previous(text, at);
+                    at = previous(at);
                 }
                 if !after(at).is_ascii_uppercase() && !after(at).is_ascii_lowercase() {
                     at = step(at);
                 }
             } else if initial.is_ascii_uppercase() {
                 while at > 0 && after(at).is_ascii_uppercase() {
-                    at = previous(text, at);
+                    at = previous(at);
                 }
                 if !after(at).is_ascii_uppercase() {
                     at = step(at);
                 }
             } else if initial.is_ascii_digit() {
                 while at > 0 && after(at).is_ascii_digit() {
-                    at = previous(text, at);
+                    at = previous(at);
                 }
                 if !after(at).is_ascii_digit() {
                     at = step(at);
                 }
             } else if initial.is_ascii_punctuation() {
                 while at > 0 && after(at).is_ascii_punctuation() {
-                    at = previous(text, at);
+                    at = previous(at);
                 }
                 if !after(at).is_ascii_punctuation() {
                     at = step(at);
                 }
             } else if initial.is_ascii_whitespace() {
                 while at > 0 && after(at).is_ascii_whitespace() {
-                    at = previous(text, at);
+                    at = previous(at);
                 }
                 if !after(at).is_ascii_whitespace() {
                     at = step(at);
                 }
             } else if !initial.is_ascii() {
                 while at > 0 && !after(at).is_ascii() {
-                    at = previous(text, at);
+                    at = previous(at);
                 }
                 if after(at).is_ascii() {
                     at = step(at);
@@ -400,7 +361,7 @@ impl Document {
         if self.is_read_only() {
             return Err(EditError::ReadOnly);
         }
-        let mut candidate = self.text_snapshot();
+        let mut candidate = self.byte_snapshot();
         let mut selections = self.selections();
         let mut edits = super::LineEdits::default();
         for index in 0..selections.ranges().len() {
@@ -408,7 +369,7 @@ impl Document {
             let mut position = old.selection.head;
             if forward {
                 let padding = " ".repeat(old.head_virtual);
-                edits.insert(&mut candidate, position.0, &padding)?;
+                edits.change_bytes(&mut candidate, position.0..position.0, padding.as_bytes())?;
                 selections.map_edit(position.0, 0, padding.len());
                 position.0 += padding.len();
                 selections.set_range(
@@ -429,23 +390,23 @@ impl Document {
                     },
                 );
             }
-            let target = boundary_in_snapshot(&candidate, position, forward, boundary)?;
+            let target = boundary_in_bytes(&candidate, position, forward, boundary)?;
             let range = if forward {
                 position.0..target.0.max(position.0)
             } else {
                 target.0.min(position.0)..position.0
             };
-            edits.remove(&mut candidate, range.clone())?;
+            edits.change_bytes(&mut candidate, range.clone(), &[])?;
             selections.map_edit(range.start, range.len(), 0);
         }
-        selections.normalize_boundaries(&candidate, false);
+        selections.normalize_byte_bounds(&candidate);
         selections.deduplicate();
         let grouped = forward || self.selections().ranges().len() > 1;
         if grouped {
             self.begin_undo_action();
         }
         super::lock(&self.core).direct_edit = !grouped;
-        let result = self.commit_prepared(candidate, selections, edits);
+        let result = self.commit_prepared_bytes(candidate, selections, edits);
         super::lock(&self.core).direct_edit = false;
         if grouped {
             self.end_undo_action();
@@ -459,7 +420,7 @@ impl Document {
         forward: bool,
         boundary: WordBoundary,
     ) -> Result<ByteOffset, EditError> {
-        boundary_in_snapshot(&self.text_snapshot(), position, forward, boundary)
+        boundary_in_bytes(&self.byte_snapshot(), position, forward, boundary)
     }
 
     pub fn move_word(&mut self, forward: bool, extend: bool) -> Result<(), EditError> {
@@ -480,8 +441,8 @@ impl Document {
         extend: bool,
         boundary: WordBoundary,
     ) -> Result<(), EditError> {
-        let selections = move_in_snapshot(
-            &self.text_snapshot(),
+        let selections = move_in_bytes(
+            &self.byte_snapshot(),
             &self.selections(),
             forward,
             extend,
@@ -497,6 +458,16 @@ impl Document {
 
 pub(crate) fn move_in_snapshot(
     text: &Rope,
+    selections: &SelectionSet,
+    forward: bool,
+    extend: bool,
+    boundary: WordBoundary,
+) -> Result<SelectionSet, EditError> {
+    move_in_bytes(&ByteBuffer::from_bytes(text.to_string().as_bytes()), selections, forward, extend, boundary)
+}
+
+fn move_in_bytes(
+    text: &ByteBuffer,
     selections: &SelectionSet,
     forward: bool,
     extend: bool,
@@ -530,7 +501,7 @@ pub(crate) fn move_in_snapshot(
         );
     }
     selections.moved(extend, |_, old| {
-        let head = boundary_in_snapshot(text, old.selection.head, forward, boundary)?;
+        let head = boundary_in_bytes(text, old.selection.head, forward, boundary)?;
         Ok(SelectionRange {
             selection: Selection {
                 anchor: if extend { old.selection.anchor } else { head },

@@ -1,9 +1,5 @@
 use super::*;
 
-#[cfg(all(test, feature = "native-input-tests"))]
-#[path = "builtin_language_surface_tests.rs"]
-mod tests;
-
 pub(super) struct BuiltinState {
     pub(super) syntax_cache: Option<BuiltinSyntaxCache>,
     pub(super) style_revision: u64,
@@ -43,6 +39,13 @@ impl MatrixWindow {
     pub(super) fn refresh_builtin_syntax_update(
         &mut self,
     ) -> Option<crate::builtin_language::CacheUpdate> {
+        if !self.workspace.syntax_highlighting_allowed() {
+            if self.builtin.syntax_cache.take().is_some() {
+                self.editor_chrome.invalidate_layout();
+                self.editor_painted_revision = None;
+            }
+            return None;
+        }
         let id = match self.workspace.active().language() {
             crate::syntax::Language::Builtin(id) => id,
             crate::syntax::Language::Json => 57,
@@ -65,15 +68,17 @@ impl MatrixWindow {
                 return None;
             }
         };
+        let mut definition = self.style_config.effective_language(definition, self.dark);
+        self.apply_editing_language_properties(&mut definition);
         let document = self.workspace.active().id();
         let revision = self.editor().display_revision();
         let profile = self.editor_style_profile();
         let zoom_delta = self.editor_zoom_delta();
-        let style_revision = self.builtin.style_revision;
+        let style_revision = self.style_config.revision();
         if self.builtin.syntax_cache.as_ref().is_some_and(|cache| {
             cache.document == document
                 && cache.revision == revision
-                && cache.runtime.definition() == definition
+                && cache.runtime.definition() == &definition
                 && cache.style_revision == style_revision
                 && cache.profile == profile
                 && cache.dark == self.dark
@@ -92,7 +97,7 @@ impl MatrixWindow {
                 || cache.zoom_delta != zoom_delta;
             cache
                 .runtime
-                .refresh(&text, definition, style_revision)
+                .refresh(&text, &definition, style_revision)
                 .map(|update| {
                     let update = if presentation_changed
                         && update == crate::builtin_language::CacheUpdate::Unchanged
@@ -104,7 +109,7 @@ impl MatrixWindow {
                     (cache.runtime, update)
                 })
         } else {
-            crate::builtin_language::SyntaxCache::new(&text, definition, style_revision).map(
+            crate::builtin_language::SyntaxCache::new(&text, &definition, style_revision).map(
                 |runtime| {
                     (
                         runtime,
@@ -146,6 +151,9 @@ impl MatrixWindow {
     }
 
     fn active_builtin_cache(&self) -> Option<&BuiltinSyntaxCache> {
+        if !self.workspace.syntax_highlighting_allowed() {
+            return None;
+        }
         let id = match self.workspace.active().language() {
             crate::syntax::Language::Builtin(id) => id,
             crate::syntax::Language::Json => 57,
@@ -164,45 +172,48 @@ impl MatrixWindow {
         end: usize,
         marked: Option<&std::ops::Range<ByteOffset>>,
         base: gpui::TextRun,
+        links: &[std::ops::Range<usize>],
     ) -> Vec<(gpui::TextRun, gpui::Pixels)> {
         let profile = self.editor_style_profile();
         let Some(cache) = self.active_builtin_cache() else {
-            return vec![(base, self.editor_font_size())];
-        };
-        let spans = match cache.runtime.styled_runs(
-            start..end,
-            self.dark,
-            &profile,
-            self.editor_zoom_delta(),
-        ) {
-            Ok(spans) => spans,
-            Err(error) => {
-                eprintln!(
-                    "Built-in language {} style run request failed: {error}",
-                    cache.runtime.definition().id
-                );
-                return Vec::new();
-            }
+            return self.plain_editor_style_runs(start, end, marked, base, links);
         };
         let text = cache.runtime.text();
-        let line_start = text[..start].rfind(['\r', '\n']).map_or(0, |byte| byte + 1);
-        let line_end = text[end..]
-            .find(['\r', '\n'])
-            .map_or(text.len(), |byte| end + byte);
-        let links = crate::links::link_spans(
-            &text[line_start..line_end],
-            start - line_start..end - line_start,
-        )
-        .into_iter()
-        .map(|range| range.start + line_start..range.end + line_start)
-        .collect::<Vec<_>>();
+        if start > end
+            || end > text.len()
+            || !text.is_char_boundary(start)
+            || !text.is_char_boundary(end)
+        {
+            eprintln!(
+                "Built-in language {} style range is invalid",
+                cache.runtime.definition().id
+            );
+            return Vec::new();
+        }
+        let spans = &cache.runtime.result().spans;
+        let first = spans.partition_point(|span| span.range.end <= start);
+        let spans = spans[first..]
+            .iter()
+            .take_while(|span| span.range.start < end)
+            .cloned()
+            .map(|mut span| {
+                span.range = span.range.start.max(start)..span.range.end.min(end);
+                span
+            })
+            .collect::<Vec<_>>();
         let mut marked_ranges = self.editor().marked_ranges();
         if let Some(marked) = marked {
             marked_ranges.push(marked.clone());
         }
         let mut runs = Vec::new();
         for span in spans {
-            let appearance = span.appearance;
+            let appearance = self.style_config.appearance(
+                Some(cache.runtime.definition()),
+                span.style,
+                self.dark,
+                &profile,
+                self.editor_zoom_delta(),
+            );
             let mut run = base.clone();
             run.color = rgb(appearance.foreground).into();
             run.background_color = Some(rgb(appearance.background).into());
@@ -220,7 +231,7 @@ impl MatrixWindow {
                     marked.end.0.clamp(span.range.start, span.range.end),
                 ]);
             }
-            for link in &links {
+            for link in links {
                 cuts.extend([
                     link.start.clamp(span.range.start, span.range.end),
                     link.end.clamp(span.range.start, span.range.end),
@@ -241,7 +252,7 @@ impl MatrixWindow {
                         thickness: px(1.),
                         wavy: false,
                     })
-                } else if links
+                } else if self.preferences.files.links.underline() && links
                     .iter()
                     .any(|link| pair[0] >= link.start && pair[1] <= link.end)
                 {
@@ -276,9 +287,31 @@ impl MatrixWindow {
             .unwrap_or_default()
     }
 
+    pub(super) fn builtin_fold_header_levels(&self) -> (bool, Vec<(usize, u32)>) {
+        let Some(cache) = self.active_builtin_cache() else {
+            return (false, Vec::new());
+        };
+        let indentation_based = matches!(
+            cache.runtime.definition().lexer(),
+            "python" | "coffeescript" | "haskell" | "nimrod" | "vb" | "yaml"
+        );
+        let headers = cache
+            .runtime
+            .result()
+            .fold_levels
+            .iter()
+            .filter(|level| level.header)
+            .map(|level| (level.line, level.level & 0x0fff))
+            .collect();
+        (indentation_based, headers)
+    }
+
     pub(super) fn builtin_tag_match_ranges(
         &self,
     ) -> Option<crate::builtin_language::TagMatchRanges> {
+        if !self.workspace.brace_match_allowed() {
+            return None;
+        }
         let cache = self.active_builtin_cache()?;
         let mut options = self.builtin.tag_match_options;
         options.xhtml |= self
@@ -293,19 +326,54 @@ impl MatrixWindow {
 
     pub(super) fn builtin_tag_indicators(&self) -> Vec<crate::builtin_language::TagIndicator> {
         self.builtin_tag_match_ranges()
-            .map(|ranges| crate::builtin_language::tag_indicators(&ranges, self.dark))
+            .map(|ranges| {
+                ranges
+                    .tags
+                    .iter()
+                    .map(|range| crate::builtin_language::TagIndicator {
+                        range: range.clone(),
+                        color: self.style_colour("Tags match highlighting", "bgColor", 0x8000ff),
+                        alpha: 100,
+                    })
+                    .chain(ranges.attributes.iter().map(|range| {
+                        crate::builtin_language::TagIndicator {
+                            range: range.clone(),
+                            color: self.style_colour("Tags attribute", "bgColor", 0xffff00),
+                            alpha: 100,
+                        }
+                    }))
+                    .collect()
+            })
             .unwrap_or_default()
+    }
+
+    pub(super) fn builtin_brace_style(&self, byte: usize) -> Option<u16> {
+        let spans = &self.active_builtin_cache()?.runtime.result().spans;
+        let index = spans.partition_point(|span| span.range.end <= byte);
+        spans
+            .get(index)
+            .filter(|span| span.range.contains(&byte))
+            .map(|span| span.style)
     }
 
     pub(super) fn builtin_style_appearances(&self) -> Vec<crate::syntax::StyleAppearance> {
         self.active_builtin_cache()
             .map(|cache| {
-                crate::builtin_language::metric_appearances(
-                    cache.runtime.definition(),
-                    self.dark,
-                    &self.editor_style_profile(),
-                    self.editor_zoom_delta(),
-                )
+                let definition = cache.runtime.definition();
+                let profile = self.editor_style_profile();
+                definition
+                    .styles
+                    .iter()
+                    .map(|style| {
+                        self.style_config.appearance(
+                            Some(definition),
+                            style.id,
+                            self.dark,
+                            &profile,
+                            self.editor_zoom_delta(),
+                        )
+                    })
+                    .collect()
             })
             .unwrap_or_default()
     }

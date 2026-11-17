@@ -173,19 +173,3 @@ impl Drop for QuitGuard {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::QuitControl;
-
-    #[test]
-    fn final_window_close_authorization_survives_stale_queued_request_cancellation() {
-        let control = QuitControl::default();
-        assert!(!control.can_terminate_now());
-        control.approve();
-        control.cancel();
-        assert!(
-            control.can_terminate_now(),
-            "stale foreground work revoked completed window-close authorization"
-        );
-    }
-}

@@ -75,6 +75,11 @@ pub struct LargeFileRestriction {
     pub enabled: bool,
     pub threshold_bytes: u64,
     pub allow_auto_completion: bool,
+    pub allow_brace_match: bool,
+    pub allow_smart_highlight: bool,
+    pub allow_clickable_link: bool,
+    pub deactivate_word_wrap: bool,
+    pub suppress_2gb_warning: bool,
 }
 
 impl Default for LargeFileRestriction {
@@ -83,13 +88,18 @@ impl Default for LargeFileRestriction {
             enabled: true,
             threshold_bytes: 200 * 1024 * 1024,
             allow_auto_completion: false,
+            allow_brace_match: false,
+            allow_smart_highlight: false,
+            allow_clickable_link: false,
+            deactivate_word_wrap: true,
+            suppress_2gb_warning: false,
         }
     }
 }
 
 impl LargeFileRestriction {
     pub fn from_settings(settings: &serde_json::Value) -> std::io::Result<Self> {
-        let Some(value) = settings.get("large_file_restriction") else {
+        let Some(value) = settings.get("largeFileRestriction").or_else(|| settings.get("large_file_restriction")) else {
             return Ok(Self::default());
         };
         if !value.is_object() {
@@ -98,7 +108,14 @@ impl LargeFileRestriction {
                 "large_file_restriction must be an object",
             ));
         }
-        let enabled = match value.get("enabled") {
+        let mut merged = value.clone();
+        if let Some(old) = settings.get("large_file_restriction") {
+            for (new,old_key) in [("isEnabled","enabled"),("fileSizeMB","file_size_mb"),("allowAutoCompletion","allow_auto_completion")] {
+                if merged[new].is_null() && !old[old_key].is_null() { merged[new] = old[old_key].clone(); }
+            }
+        }
+        let value = &merged;
+        let enabled = match value.get("isEnabled").or_else(|| value.get("enabled")) {
             None => true,
             Some(value) => value.as_bool().ok_or_else(|| {
                 std::io::Error::new(
@@ -107,7 +124,7 @@ impl LargeFileRestriction {
                 )
             })?,
         };
-        let size_mb = match value.get("file_size_mb") {
+        let size_mb = match value.get("fileSizeMB").or_else(|| value.get("file_size_mb")) {
             None => 200,
             Some(value) => {
                 let number = value.as_u64().ok_or_else(|| {
@@ -116,7 +133,7 @@ impl LargeFileRestriction {
                         "large_file_restriction.file_size_mb must be an unsigned integer",
                     )
                 })?;
-                if (1..=4096).contains(&number) {
+                if number <= 4096 {
                     number
                 } else {
                     200
@@ -126,7 +143,7 @@ impl LargeFileRestriction {
         Ok(Self {
             enabled,
             threshold_bytes: size_mb * 1024 * 1024,
-            allow_auto_completion: match value.get("allow_auto_completion") {
+            allow_auto_completion: match value.get("allowAutoCompletion").or_else(|| value.get("allow_auto_completion")) {
                 None => false,
                 Some(value) => value.as_bool().ok_or_else(|| {
                     std::io::Error::new(
@@ -135,6 +152,11 @@ impl LargeFileRestriction {
                     )
                 })?,
             },
+            allow_brace_match: value["allowBraceMatch"].as_bool().unwrap_or(false),
+            allow_smart_highlight: value["allowSmartHilite"].as_bool().unwrap_or(false),
+            allow_clickable_link: value["allowClickableLink"].as_bool().unwrap_or(false),
+            deactivate_word_wrap: value["deactivateWordWrap"].as_bool().unwrap_or(true),
+            suppress_2gb_warning: value["suppress2GBWarning"].as_bool().unwrap_or(false),
         })
     }
 
@@ -188,6 +210,10 @@ pub struct Buffer {
     pub disk_file: Option<DiskFile>,
     name: String,
     format: UnicodeFormat,
+    byte_code_page: Option<crate::files::ByteFormatCodePage>,
+    udl_name: Option<String>,
+    untitled_tab_renamed: bool,
+    initial_placeholder: bool,
     format_identity: Arc<()>,
     language: crate::syntax::Language,
     language_explicit: bool,
@@ -201,6 +227,60 @@ pub struct Buffer {
 }
 
 impl Buffer {
+    pub(crate) fn window_modified_time(&self) -> Option<std::time::SystemTime> {
+        self.backup_modified.get().or_else(|| self.disk_file.as_ref().and_then(DiskFile::original_modified))
+    }
+
+    pub fn udl_name(&self) -> Option<&str> { self.udl_name.as_deref() }
+    pub fn byte_code_page(&self) -> Option<crate::files::ByteFormatCodePage> { self.byte_code_page }
+
+    pub fn set_byte_code_page(&mut self,codepage: Option<crate::files::ByteFormatCodePage>) {
+        if self.byte_code_page != codepage {
+            self.byte_code_page = codepage;
+            self.format_identity = Arc::new(());
+            self.editor.document().set_buffer_dirty(true);
+        }
+    }
+
+    pub(crate) fn restore_byte_code_page(&mut self,codepage: Option<crate::files::ByteFormatCodePage>) { self.byte_code_page = codepage; }
+
+    pub fn select_source_byte_format(&mut self, format: UnicodeFormat, codepage: Option<crate::files::ByteFormatCodePage>) {
+        self.format = format;
+        self.byte_code_page = codepage;
+        self.format_identity = Arc::new(());
+    }
+
+    pub fn reload_selected_encoding(&mut self, file: DiskFile, bytes: crate::byte_buffer::ByteBuffer) -> Result<(), WorkspaceError> {
+        if !self.disk_file.as_ref().is_some_and(|original| original.path() == file.path()) {
+            return Err(WorkspaceError::ReloadTargetMismatch(self.id));
+        }
+        if self.is_modified() {
+            return Err(WorkspaceError::UnsavedBuffer(self.id));
+        }
+        let clamp = |position: crate::editor::ByteOffset| crate::editor::ByteOffset(position.0.min(bytes.len()));
+        let selection = self.editor.document().selection();
+        let mut editor = EditorSession::from_file_bytes(bytes.clone());
+        editor.select(crate::editor::Selection { anchor: clamp(selection.anchor), head: clamp(selection.head) }).map_err(WorkspaceError::Edit)?;
+        editor.set_read_only(file.is_read_only() || self.user_read_only || self.monitoring);
+        editor.set_overwrite(self.editor.overwrite());
+        let other_editor = if let Some(other) = &self.other_editor {
+            let selection = other.document().selection();
+            let mut replacement = editor.clone_view();
+            replacement.select(crate::editor::Selection { anchor: clamp(selection.anchor), head: clamp(selection.head) }).map_err(WorkspaceError::Edit)?;
+            replacement.set_overwrite(other.overwrite());
+            Some(replacement)
+        } else {
+            None
+        };
+        self.editor = editor;
+        self.other_editor = other_editor;
+        self.initial_placeholder = false;
+        self.select_source_byte_format(file.format(), file.byte_code_page());
+        self.set_backup_modified(None);
+        self.disk_file = Some(file);
+        Ok(())
+    }
+
     pub fn is_large_file(&self) -> bool {
         self.large_file
     }
@@ -236,6 +316,7 @@ impl Buffer {
         self.language
     }
     pub fn set_language(&mut self, language: crate::syntax::Language) {
+        self.udl_name = None;
         self.language = language;
         self.language_explicit = true;
     }
@@ -255,10 +336,11 @@ impl Buffer {
     }
 
     pub fn select_format(&mut self, format: UnicodeFormat) -> bool {
-        if self.format == format {
+        if self.format == format && self.byte_code_page.is_none() {
             return false;
         }
         self.format = format;
+        self.byte_code_page = None;
         self.editor.document().set_buffer_dirty(true);
         self.format_identity = Arc::new(());
         true
@@ -269,15 +351,19 @@ impl Buffer {
             id: self.id,
             snapshot: self.editor.save_snapshot(),
             format: self.format,
+            byte_code_page: self.byte_code_page,
             format_identity: self.format_identity.clone(),
         }
     }
 
     pub fn convert_format(&mut self, format: UnicodeFormat) -> bool {
+        let had_codepage = self.byte_code_page.is_some();
         if !self.select_format(format) {
             return false;
         }
-        self.editor.clear_history();
+        if !had_codepage {
+            self.editor.clear_history();
+        }
         true
     }
     pub fn id(&self) -> BufferId {
@@ -298,10 +384,12 @@ pub struct BufferSaveIntent {
     id: BufferId,
     snapshot: crate::editor::SaveSnapshot,
     format: UnicodeFormat,
+    byte_code_page: Option<crate::files::ByteFormatCodePage>,
     format_identity: Arc<()>,
 }
 
 impl BufferSaveIntent {
+    pub fn byte_code_page(&self) -> Option<crate::files::ByteFormatCodePage> { self.byte_code_page }
     pub fn buffer_id(&self) -> BufferId {
         self.id
     }
@@ -330,6 +418,8 @@ pub enum WorkspaceError {
     NotInView(ViewId, BufferId),
     InvalidTabColor,
     InvalidSessionState,
+    Encoding(std::io::Error),
+    UnknownUserLanguage(String),
     Edit(crate::editor::EditError),
 }
 
@@ -338,6 +428,8 @@ impl fmt::Display for WorkspaceError {
         match self {
             Self::InvalidTabColor => formatter.write_str("tab color must be between 0 and 4"),
             Self::InvalidSessionState => formatter.write_str("invalid session view state"),
+            Self::Encoding(error) => write!(formatter,"{error}"),
+            Self::UnknownUserLanguage(name) => write!(formatter,"用户语言“{name}”不可用，请在新文档首选项中重新选择语言"),
             Self::UnknownBuffer(id) => write!(formatter, "buffer {} is no longer open", id.0),
             Self::EmptyView(view) => write!(formatter, "view {view:?} has no open buffers"),
             Self::NotInView(view, id) => {
@@ -375,6 +467,13 @@ pub struct Workspace {
     view_states: [BTreeMap<BufferId, DocumentViewState>; 2],
     session_ui: serde_json::Value,
     large_file_restriction: LargeFileRestriction,
+    new_document_settings: serde_json::Value,
+    keep_absent_session_files: bool,
+    opened_large_file: bool,
+    new_document_language: crate::syntax::Language,
+    udl_names: BTreeMap<u64,String>,
+    file_settings: serde_json::Value,
+    initial_document_configured: bool,
 }
 
 impl Default for Workspace {
@@ -389,6 +488,8 @@ impl Workspace {
     }
 
     pub fn with_large_file_restriction(large_file_restriction: LargeFileRestriction) -> Self {
+        let mut initial_editor = EditorSession::new("");
+        if let Err(error) = initial_editor.convert_line_endings(crate::input::LineEnding::Lf) { eprintln!("new document line ending could not be set: {error}"); }
         Self {
             buffers: vec![Buffer {
                 editor_view: ViewId::Primary,
@@ -399,10 +500,14 @@ impl Workspace {
                 backup_modified: std::cell::Cell::new(None),
                 large_file: false,
                 id: BufferId(1),
-                editor: EditorSession::new(""),
+                editor: initial_editor,
                 disk_file: None,
                 name: "new 1".into(),
                 format: UnicodeFormat::Utf8(Utf8Format::Plain),
+                byte_code_page: None,
+                udl_name: None,
+                untitled_tab_renamed: false,
+                initial_placeholder: true,
                 format_identity: Arc::new(()),
                 language: crate::syntax::Language::NormalText,
                 language_explicit: false,
@@ -416,10 +521,17 @@ impl Workspace {
             mru: vec![(ViewId::Primary, BufferId(1))],
             mru_cycle: None,
             recently_closed: Vec::new(),
-            recent_files_limit: 5,
+            recent_files_limit: 10,
             view_states: Default::default(),
             session_ui: serde_json::json!({}),
             large_file_restriction,
+            new_document_settings: serde_json::json!({}),
+            keep_absent_session_files: false,
+            opened_large_file: false,
+            new_document_language: crate::syntax::Language::NormalText,
+            udl_names: BTreeMap::new(),
+            file_settings: serde_json::json!({}),
+            initial_document_configured: false,
         }
     }
 
@@ -435,6 +547,162 @@ impl Workspace {
         !self.active().is_large_file()
             || self.large_file_restriction.allow_auto_completion
             || !self.large_file_restriction.enabled
+    }
+
+    pub fn large_file_restriction(&self) -> LargeFileRestriction {
+        self.large_file_restriction
+    }
+
+    pub fn brace_match_allowed(&self) -> bool {
+        !self.large_file_restriction.enabled || !self.active().is_large_file() || self.large_file_restriction.allow_brace_match
+    }
+
+    pub fn smart_highlight_allowed(&self) -> bool {
+        !self.large_file_restriction.enabled || !self.active().is_large_file() || self.large_file_restriction.allow_smart_highlight
+    }
+
+    pub fn clickable_links_allowed(&self) -> bool {
+        !self.large_file_restriction.enabled || !self.active().is_large_file() || self.large_file_restriction.allow_clickable_link
+    }
+
+    pub fn syntax_highlighting_allowed(&self) -> bool {
+        !self.active().is_large_file()
+    }
+
+    pub fn take_large_file_word_wrap_disable(&mut self) -> bool {
+        std::mem::take(&mut self.opened_large_file)
+            && self.large_file_restriction.enabled && self.large_file_restriction.deactivate_word_wrap
+    }
+
+    pub fn configure_new_document(&mut self, settings: &serde_json::Value) -> std::io::Result<()> {
+        let value = settings.get("NewDocDefaultSettings").cloned().unwrap_or_else(|| serde_json::json!({}));
+        if !value.is_object() { return Err(std::io::Error::other("NewDocDefaultSettings must be an object")); }
+        self.new_document_settings = value;
+        self.file_settings = settings.clone();
+        self.new_document_language = match self.new_document_settings["lang"].as_u64().unwrap_or(0) {
+            0 | 15 => crate::syntax::Language::NormalText,
+            57 => crate::syntax::Language::Json,
+            id => crate::syntax::Language::Builtin(u16::try_from(id).map_err(|_| std::io::Error::other("new document language is out of range"))?),
+        };
+        self.keep_absent_session_files = settings["KeepSessionAbsentFileEntries"].as_bool().or_else(|| settings["keepSessionAbsentFileEntries"].as_bool()).unwrap_or(false);
+        Ok(())
+    }
+
+    pub fn set_new_document_language(&mut self,language: crate::syntax::Language) {
+        self.new_document_language = language;
+    }
+
+    pub fn file_settings(&self) -> &serde_json::Value { &self.file_settings }
+
+    pub fn active_tab_width(&self) -> usize {
+        let name = match self.active().language() {
+            crate::syntax::Language::NormalText => Some("normal"),
+            crate::syntax::Language::Json => Some("json"),
+            crate::syntax::Language::Builtin(id) => crate::languages::catalog().ok().and_then(|catalog| catalog.by_id(id)).map(|language| language.name.as_str()),
+            crate::syntax::Language::UserDefined(_) => None,
+        };
+        let default = self.file_settings["TabSettings"]["size"].as_i64().filter(|size| *size > 0).unwrap_or(4);
+        let value = name.and_then(|name| self.file_settings["TabSettings"]["languages"][name]["size"].as_i64()).filter(|size| *size > 0).unwrap_or(default);
+        usize::try_from(value).unwrap_or(4)
+    }
+
+    pub fn synchronize_udl_names(&mut self,names: impl IntoIterator<Item = (u64,String)>) {
+        self.udl_names = names.into_iter().collect();
+        self.normalize_new_document_language();
+        self.refresh_udl_metadata();
+    }
+
+    pub fn refresh_udl_metadata(&mut self) {
+        for buffer in &mut self.buffers {
+            buffer.udl_name = match buffer.language { crate::syntax::Language::UserDefined(id) => self.udl_names.get(&id).cloned(),_ => None };
+        }
+    }
+
+    pub fn udl_language_named(&self,name: &str) -> Option<crate::syntax::Language> {
+        self.udl_names.iter().find(|(_,stored)| stored.as_str() == name).map(|(id,_)| crate::syntax::Language::UserDefined(*id))
+    }
+
+    pub fn udl_language_name(&self,language: crate::syntax::Language) -> Option<&str> {
+        match language { crate::syntax::Language::UserDefined(id) => self.udl_names.get(&id).map(String::as_str),_ => None }
+    }
+
+    pub fn use_first_line_as_tab_name(&mut self,id: BufferId,modified_line: usize) -> bool {
+        if modified_line != 0 || !self.new_document_settings["useContentAsTabName"].as_bool().unwrap_or(false) { return false; }
+        let Some(buffer) = self.buffers.iter().find(|buffer| buffer.id() == id) else { return false; };
+        if buffer.disk_file.is_some() || buffer.untitled_tab_renamed { return false; }
+        let text = buffer.editor.committed_text();
+        let line = text.split(['\r','\n']).next().unwrap_or_default().trim();
+        let mut length = 0;
+        let name: String = line.chars().filter(|ch| !matches!(ch,'\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '\t' | '\r' | '\n')).take_while(|ch| { length += ch.len_utf16(); length <= 63 }).collect();
+        if name.is_empty() || self.buffers.iter().any(|buffer| buffer.name() == name) { return false; }
+        let Some(buffer) = self.buffers.iter_mut().find(|buffer| buffer.id() == id) else { return false; };
+        buffer.name = name;
+        true
+    }
+
+    fn new_document_format(&self) -> Result<(UnicodeFormat,Option<crate::files::ByteFormatCodePage>),WorkspaceError> {
+        let requested = self.new_document_settings["encoding"].as_i64().unwrap_or(4);
+        let codepage = self.new_document_settings["codepage"].as_i64().unwrap_or(-1);
+        let bytes = if codepage >= 0 {
+            let format = crate::files::ByteFormatCodePage::from_value(&codepage.into()).map_err(WorkspaceError::Encoding)?;
+            if let Some(format) = format { format.encode("").map_err(WorkspaceError::Encoding)?; }
+            format
+        } else if requested == 0 {
+            return Err(WorkspaceError::Encoding(std::io::Error::other("Windows 默认 ACP 已排除，请在新文档首选项选择 UTF-8、UTF-16 或显式 Windows/OEM 字符集")));
+        } else { None };
+        let format = if bytes.is_some() { UnicodeFormat::Utf8(Utf8Format::Plain) } else { match requested {
+            1 => UnicodeFormat::Utf8(Utf8Format::Bom),2 => UnicodeFormat::Utf16BeBom,3 => UnicodeFormat::Utf16LeBom,_ => UnicodeFormat::Utf8(Utf8Format::Plain),
+        } };
+        Ok((format,bytes))
+    }
+
+    fn normalize_new_document_language(&mut self) {
+        if self.new_document_settings["lang"].as_i64() != Some(15) { return; }
+        let name = self.new_document_settings["udl"].as_str().unwrap_or_default();
+        if !name.is_empty() && self.udl_language_named(name).is_some() { return; }
+        self.new_document_settings["lang"] = 0.into();
+        self.new_document_settings["udl"] = "".into();
+        self.file_settings["NewDocDefaultSettings"] = self.new_document_settings.clone();
+        self.new_document_language = crate::syntax::Language::NormalText;
+    }
+
+    fn resolved_new_document_language(&mut self) -> Result<crate::syntax::Language,WorkspaceError> {
+        self.normalize_new_document_language();
+        if self.new_document_settings["lang"].as_i64() == Some(15) {
+            let name = self.new_document_settings["udl"].as_str().unwrap_or_default();
+            Ok(self.udl_language_named(name).unwrap_or(crate::syntax::Language::NormalText))
+        } else { Ok(self.new_document_language) }
+    }
+
+    pub fn apply_initial_new_document_defaults(&mut self) -> Result<(),WorkspaceError> {
+        if self.initial_document_configured || !self.active().initial_placeholder { return Ok(()); }
+        if self.buffers.len() != 1 || self.active().disk_file.is_some() || self.active().is_modified()
+            || self.active().editor.document().len_bytes() != 0 || self.active().language_is_explicit() { return Ok(()); }
+        let (format,codepage) = self.new_document_format()?;
+        let ending = match self.new_document_settings["format"].as_i64().unwrap_or(2) { 0 => crate::input::LineEnding::CrLf,1 => crate::input::LineEnding::Cr,_ => crate::input::LineEnding::Lf };
+        let language = self.resolved_new_document_language()?;
+        let name = self.udl_language_name(language).map(str::to_owned);
+        let buffer = self.active_mut();
+        buffer.editor.convert_line_endings(ending).map_err(WorkspaceError::Edit)?;
+        buffer.format = format;
+        buffer.byte_code_page = codepage;
+        if language == crate::syntax::Language::NormalText { buffer.set_detected_language(language); } else { buffer.set_language(language); }
+        buffer.udl_name = name;
+        buffer.initial_placeholder = false;
+        self.initial_document_configured = true;
+        Ok(())
+    }
+
+    pub fn validate_recent_files_at_startup(&mut self,settings: &serde_json::Value) {
+        if settings["validate_recent_files_at_startup"].as_bool().unwrap_or(false) { self.recently_closed.retain(|path| path.is_file()); }
+    }
+
+    pub fn disable_word_wrap_in_views(&mut self) {
+        for view in &mut self.view_states { for state in view.values_mut() { state.word_wrap = false; } }
+    }
+
+    pub(crate) fn keep_absent_session_files(&self) -> bool {
+        self.keep_absent_session_files
     }
 
     pub fn session_ui(&self) -> &serde_json::Value {
@@ -655,6 +923,7 @@ impl Workspace {
             buffer.set_user_read_only(buffer.user_read_only);
         }
         buffer.name = name.to_string();
+        buffer.untitled_tab_renamed = true;
         if !buffer.language_is_explicit() {
             buffer.set_detected_language(crate::syntax::Language::from_path(std::path::Path::new(
                 name,
@@ -675,7 +944,7 @@ impl Workspace {
             None => self.recent_files_limit,
             Some(value) => value
                 .as_u64()
-                .map(|limit| limit.min(5) as usize)
+                .map(|limit| limit.min(30) as usize)
                 .ok_or(WorkspaceError::InvalidSessionState)?,
         };
         let paths = match settings.get("recent_files") {
@@ -708,9 +977,9 @@ impl Workspace {
         let Some(path) = self.recently_closed.first().cloned() else {
             return Ok(None);
         };
-        let (file, text) = DiskFile::load_unicode(&path)?;
+        let (file, bytes) = DiskFile::load_buffer_with_preferences(&path,&self.file_settings)?;
         let id = self
-            .open_buffer(file, &text)
+            .open_buffer_bytes(file, bytes)
             .map_err(|error| std::io::Error::other(error.to_string()))?;
         Ok(Some(id))
     }
@@ -910,6 +1179,15 @@ impl Workspace {
         &mut self.buffers[self.active]
     }
 
+    pub fn mark_deleted_file(&mut self,id: BufferId) {
+        if let Some(buffer) = self.buffers.iter_mut().find(|buffer| buffer.id() == id) {
+            if let Some(file) = &mut buffer.disk_file { file.mark_deleted(); }
+            buffer.editor.document().set_buffer_dirty(true);
+            let user_read_only = buffer.user_read_only;
+            buffer.set_user_read_only(user_read_only);
+        }
+    }
+
     pub fn complete_save(
         &mut self,
         intent: &BufferSaveIntent,
@@ -926,7 +1204,7 @@ impl Workspace {
             .document()
             .validate_save_snapshot(&intent.snapshot)
             .map_err(WorkspaceError::Edit)?;
-        if file.format() != intent.format {
+        if file.format() != intent.format || file.byte_code_page() != intent.byte_code_page {
             return Err(WorkspaceError::SavedFormatMismatch(intent.id));
         }
         if completion == SaveCompletion::Copy {
@@ -959,6 +1237,11 @@ impl Workspace {
 
     pub fn buffers(&self) -> &[Buffer] {
         &self.buffers
+    }
+    pub fn set_all_user_read_only(&mut self, read_only: bool) {
+        for buffer in &mut self.buffers {
+            buffer.set_user_read_only(read_only);
+        }
     }
 
     pub(crate) fn buffers_mut(&mut self) -> impl Iterator<Item = &mut Buffer> {
@@ -1219,7 +1502,22 @@ impl Workspace {
             .map(|number| format!("new {number}"))
             .find(|name| !used.contains(name.as_str()))
             .ok_or(WorkspaceError::IdExhausted)?;
-        self.append_buffer(EditorSession::new(""), None, name)
+        let mut editor = EditorSession::new("");
+        let ending = match self.new_document_settings["format"].as_i64().unwrap_or(2) {
+            0 => crate::input::LineEnding::CrLf,
+            1 => crate::input::LineEnding::Cr,
+            _ => crate::input::LineEnding::Lf,
+        };
+        editor.convert_line_endings(ending).map_err(WorkspaceError::Edit)?;
+        let (encoding,byte_code_page) = self.new_document_format()?;
+        let language = self.resolved_new_document_language()?;
+        let udl_name = self.udl_language_name(language).map(str::to_owned);
+        let id = self.append_buffer(editor, None, name)?;
+        self.active_mut().format = encoding;
+        self.active_mut().byte_code_page = byte_code_page;
+        if language == crate::syntax::Language::NormalText { self.active_mut().set_detected_language(language); } else { self.active_mut().set_language(language); }
+        self.active_mut().udl_name = udl_name;
+        Ok(id)
     }
 
     pub fn reload_buffer(
@@ -1274,7 +1572,9 @@ impl Workspace {
             buffer.other_editor = Some(replacement);
         }
         buffer.editor = editor;
+        buffer.initial_placeholder = false;
         buffer.format = file.format();
+        buffer.byte_code_page = file.byte_code_page();
         buffer.format_identity = Arc::new(());
         buffer.set_backup_modified(None);
         buffer.disk_file = Some(file);
@@ -1282,6 +1582,10 @@ impl Workspace {
     }
 
     pub fn open_buffer(&mut self, file: DiskFile, text: &str) -> Result<BufferId, WorkspaceError> {
+        self.open_buffer_bytes(file, crate::byte_buffer::ByteBuffer::from_bytes(text.as_bytes()))
+    }
+
+    pub(crate) fn open_buffer_bytes(&mut self, file: DiskFile, bytes: crate::byte_buffer::ByteBuffer) -> Result<BufferId, WorkspaceError> {
         self.recently_closed.retain(|path| path != file.path());
         if let Some(index) = self.buffers.iter().position(|buffer| {
             buffer
@@ -1293,7 +1597,7 @@ impl Workspace {
             self.activate(id)?;
             return Ok(id);
         }
-        let mut editor = EditorSession::from_file_text(text);
+        let mut editor = EditorSession::from_file_bytes(bytes);
         editor.set_read_only(file.is_read_only());
         self.append_buffer(editor, Some(file), String::new())
     }
@@ -1307,8 +1611,10 @@ impl Workspace {
         loaded_bytes: u64,
     ) -> Result<BufferId, WorkspaceError> {
         let id = self.append_buffer(editor, disk_file, name)?;
+        self.initial_document_configured = true;
         self.active_mut().format = format;
         self.active_mut().large_file = self.large_file_restriction.classifies(loaded_bytes);
+        self.opened_large_file |= self.active().is_large_file();
         Ok(id)
     }
 
@@ -1332,6 +1638,9 @@ impl Workspace {
             .checked_add(1)
             .ok_or(WorkspaceError::IdExhausted)?;
         self.buffers.push(Buffer {
+            udl_name: None,
+            untitled_tab_renamed: false,
+            initial_placeholder: false,
             large_file: disk_file.as_ref().is_some_and(|file| {
                 self.large_file_restriction
                     .classifies(file.loaded_len() as u64)
@@ -1353,12 +1662,14 @@ impl Workspace {
                 .as_ref()
                 .map(DiskFile::format)
                 .unwrap_or(UnicodeFormat::Utf8(Utf8Format::Plain)),
+            byte_code_page: disk_file.as_ref().and_then(DiskFile::byte_code_page),
             format_identity: Arc::new(()),
             disk_file,
             name,
         });
         self.next_id = next;
         self.active = self.buffers.len() - 1;
+        self.opened_large_file |= self.active().is_large_file();
         self.memberships[self.active_view.index()].push(id);
         self.view_active[self.active_view.index()] = Some(id);
         self.record_activation(self.active_view, id);

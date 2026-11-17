@@ -184,6 +184,11 @@ pub enum MacroStep {
     Paste,
     Bookmark(crate::menu::BookmarkCommand),
     GoToLine(usize),
+    Scintilla {
+        message: u32,
+        wparam: u64,
+        lparam: i64,
+    },
     Unsupported(&'static str),
 }
 
@@ -337,6 +342,11 @@ impl MacroLibrary {
             return Err(invalid("There is no recorded macro"));
         }
         for step in steps {
+            if let MacroStep::Scintilla { message, .. } = step
+                && !MacroStep::scintilla_recordable(*message)
+            {
+                return Err(invalid("Unknown or unrecordable Scintilla macro message"));
+            }
             if let MacroStep::MultiSelection(command) = step
                 && MacroStep::multi_selection(command.source_id()).is_none()
             {
@@ -416,6 +426,13 @@ impl MacroLibrary {
 }
 
 impl MacroStep {
+    pub fn scintilla_recordable(message: u32) -> bool {
+        matches!(message, 2004 | 2330 | 2342 | 2343 | 2413..=2416 | 2311
+            | 2439..=2441 | 2312..=2315 | 2331 | 2332 | 2346 | 2348 | 2349
+            | 2450 | 2430 | 2652 | 2653 | 2435..=2438 | 2344 | 2337 | 2455
+            | 2339 | 2404)
+    }
+
     pub fn multi_selection(id: u32) -> Option<Self> {
         (42092..=42099)
             .contains(&id)
@@ -483,6 +500,9 @@ impl MacroStep {
                 BookmarkCommand::Previous => "previous", BookmarkCommand::ClearAll => "clear_all",
             }}),
             Self::GoToLine(line) => json!({"type":"goto_line", "line":line}),
+            Self::Scintilla { message, wparam, lparam } => {
+                json!({"type":"scintilla", "message":message, "wparam":wparam, "lparam":lparam})
+            }
             Self::Unsupported(name) => {
                 return Err(invalid(format!("Unsupported macro operation: {name}")));
             }
@@ -497,6 +517,17 @@ impl MacroStep {
                 .ok_or_else(|| invalid(format!("Macro step {name} must be a boolean")))
         };
         Ok(match value.get("type").and_then(Value::as_str) {
+            Some("scintilla") => {
+                let message = value.get("message").and_then(Value::as_u64)
+                    .and_then(|message| u32::try_from(message).ok())
+                    .filter(|message| Self::scintilla_recordable(*message))
+                    .ok_or_else(|| invalid("Unknown or unrecordable Scintilla macro message"))?;
+                let wparam = value.get("wparam").and_then(Value::as_u64)
+                    .ok_or_else(|| invalid("Scintilla macro wparam must be an unsigned integer"))?;
+                let lparam = value.get("lparam").and_then(Value::as_i64)
+                    .ok_or_else(|| invalid("Scintilla macro lparam must be an integer"))?;
+                Self::Scintilla { message, wparam, lparam }
+            }
             Some("character_text") => Self::CharacterText(
                 value
                     .get("text")

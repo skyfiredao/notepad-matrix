@@ -161,6 +161,7 @@ impl MatrixWindow {
             }
             self.editor_dragging = false;
             self.editor_chrome.clear_drag();
+            self.invalidate_incremental_count();
             self.refresh_function_list(window, cx);
         }
         self.editor_focus.focus(window, cx);
@@ -300,6 +301,7 @@ impl MatrixWindow {
         let panes: Vec<_> = [ViewId::Primary, ViewId::Secondary]
             .into_iter()
             .filter(|pane| self.workspace.active_id_in_view(*pane).is_some())
+            .filter(|pane| self.view_panels_other_pane_visible() || *pane == focused)
             .collect();
         let split = panes.len() == 2;
         let mut elements = Vec::new();
@@ -362,7 +364,7 @@ impl MatrixWindow {
                         }))
                     })
                     .when(!split, |el| el.flex_1())
-                    .child(tabs)
+                    .children(self.view_tabs_status_visible().then_some(tabs))
                     .child(editor)
                     .into_any_element(),
             );

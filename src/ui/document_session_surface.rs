@@ -51,6 +51,17 @@ pub(super) fn bindings() -> Vec<KeyBinding> {
 }
 
 impl MatrixWindow {
+    pub(super) fn synchronize_renamed_tab_backup(&mut self, id: crate::workspace::BufferId, old_name: &str, cx: &mut Context<Self>) {
+        let Some(buffer) = self.workspace.buffers().iter().find(|buffer| buffer.id() == id) else { return; };
+        let name = buffer.name();
+        if let Some(recovery) = &mut self.recovery
+            && let Err(error) = recovery.rename_buffer_backup(id, old_name, &name) {
+            self.notify_editor_error(format!("标签备份无法重命名: {error}"), cx);
+            return;
+        }
+        self.synchronize_recovery(cx);
+    }
+
     pub(super) fn backup_failure_visible(&self) -> bool {
         self.backup_failure.sender.is_some()
     }
@@ -93,6 +104,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_backup_failure(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        use super::dialog_font::px;
         if !self.backup_failure_visible() {
             return None;
         }
@@ -158,11 +170,13 @@ impl MatrixWindow {
         )
     }
 
-    pub(super) fn persist_recent_files(&self) -> io::Result<()> {
+    pub(super) fn persist_recent_files(&mut self) -> io::Result<()> {
         let Some(store) = &self.settings_store else {
             return Ok(());
         };
         let paths = serde_json::to_value(self.workspace.recently_closed())?;
+        self.preferences.settings["recent_files"] = paths.clone();
+        self.preferences.settings["recent_files_limit"] = self.workspace.recent_files_limit().into();
         let settings = store.load_settings()?;
         if settings.get("recent_files") == Some(&paths)
             && settings
@@ -195,44 +209,35 @@ impl MatrixWindow {
                 return;
             }
         };
-        let directory = match &self.settings_store {
-            Some(store) => match store.document_path(std::path::Path::new("sessions/prepare.json"))
-            {
-                Ok(path) => path
-                    .parent()
-                    .map(std::path::Path::to_owned)
-                    .unwrap_or_else(|| store.root().to_owned()),
-                Err(error) => {
-                    self.notify_editor_error(
-                        format!("Could not prepare session directory: {error}"),
-                        cx,
-                    );
-                    return;
-                }
-            },
-            None => std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from(".")),
+        let directory = match self.file_prompt_directory() {
+            Ok(directory) => directory,
+            Err(error) => { self.notify_editor_error(error.to_string(),cx); return; }
         };
         self.menu_input(MenuEvent::Dismiss, window, cx);
-        let prompt = cx.prompt_for_new_path(&directory, Some("session.json"));
+        let extension = self.pref_string("sessionExt","");
+        let suggested = if extension.is_empty() { "session.json".into() } else { format!("session.{}",extension.trim_start_matches('.')) };
+        let prompt = super::native_path_prompt::prompt_for_new_path_in(&directory,Some(&suggested),window,cx);
         let executor = cx.background_executor().clone();
         self.file_busy = true;
         cx.notify();
         cx.spawn_in(window, async move |view, cx| {
             let result = match prompt.await {
-                Ok(Ok(Some(path))) => {
-                    executor
-                        .spawn(async move {
-                            archive.save(&path, crate::files::OverwritePolicy::Confirmed)
-                        })
-                        .await
+                Ok(result) => {
+                    let remembered = view.update_in(cx,|view,_,_| view.remember_file_prompt_directory(result.directory.as_deref()));
+                    match remembered {
+                        Ok(Ok(())) => match result.selection {
+                            Some(mut path) => {
+                                let append = !extension.is_empty() && path.extension().is_none();
+                                if append { path.set_extension(extension.trim_start_matches('.')); }
+                                executor.spawn(async move { archive.save(&path,if append { crate::files::OverwritePolicy::Refuse } else { crate::files::OverwritePolicy::Confirmed }) }).await
+                            }
+                            None => Ok(()),
+                        },
+                        Ok(Err(error)) => Err(error),
+                        Err(error) => Err(io::Error::other(error.to_string())),
+                    }
                 }
-                Ok(Ok(None)) => Ok(()),
-                Ok(Err(error)) => Err(io::Error::other(error.to_string())),
-                Err(error) => Err(io::Error::other(format!(
-                    "session save chooser disconnected: {error}"
-                ))),
+                Err(error) => Err(error),
             };
             if let Err(error) = view.update_in(cx, |view, _, cx| {
                 view.file_busy = false;
@@ -252,49 +257,38 @@ impl MatrixWindow {
             return;
         }
         self.menu_input(MenuEvent::Dismiss, window, cx);
-        let prompt = cx.prompt_for_paths(gpui::PathPromptOptions {
+        let directory = match self.file_prompt_directory() {
+            Ok(directory) => directory,
+            Err(error) => { self.notify_editor_error(error.to_string(),cx); return; }
+        };
+        let prompt = super::native_path_prompt::prompt_for_paths_in(&directory,gpui::PathPromptOptions {
             files: true,
             directories: false,
             multiple: false,
             prompt: Some("Load Session".into()),
-        });
+        },window,cx);
         let executor = cx.background_executor().clone();
         self.file_busy = true;
         cx.notify();
         cx.spawn_in(window, async move |view, cx| {
             let loaded = match prompt.await {
-                Ok(Ok(Some(paths))) => {
-                    executor
-                        .spawn(async move {
-                            paths
-                                .first()
-                                .map(|path| crate::recovery::SessionFile::load(path))
-                                .transpose()
-                        })
-                        .await
+                Ok(result) => {
+                    let remembered = view.update_in(cx,|view,_,_| view.remember_file_prompt_directory(result.directory.as_deref()));
+                    match remembered {
+                        Ok(Ok(())) => match result.selection {
+                            Some(paths) => executor.spawn(async move { paths.first().map(|path| crate::recovery::SessionFile::load(path).map(|archive| (path.clone(),archive))).transpose() }).await,
+                            None => Ok(None),
+                        },
+                        Ok(Err(error)) => Err(error),
+                        Err(error) => Err(io::Error::other(error.to_string())),
+                    }
                 }
-                Ok(Ok(None)) => Ok(None),
-                Ok(Err(error)) => Err(io::Error::other(error.to_string())),
-                Err(error) => Err(io::Error::other(format!(
-                    "session open chooser disconnected: {error}"
-                ))),
+                Err(error) => Err(error),
             };
             if let Err(error) = view.update_in(cx, |view, window, cx| {
                 view.file_busy = false;
                 match loaded {
-                    Ok(Some(archive)) => match archive.restore_into(&mut view.workspace) {
-                        Ok(warnings) => {
-                            view.restore_session_ui(window, cx);
-                            view.restore_session_monitoring(window, cx);
-                            view.reset_active_view(window, cx);
-                            if !warnings.is_empty() {
-                                view.notify_editor_error(warnings.join("\n"), cx);
-                            }
-                        }
-                        Err(error) => {
-                            view.notify_editor_error(format!("Could not load session: {error}"), cx)
-                        }
-                    },
+                    Ok(Some((path,archive))) => view.accept_session_archive(path,archive,window,cx),
                     Ok(None) => {}
                     Err(error) => {
                         view.notify_editor_error(format!("Could not load session: {error}"), cx)
@@ -306,6 +300,103 @@ impl MatrixWindow {
             }
         })
         .detach();
+    }
+
+    pub(super) fn accept_session_archive(&mut self,path: PathBuf,archive: crate::recovery::SessionFile,window: &mut Window,cx: &mut Context<Self>) {
+        self.accept_session_archive_pending(path, archive, None, window, cx);
+    }
+
+    pub(super) fn accept_session_archive_with_completion(&mut self, path: PathBuf, archive: crate::recovery::SessionFile, window: &mut Window, cx: &mut Context<Self>) -> std::sync::mpsc::Receiver<()> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        self.accept_session_archive_pending(path, archive, Some(sender), window, cx);
+        receiver
+    }
+
+    fn finish_session_archive_open(completion: Option<std::sync::mpsc::Sender<()>>) {
+        if let Some(sender) = completion && let Err(error) = sender.send(()) { eprintln!("session open completion unavailable: {error}"); }
+    }
+
+    fn accept_session_archive_pending(&mut self, path: PathBuf, mut archive: crate::recovery::SessionFile, completion: Option<std::sync::mpsc::Sender<()>>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.file_busy || self.close_dialog || self.save_all_dialog || self.save_all_restore.is_some() || self.reload_target.is_some() || self.batch_editing_blocked() || !self.cancel_view_composition(window,cx) {
+            Self::finish_session_archive_open(completion);
+            return;
+        }
+        self.workspace.synchronize_udl_names(self.udl.registry.named().map(|(id,definition)| (id,definition.name.clone())));
+        let empty = self.workspace.buffers().len() == 1 && self.workspace.active().disk_file.is_none() && !self.workspace.active().is_modified() && self.workspace.active().editor.document().len_bytes() == 0;
+        if !empty && matches!(self.preferences.files.multi_instance,1 | 2) {
+            let options = crate::launch::LaunchOptions { files:vec![path],multi_instance:true,no_session:true,open_session:true,..Default::default() };
+            match std::env::current_exe().and_then(|executable| options.spawn(&executable)) {
+                Ok(child) => {
+                    let executor = cx.background_executor().clone();
+                    cx.spawn(async move |_,_| {
+                        if let Err(error) = crate::run_commands::reap(child,|| executor.timer(std::time::Duration::from_secs(1))).await { eprintln!("session instance failed: {error}"); }
+                    }).detach();
+                }
+                Err(error) => self.notify_editor_error(format!("会话新实例无法启动: {error}"),cx),
+            }
+            Self::finish_session_archive_open(completion);
+            return;
+        }
+        if !self.pref_bool("largeFileRestriction.suppress2GBWarning", false) {
+            let paths = match archive.paths() {
+                Ok(paths) => paths,
+                Err(error) => { self.notify_editor_error(error.to_string(), cx); Self::finish_session_archive_open(completion); return; }
+            };
+            let paths = paths.into_iter().filter(|path| crate::folder_workspace::existing_buffer(&self.workspace, path).is_none()).collect::<Vec<_>>();
+            self.file_busy = true;
+            let executor = cx.background_executor().clone();
+            cx.spawn_in(window, async move |view, cx| {
+                let huge = executor.spawn(async move { paths.into_iter().filter(|path| std::fs::metadata(path).is_ok_and(|metadata| {
+                    let size = metadata.len();
+                    size.saturating_add((1_u64 << 20).min(size / 6)) > i32::MAX as u64
+                })).collect::<Vec<_>>() }).await;
+                let mut excluded = Vec::new();
+                for file in huge {
+                    let message = format!("{}\n\n打开 2GB 以上的大文件可能需要几分钟。是否打开？", file.display());
+                    let prompt = match view.update_in(cx, |_, window, cx| window.prompt(gpui::PromptLevel::Warning, "打开大文件警告", Some(&message), &[gpui::PromptButton::ok("是"), gpui::PromptButton::cancel("否")], cx)) {
+                        Ok(prompt) => prompt,
+                        Err(error) => { eprintln!("session large file prompt unavailable: {error}"); Self::finish_session_archive_open(completion); return; }
+                    };
+                    match prompt.await {
+                        Ok(0) => {},
+                        Ok(_) => excluded.push(file),
+                        Err(error) => {
+                            excluded.push(file);
+                            if let Err(update_error) = view.update_in(cx, |view, _, cx| view.notify_editor_error(error.to_string(), cx)) { eprintln!("session large file prompt failure unavailable: {update_error}"); }
+                        }
+                    }
+                }
+                if let Err(error) = view.update_in(cx, |view, window, cx| {
+                    view.file_busy = false;
+                    match archive.exclude_paths(&excluded) {
+                        Ok(()) => view.restore_accepted_session_archive(path, archive, window, cx),
+                        Err(error) => view.notify_editor_error(error.to_string(), cx),
+                    }
+                    Self::finish_session_archive_open(completion);
+                }) { eprintln!("session confirmed open unavailable: {error}"); }
+            }).detach();
+            cx.notify();
+            return;
+        }
+        self.restore_accepted_session_archive(path, archive, window, cx);
+        Self::finish_session_archive_open(completion);
+    }
+
+    fn restore_accepted_session_archive(&mut self, path: PathBuf, archive: crate::recovery::SessionFile, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.cancel_view_composition(window, cx) { return; }
+        match archive.restore_into(&mut self.workspace) {
+            Ok(warnings) => {
+                for buffer in self.workspace.buffers() { self.initialize_buffer_change_history(buffer.editor.document()); }
+                if self.preferences.files.multi_instance == 1 { self.preferences.files.loaded_session_path = Some(path); }
+                self.restore_session_ui(window,cx);
+                self.restore_session_monitoring(window,cx);
+                self.confirm_absent_session_files(true,window,cx);
+                self.reset_active_view(window,cx);
+                self.preferences_apply_large_file_open_policy(window,cx);
+                if !warnings.is_empty() { self.notify_editor_error(warnings.join("\n"),cx); }
+            }
+            Err(error) => self.notify_editor_error(format!("会话无法恢复: {error}"),cx),
+        }
     }
 
     pub(super) fn document_switcher_visible(&self) -> bool {
@@ -322,6 +413,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_document_switcher(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let px = |value| gpui::px(value * dialog_font::switcher_scale());
         let entries = self.workspace.mru_cycle_candidates()?;
         let active = self
             .workspace
@@ -335,6 +427,8 @@ impl MatrixWindow {
                 .key_context("MatrixDocumentSwitcher")
                 .role(Role::ListBox)
                 .aria_label("Document switcher")
+                .font_family(dialog_font::system_font_family())
+                .text_size(px(13.))
                 .w_full()
                 .h_full()
                 .overflow_y_scroll()
@@ -380,7 +474,7 @@ impl MatrixWindow {
                             .px(px(6.))
                             .py(px(3.))
                             .when(active == (pane, id), |entry| {
-                                entry.bg(rgb(0x0078d4)).text_color(rgb(0xffffff))
+                                entry.bg(rgb(0x0078d4)).text_color(rgb(0xffffff)).font_weight(gpui::FontWeight::BOLD)
                             })
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 if view.route_to_document(window, cx, move |view, window, cx| {
@@ -410,7 +504,7 @@ impl MatrixWindow {
     }
 
     fn document_navigation_blocked(&self) -> bool {
-        self.file_busy || self.close_dialog || self.save_all_dialog || self.batch_editing_blocked()
+        self.file_busy || self.file_open_sequence_pending() || self.close_dialog || self.save_all_dialog || self.batch_editing_blocked()
     }
 
     pub(super) fn capture_current_document_state(&mut self) {
@@ -467,6 +561,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn capture_session_ui(&mut self) -> io::Result<()> {
+        self.workspace.synchronize_udl_names(self.udl.registry.named().map(|(id,definition)| (id,definition.name.clone())));
         let focused = self.pane;
         for pane in [ViewId::Primary, ViewId::Secondary] {
             if self.workspace.active_id_in_view(pane).is_some() && self.scope_editor_pane(pane) {
@@ -486,6 +581,15 @@ impl MatrixWindow {
         snapshot["document_list_visible"] = serde_json::json!(self.document_list_visible);
         snapshot["document_map_visible"] = serde_json::json!(self.document_map.visible);
         snapshot["panels"] = self.capture_panel_state()?;
+        super::preferences_surface::write_value(&mut self.preferences.settings,"multiInst.panelState",snapshot["panels"].clone())?;
+        if let Some(store) = &self.settings_store {
+            let settings = store.load_settings()?;
+            if settings["multiInst"]["panelState"] != snapshot["panels"] {
+                store.update_settings(|settings| {
+                    super::preferences_surface::write_value(settings,"multiInst.panelState",snapshot["panels"].clone())
+                })?;
+            }
+        }
         self.workspace
             .set_session_ui(snapshot)
             .map_err(|error| io::Error::other(error.to_string()))
@@ -531,6 +635,28 @@ impl MatrixWindow {
             }
         }
         self.scope_editor_pane(focused);
+    }
+
+    pub(super) fn restore_panel_keep_state(&mut self,snapshot: &serde_json::Value,settings: &serde_json::Value,window: &mut Window,cx: &mut Context<Self>) -> io::Result<()> {
+        let mut snapshot = snapshot.clone();
+        let flags = [
+            (crate::panel_layout::PanelId::DocumentList,"documentList"),
+            (crate::panel_layout::PanelId::DocumentMap,"documentMap"),
+            (crate::panel_layout::PanelId::FunctionList,"fuctionList"),
+            (crate::panel_layout::PanelId::Folder,"folderAsWorkspace"),
+            (crate::panel_layout::PanelId::Characters,"characterPanel"),
+            (crate::panel_layout::PanelId::Project1,"projectPanels"),
+            (crate::panel_layout::PanelId::Project2,"projectPanels"),
+            (crate::panel_layout::PanelId::Project3,"projectPanels"),
+            (crate::panel_layout::PanelId::Converter,"pluginPanels"),
+        ];
+        for (id,key) in flags {
+            if !settings["multiInst"][key].as_bool().unwrap_or(false)
+                || (id == crate::panel_layout::PanelId::Converter && !self.converter_enabled)
+            { snapshot["layout"]["panels"][id.key()]["visible"] = false.into(); }
+        }
+        snapshot["folder"]["visible"] = snapshot["layout"]["panels"]["folder"]["visible"].clone();
+        self.restore_panel_state(&snapshot,window,cx)
     }
 
     pub(super) fn cycle_mru_buffer(
@@ -614,8 +740,7 @@ impl MatrixWindow {
         let pinned = !self.workspace.active().is_pinned();
         match self.workspace.set_pinned(id, pinned) {
             Ok(()) => {
-                self.tab_scroll
-                    .scroll_to_item(self.workspace.active_index());
+                self.scroll_active_tab_into_view();
                 self.synchronize_recovery(cx);
                 cx.notify();
             }
@@ -647,8 +772,7 @@ impl MatrixWindow {
             return;
         }
         self.workspace.sort_tabs(sort, descending);
-        self.tab_scroll
-            .scroll_to_item(self.workspace.active_index());
+        self.scroll_active_tab_into_view();
         self.synchronize_recovery(cx);
         cx.notify();
     }

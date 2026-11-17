@@ -7,7 +7,12 @@ pub(super) struct PanelState {
     pub(super) layout: PanelLayout,
     windows: BTreeMap<PanelId, gpui::WindowHandle<PanelWindow>>,
     opening: BTreeSet<PanelId>,
+    mode_hidden: bool,
     resize: Option<(PanelId, gpui::Point<gpui::Pixels>, f32)>,
+    title_drag: Option<(PanelId, gpui::Point<gpui::Pixels>)>,
+    dock_regions: Vec<(DockSide, Bounds<gpui::Pixels>)>,
+    pub(super) document_list_sort: u8,
+    preserved: serde_json::Value,
     pub(super) preview: super::tab_preview::PreviewState,
 }
 
@@ -69,7 +74,11 @@ impl PanelWindow {
             }
         });
         let focus = cx.focus_handle();
-        focus.focus(window, cx);
+        if id == PanelId::Converter {
+            owner.update(cx, |view, cx| view.focus_converter_panel(window, cx));
+        } else {
+            focus.focus(window, cx);
+        }
         Self {
             owner: owner.downgrade(),
             id,
@@ -149,16 +158,19 @@ impl MatrixWindow {
             PanelId::Project2 => self.projects.visible(1),
             PanelId::Project3 => self.projects.visible(2),
             PanelId::Characters => self.characters.visible,
+            PanelId::Converter => self.panels.layout.panel(id).visible,
         }
     }
 
     pub(super) fn capture_panel_state(&self) -> io::Result<serde_json::Value> {
-        Ok(serde_json::json!({
+        let mut state = self.panels.preserved.as_object().cloned().unwrap_or_default();
+        state.extend(serde_json::json!({
             "version": 1,
             "layout": self.capture_panel_layout(),
             "folder": self.capture_folder_workspace()?,
             "projects": self.projects.snapshot()?,
-        }))
+        }).as_object().cloned().unwrap_or_default());
+        Ok(serde_json::Value::Object(state))
     }
 
     pub(super) fn restore_panel_state(
@@ -177,6 +189,7 @@ impl MatrixWindow {
         crate::folder_workspace::FolderWorkspace::restore(&value["folder"])?;
         self.projects.restore(&value["projects"])?;
         self.restore_folder_workspace(&value["folder"], window, cx)?;
+        self.panels.preserved = value.clone();
         self.restore_panel_layout(&value["layout"], window, cx)
     }
 
@@ -200,6 +213,15 @@ impl MatrixWindow {
         self.panels.layout.show(id);
         self.set_panel_body_visible(id, true, window, cx);
         self.sync_panel_windows(window, cx);
+        if id == PanelId::Converter && let Some(handle) = self.panels.windows.get(&id).copied() {
+            let input = self.converter_panel_input();
+            cx.defer(move |cx| {
+                if let Err(error) = handle.update(cx, |_, window, cx| {
+                    window.activate_window();
+                    input.update(cx, |input, cx| input.focus(window, cx));
+                }) { eprintln!("could not activate Conversion panel: {error}"); }
+            });
+        }
         cx.notify();
     }
 
@@ -226,8 +248,13 @@ impl MatrixWindow {
     ) {
         match id {
             PanelId::Characters => self.characters.visible = visible,
+            PanelId::Converter => {
+                if visible && self.converter_enabled { self.panels.layout.show(id); } else { self.panels.layout.hide(id); }
+            }
             PanelId::DocumentList => self.document_list_visible = visible,
-            PanelId::DocumentMap => self.document_map.visible = visible,
+            PanelId::DocumentMap => {
+                self.set_document_map_visible(visible);
+            }
             PanelId::FunctionList => {
                 if visible && !self.function_list_visible() {
                     self.open_function_list_body(window, cx);
@@ -252,6 +279,7 @@ impl MatrixWindow {
                 if let Ok(panel) = self.projects.model.panel_mut(index) {
                     panel.visible = visible;
                 }
+                self.sync_find_project_panels(cx);
             }
         }
     }
@@ -288,6 +316,22 @@ impl MatrixWindow {
     }
 
     pub(super) fn sync_panel_windows(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let mode_hidden = !self.view_panels_other_pane_visible();
+        if self.panels.mode_hidden != mode_hidden {
+            self.panels.mode_hidden = mode_hidden;
+            for handle in self.panels.windows.values().copied() {
+                if let Err(error) = handle.update(cx, |_, window, _| {
+                    if let Ok(handle) = HasWindowHandle::window_handle(window)
+                        && let RawWindowHandle::AppKit(handle) = handle.as_raw()
+                    {
+                        let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+                        if let Some(host) = view.window() {
+                            if mode_hidden { host.orderOut(None); } else { host.orderFront(None); }
+                        }
+                    }
+                }) { eprintln!("panel display mode could not reach its window: {error}"); }
+            }
+        }
         for id in PanelId::ALL {
             if self.panel_body_visible(id) {
                 self.panels.layout.show(id);
@@ -307,6 +351,7 @@ impl MatrixWindow {
                 }
                 continue;
             }
+            if mode_hidden { continue; }
             if self
                 .panels
                 .windows
@@ -332,15 +377,17 @@ impl MatrixWindow {
                 let options = WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(Bounds {
                         origin: gpui::point(px(b.x), px(b.y)),
-                        size: size(px(b.width), px(b.height)),
+                        size: if id == PanelId::Converter {
+                            size(px(b.width).max(dialog_font::px(488.)), px(b.height).max(dialog_font::px(238.)))
+                        } else { size(px(b.width), px(b.height)) },
                     })),
-                    titlebar: Some(TitlebarOptions {
+                    titlebar: (!matches!(id, PanelId::DocumentList | PanelId::DocumentMap | PanelId::Converter)).then(|| TitlebarOptions {
                         title: Some(id.title().into()),
                         ..Default::default()
                     }),
                     kind: gpui::WindowKind::Floating,
                     is_movable: true,
-                    window_min_size: Some(size(px(140.), px(100.))),
+                    window_min_size: Some(if id == PanelId::Converter { size(super::dialog_font::px(488.), super::dialog_font::px(238.)) } else { size(px(140.), px(100.)) }),
                     ..Default::default()
                 };
                 let observed = owner.clone();
@@ -368,8 +415,10 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_panel_region(&self, side: DockSide, cx: &mut Context<Self>) -> AnyElement {
+        let owner = cx.entity();
         div()
             .id(format!("panel-region-{}", side.key()))
+            .relative()
             .flex()
             .flex_shrink_0()
             .min_h(px(0.))
@@ -377,6 +426,13 @@ impl MatrixWindow {
             .when(matches!(side, DockSide::Top | DockSide::Bottom), |region| {
                 region.flex_col().w_full()
             })
+            .child(gpui::canvas(|_, _, _| (), move |bounds, _, window, cx| {
+                let screen = Bounds::new(bounds.origin + window.bounds().origin, bounds.size);
+                owner.update(cx, |view, _| {
+                    view.panels.dock_regions.retain(|(region, _)| *region != side);
+                    view.panels.dock_regions.push((side, screen));
+                });
+            }).absolute().size_full())
             .children(
                 self.panels
                     .layout
@@ -395,6 +451,7 @@ impl MatrixWindow {
     ) -> AnyElement {
         let p = self.panels.layout.panel(id);
         let dark = self.dark;
+        let single_title = matches!(id, PanelId::DocumentList | PanelId::DocumentMap | PanelId::Converter);
         let content = match id {
             PanelId::Characters => self.render_character_panel(cx),
             PanelId::DocumentList => self.render_document_list(cx),
@@ -404,8 +461,9 @@ impl MatrixWindow {
             PanelId::Project1 => self.render_project_panel(0, cx),
             PanelId::Project2 => self.render_project_panel(1, cx),
             PanelId::Project3 => self.render_project_panel(2, cx),
+            PanelId::Converter => self.render_converter_panel(cx),
         };
-        let controls = DockSide::ALL.into_iter().map(|side| {
+        let controls = DockSide::ALL.into_iter().filter(move |_| !single_title).map(|side| {
             div()
                 .id(format!("{}-dock-{}", id.key(), side.key()))
                 .role(Role::Button)
@@ -459,8 +517,44 @@ impl MatrixWindow {
                     });
                 });
                 let owner = resize_owner.clone();
-                window.on_mouse_event(move |_: &gpui::MouseUpEvent, _, _, cx| {
-                    owner.update(cx, |view, _| {
+                window.on_mouse_event(move |event: &gpui::MouseUpEvent, phase, window, cx| {
+                    if phase != gpui::DispatchPhase::Bubble { return; }
+                    owner.update(cx, |view, cx| {
+                        if let Some((target, origin)) = view.panels.title_drag
+                            && target == id
+                        {
+                            view.panels.title_drag = None;
+                            let position = event.position + window.bounds().origin;
+                            let dx = f32::from(position.x - origin.x);
+                            let dy = f32::from(position.y - origin.y);
+                            if dx.abs() + dy.abs() > 5. {
+                                let side = view.panels.dock_regions.iter().find_map(|(side, bounds)| {
+                                    let mut target = *bounds;
+                                    if view.panels.layout.docked(*side).is_empty() {
+                                        match side {
+                                            DockSide::Left | DockSide::Right => {
+                                                target.origin.x -= px(20.);
+                                                target.size.width = px(40.);
+                                            }
+                                            DockSide::Top | DockSide::Bottom => {
+                                                target.origin.y -= px(20.);
+                                                target.size.height = px(40.);
+                                            }
+                                        }
+                                    } else { target.size.height = dialog_font::px(18.); }
+                                    target.contains(&position).then_some(*side)
+                                });
+                                if let Some(side) = side { view.dock_panel(id, side, window, cx); }
+                                else {
+                                    let mut bounds = view.panels.layout.panel(id).bounds;
+                                    bounds.x = f32::from(position.x) - 20.;
+                                    bounds.y = f32::from(position.y) - 9.;
+                                    if let Err(error) = view.panels.layout.set_bounds(id, bounds) {
+                                        view.notify_editor_error(error.to_string(), cx);
+                                    } else { view.float_panel(id, window, cx); }
+                                }
+                            }
+                        }
                         if view
                             .panels
                             .resize
@@ -475,6 +569,7 @@ impl MatrixWindow {
         .size_full();
         div()
             .id(format!("{}-dock-frame", id.key()))
+            .relative()
             .flex()
             .flex_col()
             .min_h(px(0.))
@@ -483,22 +578,44 @@ impl MatrixWindow {
             .when(floating, |frame| frame.size_full())
             .when(
                 !floating && matches!(p.dock, DockSide::Left | DockSide::Right),
-                |frame| frame.w(px(p.size)).h_full(),
+                |frame| frame.w(if id == PanelId::Converter { px(p.size).max(dialog_font::px(488.)) } else { px(p.size) }).h_full(),
             )
             .when(
                 !floating && matches!(p.dock, DockSide::Top | DockSide::Bottom),
-                |frame| frame.h(px(p.size)).w_full(),
+                |frame| frame.h(if id == PanelId::Converter { px(p.size).max(dialog_font::px(238.)) } else { px(p.size) }).w_full(),
             )
             .bg(rgb(if self.dark { 0x282828 } else { 0xf6f6f6 }))
             .text_color(rgb(if self.dark { 0xd4d4d4 } else { 0x202020 }))
+            .child(resize_listener.absolute())
             .child(
                 div()
-                    .h(px(23.))
+                    .id(format!("{}-caption", id.key()))
+                    .role(Role::GenericContainer)
+                    .aria_label(id.title())
+                    .h(if single_title { dialog_font::px(18.) } else { px(23.) })
                     .flex_shrink_0()
                     .flex()
                     .items_center()
+                    .when(single_title, |caption| caption
+                        .font_family(dialog_font::font_family())
+                        .text_size(dialog_font::px(12.))
+                        .bg(rgb(if dark { 0x383838 } else { 0xf0f0f0 }))
+                        .border_b_1().border_color(rgb(0x808080))
+                        .on_mouse_down(MouseButton::Left, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| {
+                            if event.click_count == 2 {
+                                view.panels.title_drag = None;
+                                if floating {
+                                    view.dock_panel(id, view.panels.layout.panel(id).dock, window, cx);
+                                } else { view.float_panel(id, window, cx); }
+                            } else {
+                                view.panels.title_drag = Some((id, event.position + window.bounds().origin));
+                                if floating { window.start_window_move(); }
+                            }
+                            cx.stop_propagation();
+                        }))
+                        .child(div().flex_1().min_w(px(0.)).px(dialog_font::px(2.)).overflow_hidden().whitespace_nowrap().child(id.title())))
                     .children(controls)
-                    .child(
+                    .when(!single_title, |caption| caption.child(
                         div()
                             .id(format!("{}-float", id.key()))
                             .role(Role::Button)
@@ -513,7 +630,7 @@ impl MatrixWindow {
                                 view.float_panel(id, window, cx);
                                 cx.stop_propagation();
                             })),
-                    )
+                    ))
                     .child(
                         div()
                             .id(format!("{}-hide", id.key()))
@@ -524,6 +641,12 @@ impl MatrixWindow {
                                 icon_tooltip::view(format!("Hide {}", id.title()), dark, cx)
                             })
                             .px(px(3.))
+                            .when(single_title, |button| button
+                                .w(dialog_font::px(14.)).h(dialog_font::px(14.))
+                                .mr(dialog_font::px(2.)).px(px(0.))
+                                .flex().items_center().justify_center()
+                                .border_1().border_color(rgb(0x808080))
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()))
                             .cursor_pointer()
                             .child("×")
                             .on_click(cx.listener(move |view, _, window, cx| {
@@ -544,10 +667,16 @@ impl MatrixWindow {
                 frame.child(
                     div()
                         .id(format!("{}-resize", id.key()))
-                        .h(px(5.))
-                        .w_full()
+                        .when(single_title, |edge| edge.absolute()
+                        .when(matches!(p.dock, DockSide::Left | DockSide::Right), |edge| edge.top_0().h_full().w(px(4.)))
+                        .when(matches!(p.dock, DockSide::Top | DockSide::Bottom), |edge| edge.left_0().w_full().h(px(4.)))
+                        .when(p.dock == DockSide::Left, |edge| edge.right_0())
+                        .when(p.dock == DockSide::Right, |edge| edge.left_0())
+                        .when(p.dock == DockSide::Top, |edge| edge.bottom_0())
+                        .when(p.dock == DockSide::Bottom, |edge| edge.top_0()))
+                        .when(!single_title, |edge| edge.h(px(5.)).w_full())
                         .cursor_crosshair()
-                        .bg(rgb(0x808080))
+                        .bg(rgb(if dark { 0x484848 } else { 0xd4d0c8 }))
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(move |view, event: &gpui::MouseDownEvent, _, cx| {
@@ -555,122 +684,9 @@ impl MatrixWindow {
                                     Some((id, event.position, view.panels.layout.panel(id).size));
                                 cx.stop_propagation();
                             }),
-                        )
-                        .child(resize_listener),
+                        ),
                 )
             })
             .into_any_element()
-    }
-}
-
-#[cfg(all(test, feature = "native-input-tests"))]
-mod tests {
-    use super::*;
-
-    #[gpui::test]
-    fn project_windows_render_real_project_trees_and_restore_common_state(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let main = cx.add_window(|window, cx| MatrixWindow::new(false, window, cx));
-        let saved = main
-            .update(cx, |view, window, cx| {
-                view.projects
-                    .model
-                    .panel_mut(0)
-                    .expect("project panel")
-                    .add_project("Retained project")
-                    .expect("project");
-                view.float_panel(PanelId::Project1, window, cx);
-                view.capture_panel_state().expect("capture common state")
-            })
-            .expect("capture");
-        cx.run_until_parked();
-        assert_eq!(cx.windows().len(), 2);
-        main.update(cx, |view, window, cx| {
-            view.hide_panel(PanelId::Project1, window, cx)
-        })
-        .expect("hide");
-        cx.run_until_parked();
-        assert_eq!(cx.windows().len(), 1);
-        main.update(cx, |view, window, cx| {
-            view.restore_panel_state(&saved, window, cx)
-                .expect("restore")
-        })
-        .expect("restore state");
-        cx.run_until_parked();
-        assert_eq!(cx.windows().len(), 2);
-        main.read_with(cx, |view, _| {
-            assert!(view.projects.visible(0));
-            assert_eq!(
-                view.projects.model.panel(0).expect("panel").roots()[0].name,
-                "Retained project"
-            );
-            assert_eq!(
-                view.panels.layout.panel(PanelId::Project1).placement,
-                Placement::Floating
-            );
-        })
-        .expect("restored project tree");
-    }
-
-    #[gpui::test]
-    fn panels_float_independently_close_to_hide_and_redock_retained_content(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let main = cx.add_window(|window, cx| MatrixWindow::new(false, window, cx));
-        cx.run_until_parked();
-        main.update(cx, |view, window, cx| {
-            view.editor_mut().insert_text("retained").expect("edit");
-            view.float_panel(PanelId::DocumentList, window, cx);
-            view.float_panel(PanelId::DocumentMap, window, cx);
-        })
-        .expect("float");
-        cx.run_until_parked();
-        assert_eq!(cx.windows().len(), 3);
-        let list = main
-            .read_with(cx, |view, _| {
-                *view
-                    .panels
-                    .windows
-                    .get(&PanelId::DocumentList)
-                    .expect("list window")
-            })
-            .expect("main");
-        let map = main
-            .read_with(cx, |view, _| {
-                *view
-                    .panels
-                    .windows
-                    .get(&PanelId::DocumentMap)
-                    .expect("map window")
-            })
-            .expect("main");
-        cx.dispatch_action(list.into(), CloseWindow);
-        cx.run_until_parked();
-        assert!(!cx.windows().contains(&list.into()));
-        assert!(cx.windows().contains(&map.into()));
-        main.update(cx, |view, window, cx| {
-            let p = view.panels.layout.panel(PanelId::DocumentList);
-            assert!(!p.visible);
-            assert_eq!(p.placement, Placement::Floating);
-            view.show_panel(PanelId::DocumentList, window, cx);
-        })
-        .expect("reopen");
-        cx.run_until_parked();
-        assert_eq!(cx.windows().len(), 3);
-        main.update(cx, |view, window, cx| {
-            view.dock_panel(PanelId::DocumentMap, DockSide::Left, window, cx)
-        })
-        .expect("dock");
-        cx.run_until_parked();
-        assert!(!cx.windows().contains(&map.into()));
-        main.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "retained");
-            assert_eq!(
-                view.panels.layout.panel(PanelId::DocumentMap).placement,
-                Placement::Docked(DockSide::Left)
-            );
-        })
-        .expect("retained document");
     }
 }

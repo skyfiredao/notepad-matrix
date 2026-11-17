@@ -13,10 +13,11 @@ pub enum PanelId {
     Project2,
     Project3,
     Characters,
+    Converter,
 }
 
 impl PanelId {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::DocumentList,
         Self::DocumentMap,
         Self::FunctionList,
@@ -25,6 +26,7 @@ impl PanelId {
         Self::Project2,
         Self::Project3,
         Self::Characters,
+        Self::Converter,
     ];
 
     pub fn key(self) -> &'static str {
@@ -37,19 +39,21 @@ impl PanelId {
             Self::Project2 => "project-2",
             Self::Project3 => "project-3",
             Self::Characters => "characters",
+            Self::Converter => "converter",
         }
     }
 
     pub fn title(self) -> &'static str {
         match self {
-            Self::DocumentList => "Document List",
-            Self::DocumentMap => "Document Map",
+            Self::DocumentList => "文档列表",
+            Self::DocumentMap => "文档结构图",
             Self::FunctionList => "Function List",
             Self::Folder => "Folder as Workspace",
             Self::Project1 => "Project Panel 1",
             Self::Project2 => "Project Panel 2",
             Self::Project3 => "Project Panel 3",
             Self::Characters => "ASCII Codes Insertion Panel",
+            Self::Converter => "Conversion",
         }
     }
 }
@@ -138,11 +142,13 @@ pub struct PanelPlacement {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PanelLayout {
     panels: BTreeMap<PanelId, PanelPlacement>,
+    preserved: Value,
 }
 
 impl Default for PanelLayout {
     fn default() -> Self {
         Self {
+            preserved: Value::Null,
             panels: PanelId::ALL
                 .into_iter()
                 .enumerate()
@@ -156,19 +162,20 @@ impl Default for PanelLayout {
                         DockSide::Left
                     };
                     let size = match id {
-                        PanelId::DocumentList => 180.,
-                        PanelId::DocumentMap => 180.,
+                        PanelId::DocumentList => 200.,
+                        PanelId::DocumentMap => 200.,
+                        PanelId::Converter => 488.,
                         _ => 250.,
                     };
                     (
                         id,
                         PanelPlacement {
                             visible: false,
-                            placement: Placement::Docked(dock),
+                            placement: if id == PanelId::Converter { Placement::Floating } else { Placement::Docked(dock) },
                             dock,
                             order,
                             size,
-                            bounds: FloatBounds::default(),
+                            bounds: if id == PanelId::Converter { FloatBounds { width: 488., height: 238., ..FloatBounds::default() } } else { FloatBounds::default() },
                         },
                     )
                 })
@@ -255,13 +262,21 @@ impl PanelLayout {
     }
 
     pub fn to_json(&self) -> Value {
-        let panels: serde_json::Map<String, Value> = PanelId::ALL.into_iter().map(|id| {
+        let mut result = self.preserved.as_object().cloned().unwrap_or_default();
+        let mut panels = result.get("panels").and_then(Value::as_object).cloned().unwrap_or_default();
+        for id in PanelId::ALL {
             let p = self.panel(id);
-            (id.key().into(), json!({ "visible": p.visible, "floating": p.placement == Placement::Floating,
+            let mut value = panels.get(id.key()).and_then(Value::as_object).cloned().unwrap_or_default();
+            let mut bounds = value.get("bounds").and_then(Value::as_object).cloned().unwrap_or_default();
+            bounds.extend(json!({ "x": p.bounds.x, "y": p.bounds.y, "width": p.bounds.width, "height": p.bounds.height }).as_object().cloned().unwrap_or_default());
+            value.extend(json!({ "visible": p.visible, "floating": p.placement == Placement::Floating,
                 "dock": p.dock.key(), "order": p.order, "size": p.size,
-                "bounds": { "x": p.bounds.x, "y": p.bounds.y, "width": p.bounds.width, "height": p.bounds.height } }))
-        }).collect();
-        json!({ "version": 1, "panels": panels })
+                "bounds": bounds }).as_object().cloned().unwrap_or_default());
+            panels.insert(id.key().into(), Value::Object(value));
+        }
+        result.insert("version".into(), json!(1));
+        result.insert("panels".into(), Value::Object(panels));
+        Value::Object(result)
     }
 
     pub fn from_json(value: &Value) -> io::Result<Self> {
@@ -273,6 +288,7 @@ impl PanelLayout {
             .and_then(Value::as_object)
             .ok_or_else(|| invalid("Missing panel placements"))?;
         let mut layout = Self::default();
+        layout.preserved = value.clone();
         for id in PanelId::ALL {
             let Some(value) = values.get(id.key()) else {
                 continue;

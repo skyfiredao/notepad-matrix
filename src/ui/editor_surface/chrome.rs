@@ -1,8 +1,7 @@
 use std::ops::Range;
 
-pub const BASE_FONT_SIZE: f32 = 20.;
+pub const BASE_FONT_SIZE: f32 = 16.;
 pub const DEFAULT_EDITOR_FONT_FAMILY: &str = "Helvetica";
-pub const BASE_LINE_HEIGHT: f32 = 26.;
 pub const GUTTER_LEFT: f32 = 0.;
 pub const GUTTER_WIDTH: f32 = 32. + 16. + 9. + 14.;
 pub const TEXT_LEFT: f32 = GUTTER_LEFT + GUTTER_WIDTH + 1.;
@@ -10,7 +9,6 @@ pub const TEXT_RIGHT_PADDING: f32 = 4.;
 pub const TEXT_TOP: f32 = 3.;
 pub const TEXT_VERTICAL_PADDING: f32 = TEXT_TOP * 2.;
 pub const SCROLLBAR_SIZE: f32 = 16.;
-pub const TEXT_INSET: f32 = TEXT_LEFT + TEXT_RIGHT_PADDING;
 
 pub fn scrollbar_track(extent: f32) -> Range<f32> {
     let extent = extent.max(0.);
@@ -55,9 +53,6 @@ impl EditorDisplay {
     pub fn font_size(self) -> f32 {
         (BASE_FONT_SIZE + self.zoom as f32).max(1.)
     }
-    pub fn line_height(self) -> f32 {
-        (self.font_size() * BASE_LINE_HEIGHT / BASE_FONT_SIZE).ceil()
-    }
     pub fn zoom(self) -> i32 {
         self.zoom
     }
@@ -91,30 +86,45 @@ impl EditorSymbols {
 pub struct DisplayRow {
     pub text: String,
     pub representations: Vec<Range<usize>>,
+    pub control_representations: Vec<Range<usize>>,
     boundaries: Vec<(usize, usize)>,
 }
 
 impl DisplayRow {
-    pub fn with_symbols(raw: &str, symbols: EditorSymbols) -> Self {
-        use crate::byte_text::{ByteUnit, ByteValue};
-        if raw.is_ascii() {
-            return Self::with_bytes(raw.as_bytes(), symbols);
+    pub(crate) fn with_preferences(
+        raw: &[u8],
+        symbols: EditorSymbols,
+        npc_mode: i64,
+        include_controls: bool,
+    ) -> Self {
+        let bytes = crate::byte_buffer::ByteBuffer::from_bytes(raw);
+        let input = crate::byte_projection::ByteProjection::from_bytes(&bytes);
+        let mut row = Self::project(
+            raw,
+            crate::byte_text::units(raw.iter().copied()),
+            symbols,
+            npc_mode,
+            include_controls,
+        );
+        for (source, _) in &mut row.boundaries {
+            let position = crate::editor::ByteOffset(*source);
+            *source = input
+                .project_selection(crate::editor::Selection {
+                    anchor: position,
+                    head: position,
+                })
+                .head
+                .0;
         }
-        let units = raw.char_indices().map(|(start, character)| ByteUnit {
-            range: start..start + character.len_utf8(),
-            value: ByteValue::Scalar(character),
-        });
-        Self::project(raw.as_bytes(), units, symbols)
-    }
-
-    pub fn with_bytes(raw: &[u8], symbols: EditorSymbols) -> Self {
-        Self::project(raw, crate::byte_text::units(raw.iter().copied()), symbols)
+        row
     }
 
     fn project(
         raw: &[u8],
         units: impl Iterator<Item = crate::byte_text::ByteUnit>,
         symbols: EditorSymbols,
+        npc_mode: i64,
+        include_controls: bool,
     ) -> Self {
         use crate::byte_text::ByteValue;
         let content = &raw[..raw
@@ -123,6 +133,7 @@ impl DisplayRow {
             .map_or(0, |index| index + 1)];
         let mut text = String::new();
         let mut representations = Vec::new();
+        let mut control_representations = Vec::new();
         let mut boundaries = Vec::new();
         let mut column = 0;
         for unit in units.take_while(|unit| unit.range.end <= content.len()) {
@@ -130,9 +141,11 @@ impl DisplayRow {
             let ch = match unit.value {
                 ByteValue::Scalar(character) => character,
                 ByteValue::Invalid(byte) => {
+                    let start = text.len();
                     text.push('x');
                     text.push(char::from(b"0123456789ABCDEF"[usize::from(byte >> 4)]));
                     text.push(char::from(b"0123456789ABCDEF"[usize::from(byte & 0x0f)]));
+                    representations.push(start..text.len());
                     column += 1;
                     continue;
                 }
@@ -150,8 +163,17 @@ impl DisplayRow {
                         symbols.nonprinting
                     } {
                         let start = text.len();
-                        text.push_str(label);
+                        if npc_mode == 0 && (!control || include_controls) {
+                            text.push(ch);
+                        } else if npc_mode == 2 && (!control || include_controls) {
+                            text.push_str(&format!("U+{:04X}", ch as u32));
+                        } else {
+                            text.push_str(label);
+                        }
                         representations.push(start..text.len());
+                        if control {
+                            control_representations.push(start..text.len());
+                        }
                     } else if !control {
                         text.push(ch);
                     }
@@ -172,6 +194,7 @@ impl DisplayRow {
         Self {
             text,
             representations,
+            control_representations,
             boundaries,
         }
     }
@@ -180,11 +203,11 @@ impl DisplayRow {
         self.boundaries.last().map_or(0, |pair| pair.0)
     }
     pub fn display_index(&self, source: usize) -> usize {
-        let index = self
-            .boundaries
-            .partition_point(|pair| pair.0 <= source)
-            .saturating_sub(1);
-        self.boundaries.get(index).map_or(0, |pair| pair.1)
+        let index = self.boundaries.partition_point(|pair| pair.0 < source);
+        self.boundaries
+            .get(index)
+            .or_else(|| self.boundaries.last())
+            .map_or(0, |pair| pair.1)
     }
     pub fn source_index(&self, display: usize) -> usize {
         let index = self.boundaries.partition_point(|pair| pair.1 < display);

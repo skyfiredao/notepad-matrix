@@ -5,6 +5,7 @@ use std::ops::Range;
 pub(super) struct InlineComposition {
     base_selections: SelectionSet,
     pub(super) selections: SelectionSet,
+    pub(super) source_selections: SelectionSet,
     edits: LineEdits,
     pub(super) marked_ranges: Vec<Range<ByteOffset>>,
     full_ranges: Vec<Range<ByteOffset>>,
@@ -26,6 +27,7 @@ impl EditorSession {
         let Some(range) = range else {
             return self.mark_inline_composition(text, selected_utf16);
         };
+        let range = self.document.projection().source_selection(Selection { anchor: range.start, head: range.end })?.range();
         self.document.text_in(range.clone())?;
         let mut selections = self.document.selections();
         selections.set_range(
@@ -72,15 +74,15 @@ impl EditorSession {
             })
             .unwrap_or_else(|| self.document.selections());
         let mut selections = base_selections.clone();
-        let mut display = self.document.text_snapshot();
+        let mut bytes = self.document.byte_snapshot();
         let mut edits = LineEdits::default();
         let mut order: Vec<_> = (0..selections.ranges().len()).collect();
         for index in 0..selections.ranges().len() {
             let selected = selections.ranges()[index];
             let range = selected.selection.range();
             let padding = " ".repeat(selected.start_virtual());
-            edits.remove(&mut display, range.start.0..range.end.0)?;
-            edits.insert(&mut display, range.start.0, &padding)?;
+            edits.change_bytes(&mut bytes, range.start.0..range.end.0, &[])?;
+            edits.change_bytes(&mut bytes, range.start.0..range.start.0, padding.as_bytes())?;
             selections.map_edit(range.start.0, range.end.0 - range.start.0, padding.len());
             let caret = ByteOffset(range.start.0 + padding.len());
             selections.set_range(
@@ -97,16 +99,13 @@ impl EditorSession {
             for &index in order.iter().rev() {
                 let position = selections.ranges()[index].selection.head.0;
                 let mut end = position;
-                if self.overwrite && position < display.len() {
-                    let next = display.char(position);
-                    if !matches!(next, '\r' | '\n') {
-                        end += next.len_utf8();
-                    }
+                if self.overwrite && position < bytes.len() && !matches!(bytes.byte(position), Some(b'\r' | b'\n')) {
+                    end = bytes.deletion_range(position, false).map_err(|error| EditError::Storage(error.to_string()))?.end;
                 }
                 let mut encoded = [0; 4];
                 let value = ch.encode_utf8(&mut encoded);
-                edits.remove(&mut display, position..end)?;
-                edits.insert(&mut display, position, value)?;
+                edits.change_bytes(&mut bytes, position..end, &[])?;
+                edits.change_bytes(&mut bytes, position..position, value.as_bytes())?;
                 selections.map_edit(position, end - position, value.len());
                 let caret = ByteOffset(position + value.len());
                 selections.set_range(
@@ -120,9 +119,9 @@ impl EditorSession {
             }
         }
         let primary_end = selections.primary().selection.head.0;
-        let marked_range =
+        let mut marked_range =
             ByteOffset(primary_end.saturating_sub(text.len()))..ByteOffset(primary_end);
-        let marked_ranges: Vec<_> = selections
+        let mut marked_ranges: Vec<_> = selections
             .ranges()
             .iter()
             .map(|range| {
@@ -144,6 +143,16 @@ impl EditorSession {
                 .into(),
             );
         }
+        let projection = crate::byte_projection::ByteProjection::from_bytes(&bytes);
+        let source_selections = selections.clone();
+        let mut display_ranges = selections.ranges().to_vec();
+        for range in &mut display_ranges { range.selection = projection.display_selection(range.selection)?; }
+        selections = SelectionSet::from_parts(display_ranges, selections.primary_index(), selections.is_rectangular())?;
+        for range in &mut marked_ranges {
+            *range = projection.display_selection(Selection { anchor: range.start, head: range.end })?.range();
+        }
+        marked_range = projection.display_selection(Selection { anchor: marked_range.start, head: marked_range.end })?.range();
+        let display = projection.text();
         let selection = selections.primary().selection;
         self.composition = Some(Composition {
             base_revision: self.document.text_revision(),
@@ -152,10 +161,12 @@ impl EditorSession {
             marked_range,
             text: text.to_string(),
             display,
+            bytes,
             selection,
             inline: Some(InlineComposition {
                 base_selections,
                 selections,
+                source_selections,
                 edits,
                 full_ranges: marked_ranges.clone(),
                 marked_ranges,
@@ -200,8 +211,11 @@ impl EditorSession {
             self.commit_composition()?;
             return self.mark_display_range(Some(range), text, Some(relative));
         }
-        let start = range.start.0 - full.start.0;
-        let end = range.end.0 - full.start.0;
+        let projection = crate::byte_projection::ByteProjection::from_bytes(&composition.bytes);
+        let source_range = projection.source_selection(Selection { anchor: range.start, head: range.end })?.range();
+        let source_full = projection.source_selection(Selection { anchor: full.start, head: full.end })?.range();
+        let start = source_range.start.0 - source_full.start.0;
+        let end = source_range.end.0 - source_full.start.0;
         if !composition.text.is_char_boundary(start) || !composition.text.is_char_boundary(end) {
             return Err(EditError::InvalidBoundary);
         }
@@ -215,14 +229,18 @@ impl EditorSession {
         if let Some(composition) = &mut self.composition
             && let Some(inline) = &mut composition.inline
         {
+            let projection = crate::byte_projection::ByteProjection::from_bytes(&composition.bytes);
             inline.marked_ranges = inline
                 .full_ranges
                 .iter()
                 .map(|range| {
-                    ByteOffset(range.start.0 + start)
-                        ..ByteOffset(range.start.0 + start + text.len())
+                    let full = projection.source_selection(Selection { anchor: range.start, head: range.end })?.range();
+                    projection.display_selection(Selection {
+                        anchor: ByteOffset(full.start.0 + start),
+                        head: ByteOffset(full.start.0 + start + text.len()),
+                    }).map(Selection::range)
                 })
-                .collect();
+                .collect::<Result<Vec<_>, EditError>>()?;
             composition.marked_range =
                 inline.marked_ranges[inline.selections.primary_index()].clone();
         }
@@ -248,9 +266,9 @@ impl EditorSession {
         }
         if let Some(composition) = self.composition.as_ref() {
             if let Some(inline) = composition.inline.as_ref() {
-                self.document.commit_prepared(
-                    composition.display.clone(),
-                    inline.selections.clone(),
+                self.document.commit_prepared_bytes(
+                    composition.bytes.clone(),
+                    inline.source_selections.clone(),
                     inline.edits.clone(),
                 )?;
             }

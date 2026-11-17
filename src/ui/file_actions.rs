@@ -4,9 +4,50 @@ use crate::files::{DiskFile, OverwritePolicy};
 use crate::workspace::closing as closing_model;
 pub(super) use closing_model::CloseBatch as ConditionalClose;
 
-#[path = "file_actions_tests.rs"]
-#[cfg(all(test, feature = "native-input-tests"))]
-mod tests;
+pub(super) struct FilePromptState {
+    current_directory: Option<PathBuf>,
+    pub(super) recent_in_submenu: bool,
+    pub(super) recent_custom_length: i64,
+    pub(super) startup_settings: Option<serde_json::Value>,
+    open_sequence_pending: bool,
+}
+
+impl Default for FilePromptState {
+    fn default() -> Self {
+        Self { current_directory: None, recent_in_submenu: false, recent_custom_length: -1, startup_settings: None, open_sequence_pending: false }
+    }
+}
+
+enum OpenPathResult {
+    Text(io::Result<(DiskFile, crate::byte_buffer::ByteBuffer)>),
+    Session(io::Result<crate::recovery::SessionFile>),
+    Workspace,
+}
+
+fn matches_configured_extension(path: &std::path::Path, extension: &str) -> bool {
+    if extension.is_empty() { return false; }
+    let configured = if extension.starts_with('.') { extension.to_owned() } else { format!(".{extension}") };
+    let Some(filename) = path.file_name().and_then(|name| name.to_str()) else { return false; };
+    let Some(dot) = filename.rfind('.') else { return false; };
+    filename[dot..].to_lowercase() == configured.to_lowercase()
+}
+
+fn expanded_directory(value: &str) -> PathBuf {
+    let mut expanded = String::new();
+    let mut remaining = value;
+    while let Some(start) = remaining.find('%') {
+        expanded.push_str(&remaining[..start]);
+        let rest = &remaining[start + 1..];
+        let Some(end) = rest.find('%') else { expanded.push_str(&remaining[start..]); return PathBuf::from(expanded); };
+        match std::env::var(&rest[..end]) {
+            Ok(value) => expanded.push_str(&value),
+            Err(_) => expanded.push_str(&remaining[start..start + end + 2]),
+        }
+        remaining = &rest[end + 1..];
+    }
+    expanded.push_str(remaining);
+    PathBuf::from(expanded)
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SaveOperation {
@@ -45,6 +86,7 @@ impl MatrixWindow {
         cx: &mut Context<Self>,
     ) {
         if self.file_busy
+            || self.file_open_sequence_pending()
             || self.close_dialog
             || self.save_all_dialog
             || self.batch_editing_blocked()
@@ -109,6 +151,7 @@ impl MatrixWindow {
             return;
         }
         if self.file_busy
+            || self.file_open_sequence_pending()
             || self.close_dialog
             || self.save_all_dialog
             || self.save_all_restore.is_some()
@@ -208,6 +251,7 @@ impl MatrixWindow {
                 .close_in_view(target.view, target.id, target.disposition)
             {
                 Ok(_) => {
+                    if self.quit_after_last_document_close(target.id, window, cx) { return; }
                     if self.workspace.active().id() != active
                         || self.workspace.active_view() != previous_view
                     {
@@ -220,8 +264,7 @@ impl MatrixWindow {
                 }
             }
         }
-        self.tab_scroll
-            .scroll_to_item(self.workspace.active_index());
+        self.scroll_active_tab_into_view();
         self.editor_focus.focus(window, cx);
         self.synchronize_recovery(cx);
         cx.notify();
@@ -240,6 +283,7 @@ impl MatrixWindow {
             return;
         }
         if self.file_busy
+            || self.file_open_sequence_pending()
             || self.reload_target.is_some()
             || self.save_all_restore.is_some()
             || self.save_all_dialog
@@ -294,6 +338,7 @@ impl MatrixWindow {
             return;
         }
         if self.file_busy
+            || self.file_open_sequence_pending()
             || self.close_dialog
             || self.save_all_dialog
             || self.save_all_restore.is_some()
@@ -318,6 +363,7 @@ impl MatrixWindow {
             return;
         }
         if self.file_busy
+            || self.file_open_sequence_pending()
             || self.close_dialog
             || self.save_all_dialog
             || self.save_all_restore.is_some()
@@ -354,10 +400,25 @@ impl MatrixWindow {
         }
         match self.workspace.close_buffer(id, disposition) {
             Ok(_) => {
+                if self.quit_after_last_document_close(id, window, cx) { return; }
                 self.reset_active_view(window, cx);
             }
             Err(error) => self.notify_editor_error(error.to_string(), cx),
         }
+    }
+    pub(super) fn quit_after_last_document_close(&mut self, closed: crate::workspace::BufferId, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if !self.pref_bool("TabBar.quitOnEmpty", false)
+            || self.application_quit_pending
+            || self.workspace.buffers().iter().any(|buffer| buffer.id() == closed)
+            || self.workspace.buffers().len() != 1
+            || self.workspace.active().disk_file.is_some()
+            || self.workspace.active().is_modified()
+            || self.workspace.active().editor.document().len_bytes() != 0 {
+            return false;
+        }
+        self.reset_active_view(window, cx);
+        self.request_close(window, cx);
+        true
     }
     pub(super) fn start_save_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.macro_interaction_blocked() {
@@ -368,6 +429,7 @@ impl MatrixWindow {
             return;
         }
         if self.file_busy
+            || self.file_open_sequence_pending()
             || self.close_dialog
             || self.save_all_dialog
             || self.save_all_restore.is_some()
@@ -466,6 +528,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_save_all_dialog(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        use super::dialog_font::px;
         if !self.save_all_dialog {
             return None;
         }
@@ -560,85 +623,242 @@ impl MatrixWindow {
         )
     }
 
+    pub(super) fn file_prompt_settings(&self) -> io::Result<serde_json::Value> {
+        self.settings_store.as_ref().map(ConfigStore::load_settings).transpose()
+            .map(|settings| settings.unwrap_or_else(|| self.preferences.settings.clone()))
+    }
+
+    pub(super) fn update_file_prompt_directory(&mut self) {
+        if let Some(directory) = self.disk_file().and_then(|file| file.path().parent())
+            .filter(|directory| directory.is_dir()).map(PathBuf::from) {
+            self.file_prompt.current_directory = Some(directory);
+        }
+    }
+
+    pub(super) fn file_prompt_directory(&mut self) -> io::Result<PathBuf> {
+        let settings = self.file_prompt_settings()?;
+        self.update_file_prompt_directory();
+        let fallback = || std::env::current_exe().and_then(|path| path.parent().map(PathBuf::from)
+            .ok_or_else(|| io::Error::other("应用程序没有所在目录")));
+        match settings["openSaveDir"]["value"].as_i64().unwrap_or(0) {
+            0 => self.file_prompt.current_directory.clone().map(Ok).unwrap_or_else(fallback),
+            1 => {
+                let path = PathBuf::from(settings["openSaveDir"]["lastUsedDirPath"].as_str().unwrap_or(""));
+                if path.is_dir() { Ok(path) }
+                else { self.file_prompt.current_directory.clone().map(Ok).unwrap_or_else(fallback) }
+            }
+            2 => {
+                let path = expanded_directory(settings["openSaveDir"]["defaultDirPath"].as_str().unwrap_or(""));
+                if path.is_dir() { Ok(path) } else { fallback() }
+            }
+            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "openSaveDir.value 必须是 0、1 或 2")),
+        }
+    }
+
+    pub(super) fn remember_file_prompt_directory(&mut self, directory: Option<&std::path::Path>) -> io::Result<()> {
+        let Some(directory) = directory else { return Ok(()); };
+        let settings = self.file_prompt_settings()?;
+        if settings["openSaveDir"]["value"].as_i64().unwrap_or(0) != 1 { return Ok(()); }
+        let path = directory.to_str().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "文件选择目录不是 UTF-8"))?;
+        if let Some(store) = &self.settings_store {
+            store.update_settings(|settings| super::preferences_surface::write_value(settings, "openSaveDir.lastUsedDirPath", path.into()))?;
+        }
+        super::preferences_surface::write_value(&mut self.preferences.settings, "openSaveDir.lastUsedDirPath", path.into())?;
+        self.file_prompt.current_directory = Some(directory.to_path_buf());
+        Ok(())
+    }
+
     pub(super) fn start_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.macro_interaction_blocked() {
+        if self.macro_interaction_blocked() || self.reload_target.is_some()
+            || self.file_busy || self.file_open_sequence_pending() || self.close_dialog || self.save_all_dialog || self.batch_editing_blocked() {
             return;
         }
-        if self.reload_target.is_some() {
-            return;
-        }
-        if self.file_busy || self.close_dialog || self.save_all_dialog {
-            return;
-        }
+        let directory = match self.file_prompt_directory() {
+            Ok(directory) => directory,
+            Err(error) => { self.notify_editor_error(format!("无法读取文件选择目录：{error}"), cx); return; }
+        };
+        let prompt = super::native_path_prompt::prompt_for_paths_in(&directory, gpui::PathPromptOptions {
+            files: true, directories: false, multiple: true, prompt: None,
+        }, window, cx);
         self.file_busy = true;
-        let prompt = cx.prompt_for_paths(gpui::PathPromptOptions {
-            files: true,
-            directories: false,
-            multiple: true,
-            prompt: None,
-        });
+        cx.notify();
+        cx.spawn_in(window, async move |view, cx| {
+            let selected = prompt.await;
+            if let Err(error) = view.update_in(cx, |view, window, cx| {
+                view.file_busy = false;
+                match selected {
+                    Ok(result) => {
+                        if let Err(error) = view.remember_file_prompt_directory(result.directory.as_deref()) {
+                            view.notify_editor_error(format!("无法记住文件选择目录：{error}"), cx);
+                        }
+                        if let Some(paths) = result.selection { view.start_open_paths(paths, window, cx); }
+                        else { view.editor_focus.focus(window, cx); }
+                    }
+                    Err(error) => view.notify_editor_error(format!("Open failed: {error}"), cx),
+                }
+                cx.notify();
+            }) { eprintln!("open path chooser lost its document window: {error}"); }
+        }).detach();
+    }
+
+    pub(super) fn start_open_paths(&mut self, paths: Vec<PathBuf>, window: &mut Window, cx: &mut Context<Self>) {
+        self.start_open_paths_with_launch(paths, None, window, cx);
+    }
+
+    pub(super) fn file_open_sequence_pending(&self) -> bool { self.file_prompt.open_sequence_pending }
+
+    pub(super) fn start_open_paths_with_launch(&mut self, paths: Vec<PathBuf>, launch: Option<crate::launch::LaunchOptions>, window: &mut Window, cx: &mut Context<Self>) {
+        if paths.is_empty() || self.macro_interaction_blocked() || self.reload_target.is_some()
+            || self.file_busy || self.file_prompt.open_sequence_pending || self.close_dialog || self.save_all_dialog || self.batch_editing_blocked() {
+            return;
+        }
+        let settings = match self.file_prompt_settings() {
+            Ok(settings) => settings,
+            Err(error) => { self.notify_editor_error(format!("无法读取文件打开设置：{error}"), cx); self.complete_file_preferences_startup(window, cx); return; }
+        };
+        let session_extension = settings["sessionExt"].as_str().unwrap_or("").to_owned();
+        let workspace_extension = settings["workspaceExt"].as_str().unwrap_or("").to_owned();
+        let suppress_warning = settings["largeFileRestriction"]["suppress2GBWarning"].as_bool().unwrap_or(false);
+        let existing_paths = self.workspace.buffers().iter().filter_map(|buffer| {
+            buffer.disk_file.as_ref().map(|file| file.path().to_path_buf())
+        }).collect::<Vec<_>>();
+        let placeholder = (self.workspace.buffers().len() == 1 && self.workspace.active().disk_file.is_none() && !self.workspace.active().is_modified() && self.workspace.active().editor.document().len_bytes() == 0)
+            .then(|| (self.workspace.active_view(), self.workspace.active().id()));
+        self.file_busy = true;
+        self.file_prompt.open_sequence_pending = true;
         let executor = cx.background_executor().clone();
         cx.notify();
         cx.spawn_in(window, async move |view, cx| {
-            let selected = match prompt.await {
-                Ok(Ok(paths)) => Ok(paths),
-                Ok(Err(error)) => Err(io::Error::other(error.to_string())),
-                Err(error) => Err(io::Error::other(format!(
-                    "open path chooser disconnected: {error}"
-                ))),
-            };
-            let loaded = match selected {
-                Ok(Some(paths)) => {
-                    executor
-                        .spawn(async move {
-                            paths
-                                .into_iter()
-                                .map(|path| {
-                                    let result = DiskFile::load_unicode(&path);
-                                    (path, result)
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                        .await
-                }
-                Ok(None) => Vec::new(),
-                Err(error) => vec![(PathBuf::new(), Err(error))],
-            };
-            if let Err(error) = view.update_in(cx, |view, window, cx| {
-                view.file_busy = false;
-                let mut opened = false;
-                let mut errors = Vec::new();
-                for (path, result) in loaded {
-                    match result {
-                        Ok((file, text)) => {
-                            if !view.cancel_view_composition(window, cx) {
-                                return;
-                            }
-                            match view.workspace.open_buffer(file, &text) {
-                                Ok(_) => opened = true,
-                                Err(error) => errors.push(error.to_string()),
-                            }
-                        }
-                        Err(error) => errors.push(format!("{}: {error}", path.display())),
+            let mut opened = false;
+            let mut errors = Vec::new();
+            for path in paths {
+                if !launch.as_ref().is_some_and(|options| options.open_session) {
+                    let existing = match view.update_in(cx, |view, window, cx| {
+                        let Some(id) = crate::folder_workspace::existing_buffer(&view.workspace, &path) else { return Ok(false); };
+                        if !view.cancel_view_composition(window, cx) { return Err(io::Error::other("could not cancel composition before opening a file")); }
+                        view.workspace.activate(id).map_err(|error| io::Error::other(error.to_string()))?;
+                        if let Some(language) = launch.as_ref().and_then(|options| options.language) { view.workspace.active_mut().set_language(language); }
+                        view.initialize_active_change_history();
+                        Ok(true)
+                    }) {
+                        Ok(result) => result,
+                        Err(error) => { eprintln!("existing file open window unavailable: {error}"); return; }
+                    };
+                    match existing {
+                        Ok(true) => { opened = true; continue; },
+                        Ok(false) => {},
+                        Err(error) => { errors.push(format!("{}: {error}", path.display())); continue; }
                     }
                 }
-                if opened {
-                    view.reset_active_view(window, cx);
-                } else {
-                    view.editor_focus.focus(window, cx);
-                    cx.notify();
+                let inspect_path = path.clone();
+                let session_extension = session_extension.clone();
+                let workspace_extension = workspace_extension.clone();
+                let existing_paths = existing_paths.clone();
+                let force_session = launch.as_ref().is_some_and(|options| options.open_session);
+                let (session, workspace, huge) = executor.spawn(async move {
+                    let path = inspect_path;
+                    let already_open = existing_paths.contains(&path) || std::fs::canonicalize(&path)
+                        .is_ok_and(|resolved| existing_paths.contains(&resolved));
+                    let session = force_session || (!already_open && path.is_file() && matches_configured_extension(&path, &session_extension));
+                    let workspace = !session && !already_open && path.is_file() && matches_configured_extension(&path, &workspace_extension);
+                    let huge = !session && !workspace && !already_open && !suppress_warning && std::fs::metadata(&path).is_ok_and(|metadata| {
+                        let size = metadata.len();
+                        size.saturating_add((1_u64 << 20).min(size / 6)) > i32::MAX as u64
+                    });
+                    (session, workspace, huge)
+                }).await;
+                if huge {
+                    let message = format!("{}\n\n打开 2GB 以上的大文件可能需要几分钟。是否打开？", path.display());
+                    let prompt = match view.update_in(cx, |_, window, cx| window.prompt(gpui::PromptLevel::Warning, "打开大文件警告", Some(&message), &[gpui::PromptButton::ok("是"), gpui::PromptButton::cancel("否")], cx)) {
+                        Ok(prompt) => prompt,
+                        Err(error) => { eprintln!("large file confirmation window unavailable: {error}"); return; }
+                    };
+                    match prompt.await {
+                        Ok(0) => {},
+                        Ok(_) => continue,
+                        Err(error) => { errors.push(format!("{}: {error}", path.display())); continue; }
+                    }
                 }
-                if !errors.is_empty() {
-                    view.notify_editor_error(
-                        format!("Open failed (supported Unicode): {}", errors.join("; ")),
-                        cx,
-                    );
+                let load_path = path.clone();
+                let settings = settings.clone();
+                let load_options = launch.clone();
+                let result = executor.spawn(async move {
+                    if session { OpenPathResult::Session(crate::recovery::SessionFile::load(&load_path)) }
+                    else if workspace { OpenPathResult::Workspace }
+                    else { OpenPathResult::Text(match load_options {
+                        Some(options) => options.load_file_buffer(&load_path, &settings),
+                        None => DiskFile::load_buffer_with_preferences(&load_path, &settings),
+                    }) }
+                }).await;
+                let mut open_completion = None;
+                let result = match view.update_in(cx, |view, window, cx| {
+                    match result {
+                        OpenPathResult::Text(result) => match result {
+                            Ok((file, bytes)) => {
+                                if !view.cancel_view_composition(window, cx) { return Err(io::Error::other("could not cancel composition before opening a file")); }
+                                let id = view.workspace.open_buffer_bytes(file, bytes).map_err(|error| io::Error::other(error.to_string()))?;
+                                if let Some((pane, initial)) = placeholder
+                                    && initial != id && view.workspace.view_buffer_ids(pane).contains(&initial) {
+                                    view.workspace.close_in_view(pane, initial, crate::workspace::CloseDisposition::IfUnmodified).map_err(|error| io::Error::other(error.to_string()))?;
+                                    view.workspace.activate(id).map_err(|error| io::Error::other(error.to_string()))?;
+                                }
+                                let requested_language = launch.as_ref().map(|options| options.resolved_language(&view.workspace)).transpose()?.flatten();
+                                if let Some(language) = requested_language {
+                                    view.workspace.active_mut().set_language(language);
+                                } else if let Some(language) = view.style_config.language_for_path(&path, view.dark)
+                                    && let Some(buffer) = view.workspace.buffers_mut().find(|buffer| buffer.id() == id) {
+                                    buffer.set_language(crate::syntax::Language::Builtin(language));
+                                }
+                                view.initialize_active_change_history();
+                                Ok(true)
+                            }
+                            Err(error) => Err(error),
+                        },
+                        OpenPathResult::Session(result) => match result {
+                            Ok(archive) => {
+                                view.file_busy = false;
+                                open_completion = Some(view.accept_session_archive_with_completion(path.clone(), archive, window, cx));
+                                Ok(false)
+                            }
+                            Err(error) => Err(error),
+                        },
+                        OpenPathResult::Workspace => {
+                            view.file_busy = false;
+                            open_completion = Some(view.load_project_workspace_path_with_completion(path.clone(), window, cx)?);
+                            Ok(false)
+                        }
+                    }
+                }) {
+                    Ok(result) => result,
+                    Err(error) => { eprintln!("open completion could not reach its window: {error}"); return; }
+                };
+                match result {
+                    Ok(text_opened) => opened |= text_opened,
+                    Err(error) => errors.push(format!("{}: {error}", path.display())),
                 }
-            }) {
-                eprintln!("open completion could not reach its window: {error}");
+                if let Some(completion) = open_completion {
+                    if let Err(error) = executor.spawn(async move { completion.recv() }).await { errors.push(format!("{}: {error}", path.display())); }
+                    if let Err(error) = view.update_in(cx, |view, _, cx| { view.file_busy = true; cx.notify(); }) { eprintln!("workspace open continuation unavailable: {error}"); return; }
+                }
             }
-        })
-        .detach();
+            if let Err(error) = view.update_in(cx, |view, window, cx| {
+                view.file_busy = false;
+                view.file_prompt.open_sequence_pending = false;
+                view.workspace.refresh_udl_metadata();
+                if opened {
+                    if let Some(options) = &launch
+                        && let Err(error) = view.apply_launch_document_position(options) {
+                        errors.push(error.to_string());
+                    }
+                    view.reset_active_view(window, cx);
+                    if launch.as_ref().is_some_and(|options| options.line.is_some() || options.column.is_some()) { view.editor_follow_caret = true; }
+                    view.update_file_prompt_directory();
+                } else { view.editor_focus.focus(window, cx); cx.notify(); }
+                view.preferences_apply_large_file_open_policy(window, cx);
+                view.complete_file_preferences_startup(window, cx);
+                if !errors.is_empty() { view.notify_editor_error(format!("Open failed: {}", errors.join("; ")), cx); }
+            }) { eprintln!("open completion could not reach its window: {error}"); }
+        }).detach();
     }
 
     pub(super) fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -648,7 +868,7 @@ impl MatrixWindow {
         if self.reload_target.is_some() {
             return;
         }
-        if self.file_busy || self.save_all_dialog || self.close_dialog {
+        if self.file_busy || self.file_open_sequence_pending() || self.save_all_dialog || self.close_dialog {
             return;
         }
         if !self.prepare_udl_close(window, cx) {
@@ -679,8 +899,7 @@ impl MatrixWindow {
             if !self.activate_buffer(id, window, cx) {
                 return;
             }
-            self.tab_scroll
-                .scroll_to_item(self.workspace.active_index());
+            self.scroll_active_tab_into_view();
             self.editor_lines.clear();
             self.editor_painted_revision = None;
             self.close_dialog = true;
@@ -706,6 +925,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_close_dialog(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        use super::dialog_font::px;
         if !self.close_dialog {
             return None;
         }
@@ -953,7 +1173,7 @@ impl MatrixWindow {
         if self.reload_target.is_some() {
             return;
         }
-        if self.file_busy {
+        if self.file_busy || self.file_open_sequence_pending() {
             return;
         }
         if operation == SaveOperation::Current && self.editor().document().is_read_only() {
@@ -1016,13 +1236,14 @@ impl MatrixWindow {
             })
             .collect::<Vec<_>>();
         let format = intent.format();
+        let byte_code_page = intent.byte_code_page();
         let needs_path = operation != SaveOperation::Current || original.is_none();
-        let directory = original
-            .as_ref()
-            .and_then(|file| file.path().parent())
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
-            .unwrap_or_else(|| PathBuf::from("."));
+        let directory = if needs_path {
+            match self.file_prompt_directory() {
+                Ok(directory) => directory,
+                Err(error) => { self.notify_editor_error(format!("无法读取文件保存目录：{error}"), cx); return; }
+            }
+        } else { PathBuf::new() };
         let suggested = original
             .as_ref()
             .and_then(|file| file.path().file_name())
@@ -1036,7 +1257,7 @@ impl MatrixWindow {
                 }
             });
         let prompt = if needs_path {
-            Some(cx.prompt_for_new_path(&directory, Some(&suggested)))
+            Some(super::native_path_prompt::prompt_for_new_path_in(&directory, Some(&suggested), window, cx))
         } else {
             None
         };
@@ -1046,11 +1267,17 @@ impl MatrixWindow {
         cx.spawn_in(window, async move |view, cx| {
             let selected = if let Some(prompt) = prompt {
                 match prompt.await {
-                    Ok(Ok(path)) => Ok(path),
-                    Ok(Err(error)) => Err(io::Error::other(error.to_string())),
-                    Err(error) => Err(io::Error::other(format!(
-                        "save path chooser disconnected: {error}"
-                    ))),
+                    Ok(result) => {
+                        match view.update_in(cx, |view, _, cx| {
+                            if let Err(error) = view.remember_file_prompt_directory(result.directory.as_deref()) {
+                                view.notify_editor_error(format!("无法记住文件保存目录：{error}"), cx);
+                            }
+                        }) {
+                            Ok(()) => Ok(result.selection),
+                            Err(error) => Err(io::Error::other(format!("文件保存目录失去文档窗口：{error}"))),
+                        }
+                    }
+                    Err(error) => Err(error),
                 }
             } else {
                 Ok(original.as_ref().map(|file| file.path().to_path_buf()))
@@ -1094,14 +1321,15 @@ impl MatrixWindow {
                             }
                             let result = if needs_path {
                                 // The native save chooser confirms replacement before returning an existing path.
-                                DiskFile::save_as_unicode(
+                                DiskFile::save_as_with_byte_format(
                                     &path,
                                     &writing,
                                     format,
+                                    byte_code_page,
                                     OverwritePolicy::Confirmed,
                                 )
                             } else if let Some(file) = original {
-                                file.save_with_format(&writing, format)
+                                file.save_with_byte_format(&writing, format, byte_code_page)
                             } else {
                                 Err(io::Error::other("save target disappeared"))
                             };
@@ -1119,6 +1347,7 @@ impl MatrixWindow {
                 let closing = view.close_after_save;
                 view.close_after_save = false;
                 if let Some(other) = collision {
+                    view.encoding_save_finished(intent.buffer_id(), false, window, cx);
                     if view.conditional_close.is_some() {
                         view.finish_close_batch(true, window, cx);
                     }
@@ -1187,6 +1416,9 @@ impl MatrixWindow {
                     }
                     Ok(None) => cx.notify(),
                     Err(error) => view.notify_editor_error(format!("Save failed: {error}"), cx),
+                }
+                if view.encoding_save_finished(intent.buffer_id(), committed, window, cx) {
+                    return;
                 }
                 if closing && view.conditional_close.is_some() {
                     view.close_dialog = false;

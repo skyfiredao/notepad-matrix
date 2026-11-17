@@ -139,3 +139,26 @@ pub fn measure(
         selected_lines,
     })
 }
+
+pub fn measure_bytes(
+    bytes: &crate::byte_buffer::ByteBuffer,
+    selection: Selection,
+    tab_width: usize,
+) -> Result<DocumentStatus, EditError> {
+    let range = selection.range();
+    if range.end.0 > bytes.len() { return Err(EditError::InvalidRange); }
+    let error = |error: crate::byte_buffer::InvalidByteRange| EditError::Storage(error.to_string());
+    let row = bytes.line_index(selection.head.0).map_err(error)?;
+    let selected_lines = if range.is_empty() { 0 } else {
+        bytes.line_index(range.end.0 - 1).map_err(error)? - bytes.line_index(range.start.0).map_err(error)? + 1
+    };
+    Ok(DocumentStatus {
+        bytes: bytes.len(),
+        lines: bytes.line_count(),
+        line: row + 1,
+        column: bytes.column(selection.head.0, tab_width).map_err(error)? + 1,
+        position: selection.head.0 + 1,
+        selected_chars: bytes.count_characters(range.start.0..range.end.0, usize::MAX).map_err(error)?,
+        selected_lines,
+    })
+}

@@ -1,0 +1,95 @@
+english.xml	English
+english_customizable.xml	English (customizable)
+french.xml	Français
+taiwaneseMandarin.xml	台灣繁體
+chineseSimplified.xml	中文简体
+korean.xml	한국어
+japanese.xml	日本語
+german.xml	Deutsch
+spanish.xml	Español
+italian.xml	Italiano
+portuguese.xml	Português
+brazilian_portuguese.xml	Português (Brasil)
+dutch.xml	Nederlands
+russian.xml	Русский
+polish.xml	Polski
+catalan.xml	Català
+czech.xml	Česky
+hungarian.xml	Magyar
+romanian.xml	Română
+turkish.xml	Türkçe
+farsi.xml	فارسی
+ukrainian.xml	Українська
+hebrew.xml	עברית
+nynorsk.xml	Nynorsk
+norwegian.xml	Norsk
+occitan.xml	Occitan
+thai.xml	ไทย
+friulian.xml	Furlan
+arabic.xml	العربية
+finnish.xml	Suomi
+lithuanian.xml	Lietuvių
+greek.xml	Ελληνικά
+swedish.xml	Svenska
+galician.xml	Galego
+slovenian.xml	Slovenščina
+slovak.xml	Slovenčina
+danish.xml	Dansk
+extremaduran.xml	Estremeñu
+samogitian.xml	Žemaitiu ruoda
+bulgarian.xml	Български
+indonesian.xml	Bahasa Indonesia
+albanian.xml	Gjuha shqipe
+croatian.xml	Hrvatski
+georgian.xml	ქართული ენა
+basque.xml	Euskara
+spanish_ar.xml	Español (Argentina)
+belarusian.xml	Беларуская мова
+serbian.xml	Srpski
+serbianCyrillic.xml	Cрпски
+malay.xml	Bahasa Melayu
+malayalam.xml	മലയാളം
+luxembourgish.xml	Lëtzebuergesch
+tagalog.xml	Tagalog
+afrikaans.xml	Afrikaans
+kazakh.xml	Қазақша
+uzbek.xml	O‘zbekcha
+uzbekCyrillic.xml	Ўзбекча
+kyrgyz.xml	Кыргыз тили
+macedonian.xml	Македонски јазик
+latvian.xml	latviešu valoda
+tamil.xml	தமிழ்
+azerbaijani.xml	Azərbaycan dili
+bosnian.xml	Bosanski
+esperanto.xml	Esperanto
+ligurian.xml	Zeneize
+hindi.xml	हिन्दी
+sardinian.xml	Sardu
+uyghur.xml	ئۇيغۇرچە
+telugu.xml	తెలుగు
+aragonese.xml	aragonés
+bengali.xml	বাংলা
+sinhala.xml	සිංහල
+kabyle.xml	Taqbaylit
+marathi.xml	मराठी
+vietnamese.xml	tiếng Việt
+aranese.xml	Aranés
+gujarati.xml	ગુજરાતી
+mongolian.xml	Монгол хэл
+urdu.xml	اُردُو‎
+kannada.xml	ಕನ್ನಡ‎
+welsh.xml	Cymraeg
+estonian.xml	eesti keel
+tajikCyrillic.xml	Тоҷик
+tatar.xml	татарча
+punjabi.xml	ਪੰਜਾਬੀ
+corsican.xml	Corsu
+breton.xml	Brezhoneg
+kurdish.xml	کوردی‬
+piglatin.xml	Pig Latin
+zulu.xml	Zulu
+venetian.xml	Vèneto
+irish.xml	Gaeilge
+nepali.xml	नेपाली
+hongKongCantonese.xml	香港繁體
+abkhazian.xml	Аԥсуа бызшәа

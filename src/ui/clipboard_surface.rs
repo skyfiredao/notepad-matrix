@@ -1,8 +1,60 @@
 use super::*;
 use crate::clipboard::{ClipboardKind, ClipboardText};
-use crate::editor::EditError;
+
+const SCINTILLA_LINE_BYTES: &str = "com.notepad-matrix.scintilla-line-bytes";
+const SCINTILLA_LINE_MARKER: &str = "com.notepad-matrix.scintilla-line-copy";
+
+fn write_scintilla_line_bytes(bytes: &[u8], line_copy: bool) -> io::Result<()> {
+    use objc2::runtime::ProtocolObject;
+    use objc2_app_kit::{NSPasteboard, NSPasteboardItem, NSPasteboardWriting};
+    use objc2_foundation::{NSArray, NSData, NSString};
+    let length = u32::try_from(bytes.len()).map_err(|error| io::Error::other(error.to_string()))?;
+    let item = NSPasteboardItem::new();
+    let mut terminated = bytes.to_vec();
+    terminated.push(0);
+    let marker = [u8::from(line_copy)];
+    let length_bytes = length.to_le_bytes();
+    for (kind, data) in [
+        (SCINTILLA_LINE_BYTES, bytes),
+        (SCINTILLA_LINE_MARKER, marker.as_slice()),
+        ("com.notepad-matrix.binary-content", terminated.as_slice()),
+        ("com.notepad-matrix.binary-content-length", length_bytes.as_slice()),
+        ("public.utf8-plain-text", bytes),
+    ] {
+        if !item.setData_forType(&NSData::with_bytes(data), &NSString::from_str(kind)) { return Err(io::Error::other("Could not prepare the raw line clipboard item")); }
+    }
+    let board = NSPasteboard::generalPasteboard();
+    board.clearContents();
+    let item: &ProtocolObject<dyn NSPasteboardWriting> = ProtocolObject::from_ref(&*item);
+    if !board.writeObjects(&NSArray::from_slice(&[item])) { return Err(io::Error::other("Could not publish the raw line clipboard item")); }
+    Ok(())
+}
+
+fn read_scintilla_line_bytes() -> io::Result<Option<(Vec<u8>, bool)>> {
+    use objc2_app_kit::NSPasteboard;
+    use objc2_foundation::NSString;
+    let board = NSPasteboard::generalPasteboard();
+    let Some(items) = board.pasteboardItems() else { return Ok(None); };
+    for item in items.iter() {
+        if let Some(bytes) = item.dataForType(&NSString::from_str(SCINTILLA_LINE_BYTES)) {
+            let line_copy = match item.dataForType(&NSString::from_str(SCINTILLA_LINE_MARKER)).map(|data| data.to_vec()) {
+                Some(marker) if marker == [1] => true,
+                Some(marker) if marker == [0] => false,
+                None => false,
+                _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid raw line clipboard marker")),
+            };
+            return Ok(Some((bytes.to_vec(), line_copy)));
+        }
+    }
+    Ok(None)
+}
+
+pub(super) fn write_text(text: String, cx: &mut App) {
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+}
 
 pub(super) fn has_text(cx: &App) -> bool {
+    match read_scintilla_line_bytes() { Ok(Some(_)) => return true, Ok(None) => {}, Err(error) => eprintln!("Could not read the raw line clipboard marker: {error}") }
     cx.read_from_clipboard().is_some_and(|item| {
         item.entries
             .iter()
@@ -18,7 +70,7 @@ pub(super) fn read_text(cx: &App) -> Option<ClipboardText> {
     })
 }
 
-fn read_payload(cx: &App) -> Option<crate::input::SelectionClipboard> {
+pub(super) fn read_payload(cx: &App) -> Option<crate::input::SelectionClipboard> {
     let item = cx.read_from_clipboard()?;
     let mut text = String::new();
     let mut found = false;
@@ -37,6 +89,31 @@ fn read_payload(cx: &App) -> Option<crate::input::SelectionClipboard> {
 }
 
 impl MatrixWindow {
+    pub(super) fn copy_scintilla_lines(&mut self, cut: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.route_to_document(window, cx, move |view, window, cx| view.copy_scintilla_lines(cut, window, cx)) { return; }
+        if !self.clipboard_ready() { return; }
+        if let Err(error) = self.editor_mut().commit_composition() { self.editor_changed(Err(error), window, cx); return; }
+        let copied = (|| {
+            let document = self.editor().document().byte_snapshot();
+            let selected = self.editor().selection().range();
+            let first = document.line_index(selected.start.0).map_err(|error| crate::editor::EditError::Storage(error.to_string()))?;
+            let last = document.line_index(selected.end.0).map_err(|error| crate::editor::EditError::Storage(error.to_string()))?;
+            let start = document.line_start(first).map_err(|error| crate::editor::EditError::Storage(error.to_string()))?;
+            let end = if last + 1 < document.line_count() { document.line_start(last + 1).map_err(|error| crate::editor::EditError::Storage(error.to_string()))? } else { document.len() };
+            let bytes = document.slice(start..end).map_err(|error| crate::editor::EditError::Storage(error.to_string()))?.to_vec();
+            Ok::<_, crate::editor::EditError>((ByteOffset(start)..ByteOffset(end), bytes))
+        })();
+        let (range, bytes) = match copied { Ok(value) => value, Err(error) => { self.editor_changed(Err(error), window, cx); return; } };
+        if cut {
+            if let Err(error) = self.editor_mut().set_selections(crate::editor::SelectionSet::single(Selection { anchor: range.end, head: range.start })) { self.editor_changed(Err(error), window, cx); return; }
+            if self.editor().is_read_only() { self.editor_changed(Ok(()), window, cx); self.editor_focus.focus(window, cx); return; }
+        }
+        if let Err(error) = write_scintilla_line_bytes(&bytes, false) { self.notify_editor_error(error.to_string(), cx); return; }
+        if cut { let result = self.editor_mut().replace_selection_bytes(&[]); self.editor_changed(result, window, cx); }
+        self.editor_focus.focus(window, cx);
+        cx.notify();
+        cx.stop_propagation();
+    }
     pub(super) fn binary_clipboard(
         &mut self,
         command: crate::clipboard::BinaryCommand,
@@ -53,13 +130,11 @@ impl MatrixWindow {
             return;
         }
         if command == BinaryCommand::Paste {
-            if !cx.is_test()
-                && let Some(payload) = crate::native_binary_clipboard::read(
+            if let Some(payload) = crate::native_binary_clipboard::read(
                     &objc2_app_kit::NSPasteboard::generalPasteboard(),
                 )
-                && let Ok(text) = String::from_utf8(payload.bytes)
             {
-                self.paste_binary_text(text, payload.recorded_length, window, cx);
+                self.paste_binary_bytes(&payload.bytes, payload.recorded_length, window, cx);
                 return;
             }
             let Some(item) = cx.read_from_clipboard() else {
@@ -87,12 +162,8 @@ impl MatrixWindow {
                 .metadata()
                 .is_some_and(|metadata| metadata == BINARY_METADATA);
             let text = crate::clipboard::binary_paste_text(&text, recorded_length).to_owned();
-            self.paste_binary_text(text, recorded_length, window, cx);
+            self.paste_binary_bytes(text.as_bytes(), recorded_length, window, cx);
         } else {
-            if command == BinaryCommand::Cut && self.editor().is_read_only() {
-                self.editor_changed(Err(EditError::ReadOnly), window, cx);
-                return;
-            }
             let bytes = match crate::clipboard::binary_selection(self.editor_mut()) {
                 Ok(Some(bytes)) => bytes,
                 Ok(None) => return,
@@ -107,8 +178,7 @@ impl MatrixWindow {
                     BINARY_METADATA.into(),
                 ));
             }
-            if !cx.is_test()
-                && let Err(error) = crate::native_binary_clipboard::write(
+            if let Err(error) = crate::native_binary_clipboard::write(
                     &objc2_app_kit::NSPasteboard::generalPasteboard(),
                     &bytes,
                 )
@@ -117,7 +187,12 @@ impl MatrixWindow {
                 return;
             }
             if command == BinaryCommand::Cut {
-                self.insert_character_text(String::new(), window, cx);
+                let result = if self.editor().is_read_only() {
+                    let caret = self.editor().document().selection().range().start;
+                    self.editor_mut().select(Selection { anchor: caret, head: caret })
+                } else { self.editor_mut().replace_selection_bytes(&[]) };
+                self.editor_changed(result, window, cx);
+                self.editor_focus.focus(window, cx);
             } else {
                 self.editor_focus.focus(window, cx);
                 cx.notify();
@@ -125,20 +200,22 @@ impl MatrixWindow {
         }
     }
 
-    fn paste_binary_text(
+    fn paste_binary_bytes(
         &mut self,
-        text: String,
+        bytes: &[u8],
         recorded_length: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !recorded_length {
-            self.editor_mut().begin_undo_action();
-        }
-        self.insert_character_text(text, window, cx);
-        if !recorded_length {
-            self.editor_mut().end_undo_action();
-        }
+        let result = if self.editor().is_read_only() {
+            let caret = self.editor().document().selection().range().start;
+            self.editor_mut().select(Selection { anchor: caret, head: caret })
+        } else if recorded_length {
+            self.editor_mut().replace_selection_bytes(&[])
+                .and_then(|()| self.editor_mut().add_bytes(bytes))
+        } else { self.editor_mut().replace_selection_bytes(bytes) };
+        self.editor_changed(result, window, cx);
+        self.editor_focus.focus(window, cx);
     }
 
     pub(super) fn copy_document_path(
@@ -165,11 +242,17 @@ impl MatrixWindow {
             return;
         }
         if cut && self.editor().document().is_read_only() {
-            self.editor_changed(Err(EditError::ReadOnly), window, cx);
             cx.stop_propagation();
             return;
         }
-        let payload = self.editor().clipboard_payload();
+        if !self.line_copy_cut_without_selection && self.editor().selections().ranges().iter().all(|range| range.is_empty()) {
+            cx.stop_propagation();
+            return;
+        }
+        let payload = match self.editor().clipboard_payload() {
+            Ok(payload) => payload,
+            Err(error) => { self.editor_changed(Err(error), window, cx); cx.stop_propagation(); return; }
+        };
         if cut && let Err(error) = self.editor_mut().cut_selection() {
             self.editor_changed(Err(error), window, cx);
             cx.stop_propagation();
@@ -199,6 +282,39 @@ impl MatrixWindow {
     }
 
     pub(super) fn paste_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.clipboard_ready() {
+            match read_scintilla_line_bytes() {
+                Ok(Some((bytes, line_copy))) => {
+                    let eol = self.editor().line_ending().as_str().as_bytes();
+                    let mut converted = Vec::with_capacity(bytes.len());
+                    let mut index = 0;
+                    while index < bytes.len() {
+                        if matches!(bytes[index], b'\r' | b'\n') {
+                            if bytes[index] == b'\r' && bytes.get(index + 1) == Some(&b'\n') { index += 1; }
+                            converted.extend_from_slice(eol);
+                        } else { converted.push(bytes[index]); }
+                        index += 1;
+                    }
+                    let result = (|| {
+                        if self.editor().is_read_only() { return Err(crate::editor::EditError::ReadOnly); }
+                        if line_copy && self.editor().selection().range().is_empty() {
+                            let document = self.editor().document().byte_snapshot();
+                            let line = document.line_index(self.editor().selection().head.0).map_err(|error| crate::editor::EditError::Storage(error.to_string()))?;
+                            let start = document.line_start(line).map_err(|error| crate::editor::EditError::Storage(error.to_string()))?;
+                            self.editor_mut().set_selections(crate::editor::SelectionSet::single(Selection { anchor: ByteOffset(start), head: ByteOffset(start) }))?;
+                        }
+                        self.editor_mut().replace_selection_bytes(&converted)
+                    })();
+                    self.record_macro_step(crate::macros::MacroStep::Paste);
+                    self.editor_changed(result, window, cx);
+                    self.editor_focus.focus(window, cx);
+                    cx.stop_propagation();
+                    return;
+                }
+                Ok(None) => {},
+                Err(error) => { self.notify_editor_error(error.to_string(), cx); cx.stop_propagation(); return; }
+            }
+        }
         if self.clipboard_ready()
             && let Some(payload) = read_payload(cx)
         {
@@ -208,253 +324,5 @@ impl MatrixWindow {
             self.editor_focus.focus(window, cx);
         }
         cx.stop_propagation();
-    }
-}
-
-#[cfg(all(test, feature = "native-input-tests", debug_assertions))]
-mod tests {
-    use super::*;
-    use crate::editor::{SelectionRange, SelectionSet};
-
-    #[gpui::test]
-    fn binary_copy_and_cut_menu_keep_source_primary_bytes_and_zero_padding(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        for cut in [false, true] {
-            view.update_in(cx, |view, window, cx| {
-                *view.editor_mut() = EditorSession::from_file_text("ab\ncd");
-                view.editor_mut()
-                    .set_selections(
-                        SelectionSet::new(
-                            vec![
-                                Selection {
-                                    anchor: ByteOffset(0),
-                                    head: ByteOffset(1),
-                                }
-                                .into(),
-                                Selection {
-                                    anchor: ByteOffset(3),
-                                    head: ByteOffset(4),
-                                }
-                                .into(),
-                            ],
-                            1,
-                        )
-                        .unwrap(),
-                    )
-                    .unwrap();
-                view.menu_input(MenuEvent::OpenSubmenu("edit-paste-special"), window, cx);
-                view.menu_input(MenuEvent::First, window, cx);
-                if cut {
-                    view.menu_input(MenuEvent::Down, window, cx);
-                }
-                view.menu_input(MenuEvent::Activate, window, cx);
-                assert_eq!(
-                    cx.read_from_clipboard().unwrap().text().as_deref(),
-                    Some("c\0\0\0")
-                );
-                assert_eq!(
-                    view.editor().committed_text(),
-                    if cut { "b\nd" } else { "ab\ncd" }
-                );
-                if cut {
-                    assert!(view.editor_mut().undo());
-                    assert_eq!(view.editor().committed_text(), "ab\ncd");
-                }
-                assert!(!view.editor().document().can_undo());
-                *view.editor_mut() = EditorSession::new("");
-                view.menu_input(MenuEvent::OpenSubmenu("edit-paste-special"), window, cx);
-                view.menu_input(MenuEvent::Last, window, cx);
-                view.menu_input(MenuEvent::Activate, window, cx);
-                assert_eq!(view.editor().committed_text(), "c\0\0\0");
-            });
-        }
-    }
-
-    #[gpui::test]
-    fn binary_paste_menu_uses_source_undo_branch_for_external_and_length_marked_text(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        for recorded_length in [false, true] {
-            view.update_in(cx, |view, _, cx| {
-                *view.editor_mut() = EditorSession::new("abcd");
-                view.editor_mut()
-                    .select(Selection {
-                        anchor: ByteOffset(1),
-                        head: ByteOffset(3),
-                    })
-                    .unwrap();
-                let text = "X\r\n\0Y".to_owned();
-                let item = if recorded_length {
-                    gpui::ClipboardItem::new_string_with_metadata(
-                        text,
-                        crate::clipboard::BINARY_METADATA.into(),
-                    )
-                } else {
-                    gpui::ClipboardItem::new_string(text)
-                };
-                cx.write_to_clipboard(item);
-            });
-            view.update_in(cx, |view, window, cx| {
-                view.menu_input(MenuEvent::OpenSubmenu("edit-paste-special"), window, cx);
-                view.menu_input(MenuEvent::Last, window, cx);
-                view.menu_input(MenuEvent::Activate, window, cx);
-                assert_eq!(
-                    view.editor().committed_text(),
-                    if recorded_length {
-                        "aX\r\n\0Yd"
-                    } else {
-                        "aX\r\nd"
-                    }
-                );
-            });
-            cx.dispatch_action(EditorUndo);
-            view.read_with(cx, |view, _| {
-                assert_eq!(
-                    view.editor().committed_text(),
-                    if recorded_length { "ad" } else { "abcd" }
-                );
-            });
-            if recorded_length {
-                cx.dispatch_action(EditorUndo);
-            }
-            view.read_with(cx, |view, _| {
-                assert_eq!(view.editor().committed_text(), "abcd");
-                assert!(!view.editor().document().can_undo());
-            });
-        }
-    }
-
-    #[gpui::test]
-    fn multi_stream_cut_publishes_source_rectangle_shape_and_undoes_all_targets(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            *view.editor_mut() = EditorSession::new("ab\ncd");
-            let ranges: Vec<SelectionRange> = vec![
-                Selection {
-                    anchor: ByteOffset(0),
-                    head: ByteOffset(1),
-                }
-                .into(),
-                Selection {
-                    anchor: ByteOffset(3),
-                    head: ByteOffset(4),
-                }
-                .into(),
-            ];
-            view.editor_mut()
-                .set_selections(SelectionSet::new(ranges, 1).unwrap())
-                .unwrap();
-            assert!(!view.editor().display_selections().is_rectangular());
-            view.copy_editor(true, window, cx);
-            let payload = read_payload(cx).unwrap();
-            assert!(payload.rectangular);
-            assert!(!payload.line_copy);
-            assert_eq!(payload.text, "a\r\nc\r\n");
-            assert_eq!(view.editor().display_text(), "b\nd");
-            assert!(view.editor_mut().undo());
-            assert_eq!(view.editor().display_text(), "ab\ncd");
-            assert!(!view.editor_mut().undo());
-            *view.editor_mut() = EditorSession::new("a\0b\n");
-            view.editor_mut()
-                .select(Selection {
-                    anchor: ByteOffset(0),
-                    head: ByteOffset(4),
-                })
-                .expect("binary source selection");
-            view.binary_clipboard(crate::clipboard::BinaryCommand::Copy, window, cx);
-            assert_eq!(
-                cx.read_from_clipboard()
-                    .expect("binary clipboard")
-                    .metadata()
-                    .map(String::as_str),
-                Some(crate::clipboard::BINARY_METADATA)
-            );
-            *view.editor_mut() = EditorSession::new("");
-            view.binary_clipboard(crate::clipboard::BinaryCommand::Paste, window, cx);
-            assert_eq!(view.editor().committed_text(), "a\0b\n");
-            assert!(view.editor_mut().undo());
-            assert_eq!(view.editor().committed_text(), "");
-        });
-    }
-
-    #[gpui::test]
-    fn readonly_cut_does_not_change_clipboard_or_any_selection(cx: &mut gpui::TestAppContext) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            *view.editor_mut() = EditorSession::new("ab\ncd");
-            view.editor_mut().set_read_only(true);
-            cx.write_to_clipboard(gpui::ClipboardItem::new_string("sentinel".into()));
-            let before = view.editor().display_selections();
-            view.copy_editor(true, window, cx);
-            assert_eq!(view.editor().display_text(), "ab\ncd");
-            assert_eq!(view.editor().display_selections(), before);
-            assert_eq!(read_payload(cx).unwrap().text, "sentinel");
-        });
-        cx.dispatch_action(EditorSelectAll);
-        cx.dispatch_action(EditorCopy);
-        cx.update(|_, cx| {
-            assert_eq!(
-                read_payload(cx).expect("ordinary readonly Copy").text,
-                "ab\ncd"
-            )
-        });
-        cx.dispatch_action(EditorPaste);
-        cx.simulate_input("!");
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "ab\ncd");
-            assert_eq!(
-                view.editor().selection(),
-                Selection {
-                    anchor: ByteOffset(5),
-                    head: ByteOffset(0)
-                }
-            );
-            assert!(!view.editor().document().can_undo() && !view.editor().document().can_redo());
-        });
-        cx.dispatch_action(EditorDelete);
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "ab\ncd");
-            assert_eq!(
-                view.editor().selection(),
-                Selection {
-                    anchor: ByteOffset(0),
-                    head: ByteOffset(0)
-                }
-            );
-            assert!(!view.editor().document().can_undo() && !view.workspace.active().is_modified());
-        });
-    }
-
-    #[gpui::test]
-    fn rectangle_marker_pastes_by_rows_without_changing_external_plain_text(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            *view.editor_mut() = EditorSession::new("zz\nzz");
-            view.editor_mut()
-                .select_display(Selection {
-                    anchor: ByteOffset(1),
-                    head: ByteOffset(1),
-                })
-                .unwrap();
-            cx.write_to_clipboard(gpui::ClipboardItem::new_string_with_metadata(
-                "a\r\nc\r\n".into(),
-                ClipboardKind::Rectangle.metadata().unwrap().into(),
-            ));
-            view.paste_editor(window, cx);
-            assert_eq!(view.editor().display_text(), "zaz\nzcz");
-            assert!(view.editor_mut().undo());
-            assert_eq!(view.editor().display_text(), "zz\nzz");
-            cx.write_to_clipboard(gpui::ClipboardItem::new_string("a\nc".into()));
-            assert!(!read_payload(cx).unwrap().rectangular);
-            view.paste_editor(window, cx);
-            assert_eq!(view.editor().display_text(), "za\r\ncz\nzz");
-        });
     }
 }

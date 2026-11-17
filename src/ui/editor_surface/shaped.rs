@@ -7,7 +7,7 @@ use std::ops::Range;
 enum PartContent {
     Glyphs(Box<ShapedLine>),
     Tab(TextRun),
-    Representation(Box<ShapedLine>),
+    Representation(Box<ShapedLine>, Option<u32>),
 }
 
 struct Part {
@@ -15,6 +15,7 @@ struct Part {
     x: Pixels,
     width: Pixels,
     content: PartContent,
+    recolor: Option<(Vec<TextRun>, Pixels)>,
 }
 
 struct Group {
@@ -50,12 +51,17 @@ fn flush_group(
             x: *x,
             width,
             content: PartContent::Glyphs(Box::new(shape)),
+            recolor: Some((group.runs, group.size)),
         });
         *x += width;
     }
 }
 
 impl EditorShapedLine {
+    pub(super) fn baseline(&self) -> Pixels {
+        self.baseline
+    }
+
     pub(super) fn new(
         projection: DisplayRow,
         raw: &str,
@@ -63,6 +69,12 @@ impl EditorShapedLine {
         space_width: Pixels,
         baseline: Pixels,
         representation_font_size: Pixels,
+        representation_foreground: u32,
+        representation_background: u32,
+        eol_mode: i64,
+        eol_color: u32,
+        npc_color: Option<u32>,
+        include_controls: bool,
         window: &Window,
     ) -> Self {
         let mut tabs = raw
@@ -90,6 +102,7 @@ impl EditorShapedLine {
                         x,
                         width: next - x,
                         content: PartContent::Tab(run.clone()),
+                        recolor: None,
                     });
                     x = next;
                     byte = tab.end;
@@ -98,26 +111,51 @@ impl EditorShapedLine {
                 {
                     flush_group(&mut group, &projection, &mut parts, &mut x, window);
                     let text = &projection.text[representation.clone()];
+                    let eol =
+                        representation.start >= projection.display_index(projection.content_len());
+                    let rounded = !eol || eol_mode & 1 != 0;
+                    let custom = if eol {
+                        (eol_mode & 2 != 0).then_some(eol_color)
+                    } else if include_controls
+                        || !projection.control_representations.contains(&representation)
+                    {
+                        npc_color
+                    } else {
+                        None
+                    };
                     let shape = window.text_system().shape_line(
                         text.to_string().into(),
-                        representation_font_size,
+                        if rounded {
+                            representation_font_size
+                        } else {
+                            font_size
+                        },
                         &[TextRun {
                             len: text.len(),
-                            font: gpui::font(super::chrome::DEFAULT_EDITOR_FONT_FAMILY),
-                            color: rgb(0xffffff).into(),
+                            font: run.font.clone(),
+                            color: rgb(if rounded {
+                                representation_background
+                            } else {
+                                custom.unwrap_or(representation_foreground)
+                            })
+                            .into(),
                             background_color: None,
                             underline: None,
                             strikethrough: None,
                         }],
                         None,
                     );
-                    let width = shape.width() + px(3.);
+                    let width = shape.width() + px(if rounded { 3. } else { 0. });
                     byte = representation.end;
                     parts.push(Part {
                         range: representation,
                         x,
                         width,
-                        content: PartContent::Representation(Box::new(shape)),
+                        content: PartContent::Representation(
+                            Box::new(shape),
+                            rounded.then_some(custom.unwrap_or(representation_foreground)),
+                        ),
+                        recolor: None,
                     });
                     x += width;
                 } else {
@@ -170,7 +208,7 @@ impl EditorShapedLine {
                         PartContent::Tab(_) => {
                             part.width * (relative as f32 / part.range.len().max(1) as f32)
                         }
-                        PartContent::Representation(_) => {
+                        PartContent::Representation(_, _) => {
                             if relative == 0 {
                                 px(0.)
                             } else {
@@ -190,7 +228,7 @@ impl EditorShapedLine {
                 PartContent::Glyphs(shape) => {
                     part.range.start + shape.closest_index_for_x(x - part.x)
                 }
-                PartContent::Tab(_) | PartContent::Representation(_) => {
+                PartContent::Tab(_) | PartContent::Representation(_, _) => {
                     if x - part.x < part.width / 2. {
                         part.range.start
                     } else {
@@ -250,22 +288,27 @@ impl EditorShapedLine {
                         );
                     }
                 }
-                PartContent::Representation(shape) => {
+                PartContent::Representation(shape, background) => {
                     let top = origin.y + self.baseline - shape.ascent;
                     let blob_height = (shape.ascent + px(1.)).ceil();
-                    window.paint_quad(
-                        fill(
-                            gpui::Bounds::new(
-                                point(origin.x + part.x + px(1.), top),
-                                size(part.width - px(1.), blob_height),
-                            ),
-                            rgb(0x000000),
-                        )
-                        .corner_radii(px(1.)),
-                    );
+                    if let Some(background) = background {
+                        window.paint_quad(
+                            fill(
+                                gpui::Bounds::new(
+                                    point(origin.x + part.x + px(1.), top),
+                                    size(part.width - px(1.), blob_height),
+                                ),
+                                rgb(*background),
+                            )
+                            .corner_radii(px(1.)),
+                        );
+                    }
                     shape
                         .paint(
-                            point(origin.x + part.x + px(2.), top),
+                            point(
+                                origin.x + part.x + px(if background.is_some() { 2. } else { 0. }),
+                                top,
+                            ),
                             shape.ascent + shape.descent,
                             TextAlign::Left,
                             None,
@@ -274,6 +317,52 @@ impl EditorShapedLine {
                         )
                         .map_err(|error| error.to_string())?;
                 }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn paint_recolored(
+        &self,
+        origin: Point<Pixels>,
+        height: Pixels,
+        color: u32,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<(), String> {
+        for part in self.visible_parts(origin, window) {
+            if let (PartContent::Glyphs(original), Some((runs, font_size))) =
+                (&part.content, &part.recolor)
+            {
+                let runs = runs
+                    .iter()
+                    .map(|run| {
+                        let mut run = run.clone();
+                        run.color = run.background_color.unwrap_or_else(|| rgb(color).into());
+                        run.background_color = None;
+                        run
+                    })
+                    .collect::<Vec<_>>();
+                let shape =
+                    window
+                        .text_system()
+                        .shape_line(original.text.clone(), *font_size, &runs, None);
+                let shift = px(layout::baseline_shift(
+                    f32::from(height),
+                    f32::from(self.baseline),
+                    f32::from(shape.ascent),
+                    f32::from(shape.descent),
+                ));
+                shape
+                    .paint(
+                        point(origin.x + part.x, origin.y + shift),
+                        height,
+                        TextAlign::Left,
+                        None,
+                        window,
+                        cx,
+                    )
+                    .map_err(|error| error.to_string())?;
             }
         }
         Ok(())
@@ -311,7 +400,7 @@ impl EditorShapedLine {
                         ));
                     }
                 }
-                PartContent::Representation(_) => {}
+                PartContent::Representation(_, _) => {}
             }
         }
         Ok(())

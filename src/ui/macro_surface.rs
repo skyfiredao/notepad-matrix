@@ -3,6 +3,21 @@ use super::*;
 use crate::macros::{MacroCommand, MacroLibrary, MacroStep, RepeatMode, RepeatTracker};
 
 impl MatrixWindow {
+    pub(super) fn initialize_scintilla_shortcut_integration(
+        &mut self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+        self.set_scintilla_macro_recorder(Self::record_scintilla_macro_step);
+        self.reset_scintilla_shortcut_target();
+    }
+
+    fn record_scintilla_macro_step(&mut self, message: u32) {
+        if MacroStep::scintilla_recordable(message) {
+            self.record_macro_step(MacroStep::Scintilla { message, wparam: 0, lparam: 0 });
+        }
+    }
+
     pub(super) fn macro_interaction_blocked(&self) -> bool {
         self.macro_playing && !self.macro_dialogs.executing_step
     }
@@ -292,6 +307,9 @@ impl MatrixWindow {
 
     fn play_macro_step(&mut self, step: MacroStep, window: &mut Window, cx: &mut Context<Self>) {
         match step {
+            MacroStep::Scintilla { message, wparam: _, lparam: _ } => {
+                self.execute_scintilla_shortcut(message, window, cx)
+            }
             MacroStep::CharacterText(text) => {
                 self.insert_character_text(text.to_string(), window, cx)
             }
@@ -339,10 +357,7 @@ impl MatrixWindow {
                     }
                     MacroStep::DeleteLine => self.editor_mut().delete_current_line(),
                     MacroStep::BackspaceNotLine => self.editor_mut().backspace_not_line(),
-                    MacroStep::ClearSelection => {
-                        let range = self.editor().selection().range();
-                        self.editor_mut().replace_display_range(range, "")
-                    }
+                    MacroStep::ClearSelection => self.editor_mut().delete_forward(),
                     MacroStep::SelectAll => {
                         let end = ByteOffset(self.editor().document().len_bytes());
                         self.editor_mut().select(Selection {

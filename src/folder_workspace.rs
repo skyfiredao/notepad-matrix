@@ -331,12 +331,37 @@ pub fn existing_buffer(workspace: &Workspace, path: &Path) -> Option<BufferId> {
     })
 }
 
+pub fn dropped_folder_files(paths: Vec<PathBuf>) -> io::Result<Vec<PathBuf>> {
+    let mut pending = paths;
+    let mut files = Vec::new();
+    let mut visited = BTreeSet::new();
+    while let Some(path) = pending.pop() {
+        let metadata = fs::metadata(&path)?;
+        if metadata.is_file() { files.push(path); continue; }
+        if !metadata.is_dir() { continue; }
+        if !visited.insert(fs::canonicalize(&path)?) { continue; }
+        let mut children = fs::read_dir(&path)?.map(|entry| entry.map(|entry| entry.path())).collect::<io::Result<Vec<_>>>()?;
+        children.sort();
+        pending.extend(children.into_iter().rev());
+    }
+    files.sort();
+    files.dedup();
+    Ok(files)
+}
+
 pub struct FolderFile {
     file: DiskFile,
     text: String,
 }
 
 impl FolderFile {
+    pub fn load_with_preferences(path: &Path,settings: &serde_json::Value) -> io::Result<Self> {
+        let path = fs::canonicalize(path)?;
+        if !fs::metadata(&path)?.is_file() { return Err(io::Error::other("Not a regular file")); }
+        let (file,text) = DiskFile::load_with_preferences(&path,settings)?;
+        Ok(Self { file,text })
+    }
+
     pub fn load(path: &Path) -> io::Result<Self> {
         let path = fs::canonicalize(path)?;
         if !fs::metadata(&path)?.is_file() {
@@ -834,6 +859,7 @@ impl FolderWorkspace {
                     return false;
                 }
                 match child.and_then(|child| Ok((child.path(), child.file_type()?))) {
+                    Ok((_,kind)) if kind.is_symlink() && !self.follow_links => {},
                     Ok((path, kind)) => rows.push(FolderEntry {
                         path: path.clone(),
                         depth: depth + 1,
@@ -842,6 +868,8 @@ impl FolderWorkspace {
                             && fs::metadata(&path).is_ok_and(|metadata| metadata.is_dir())
                         {
                             EntryKind::Directory
+                        } else if kind.is_symlink() && self.follow_links && fs::metadata(&path).is_ok_and(|metadata| metadata.is_file()) {
+                            EntryKind::File
                         } else if kind.is_symlink() {
                             EntryKind::Symlink
                         } else if kind.is_dir() {

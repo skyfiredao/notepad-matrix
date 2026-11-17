@@ -4,24 +4,22 @@ use std::sync::Arc;
 use crate::editor::{ByteOffset, Selection};
 use crate::search::{LiteralOptions, SearchError};
 
-pub fn normalize_cached_range(text: &ropey::Rope, range: Range<ByteOffset>) -> Range<ByteOffset> {
-    let normalize = |position: ByteOffset| {
-        let mut at = position.0.min(text.len());
-        while !text.is_char_boundary(at) {
-            at += 1;
-        }
-        if at > 0 && at < text.len() && text.byte(at - 1) == b'\r' && text.byte(at) == b'\n' {
-            at += 1;
-        }
-        ByteOffset(at)
-    };
-    normalize(range.start)..normalize(range.end)
-}
-
 pub struct Document {
     pub name: String,
-    pub text: Arc<str>,
+    pub bytes: crate::byte_buffer::ByteBuffer,
     pub selection: Option<Selection>,
+}
+
+pub(crate) struct SearchDocument {
+    pub document: Document,
+    pub regex_state: crate::search::RegexState,
+    pub identity: Option<usize>,
+}
+
+impl From<Document> for SearchDocument {
+    fn from(document: Document) -> Self {
+        Self { document, regex_state: Default::default(), identity: None }
+    }
 }
 
 pub struct FoundLine {
@@ -64,6 +62,7 @@ pub struct Search {
     pub hits: usize,
     pub searched: usize,
     pub errors: Vec<String>,
+    pub search_error: Option<String>,
     pub collapsed: bool,
 }
 
@@ -284,6 +283,20 @@ impl ResultLineFilter {
         )
     }
 
+    pub(crate) fn search_with_progress_and_state(
+        &self,
+        query: &str,
+        options: LiteralOptions,
+        match_line_numbers: bool,
+        one_entry_per_line: bool,
+        progress: &ResultSearchProgress,
+        load: impl FnMut(&str) -> Option<SearchDocument>,
+        updates: &mut Vec<(usize, crate::search::RegexState)>,
+    ) -> Result<Search, SearchError> {
+        self.search_controlled_with_state(query, options, match_line_numbers, one_entry_per_line,
+            ResultSearchControl { cancel: &progress.cancel, progress: Some(progress) }, load, updates)
+    }
+
     fn search_controlled(
         &self,
         query: &str,
@@ -293,6 +306,20 @@ impl ResultLineFilter {
         control: ResultSearchControl<'_>,
         mut load: impl FnMut(&str) -> Option<Document>,
     ) -> Result<Search, SearchError> {
+        self.search_controlled_with_state(query, options, match_line_numbers, one_entry_per_line,
+            control, |path| load(path).map(SearchDocument::from), &mut Vec::new())
+    }
+
+    fn search_controlled_with_state(
+        &self,
+        query: &str,
+        options: LiteralOptions,
+        match_line_numbers: bool,
+        one_entry_per_line: bool,
+        control: ResultSearchControl<'_>,
+        mut load: impl FnMut(&str) -> Option<SearchDocument>,
+        updates: &mut Vec<(usize, crate::search::RegexState)>,
+    ) -> Result<Search, SearchError> {
         let paths = &self.paths;
         let mut found = Vec::new();
         let mut hits = 0;
@@ -300,21 +327,34 @@ impl ResultLineFilter {
             if control.cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 break;
             }
-            let Some(mut doc) = load(path) else {
+            let Some(mut source) = load(path) else {
                 if let Some(progress) = control.progress {
                     progress.record(index + 1, hits);
                 }
                 continue;
             };
+            if let Some(identity) = source.identity
+                && let Some((_, state)) = updates.iter().rev().find(|(id, _)| *id == identity)
+            {
+                source.regex_state = state.clone();
+            }
+            let mut doc = source.document;
             doc.selection = None;
-            let mut matches =
-                crate::search::literal_ranges_in(&doc.text, query, 0..doc.text.len(), options)?;
+            if doc.bytes.is_empty() {
+                if let Some(progress) = control.progress { progress.record(index + 1, hits); }
+                continue;
+            }
+            let matches = crate::search::literal_ranges_in_bytes_without_empty_with_state(
+                &doc.bytes, query, 0..doc.bytes.len(), options, &mut source.regex_state);
+            if matches!(options.mode, crate::search::SearchMode::Regex { .. }) && let Some(identity) = source.identity {
+                updates.push((identity, source.regex_state));
+            }
+            let mut matches = matches?;
             if match_line_numbers && !matches.is_empty() {
                 let source_lines = self.lines.get(path).map_or(&[][..], Vec::as_slice);
-                let rope = ropey::Rope::from_str(&doc.text);
                 let mut from = 0;
                 matches.retain(|range| {
-                    let line = rope.byte_to_line_idx(range.start.0, ropey::LineType::LF_CR) + 1;
+                    let Ok(line) = doc.bytes.line_index(range.start.0).map(|line| line + 1) else { return false; };
                     if let Some(index) = source_lines[from..]
                         .iter()
                         .position(|&source| source == line)
@@ -760,23 +800,40 @@ pub fn search_documents(
     options: LiteralOptions,
     one_entry_per_line: bool,
 ) -> Result<Search, SearchError> {
+    search_documents_with_state(query, documents.into_iter().map(SearchDocument::from).collect(),
+        options, one_entry_per_line, &mut Vec::new())
+}
+
+pub(crate) fn search_documents_with_state(
+    query: &str,
+    documents: Vec<SearchDocument>,
+    options: LiteralOptions,
+    one_entry_per_line: bool,
+    updates: &mut Vec<(usize, crate::search::RegexState)>,
+) -> Result<Search, SearchError> {
     let searched = documents.len();
-    let selection_scope = documents.iter().any(|doc| {
+    let selection_scope = documents.iter().any(|source| {
+        let doc = &source.document;
         doc.selection.is_some_and(|selection| {
             let range = selection.range();
-            range.start.0 != 0 || range.end.0 != doc.text.len()
+            range.start.0 != 0 || range.end.0 != doc.bytes.len()
         })
     });
     let mut found = Vec::new();
-    for doc in documents {
-        let scope = crate::search::literal_scope(
-            &doc.text,
-            doc.selection.unwrap_or_default(),
-            true,
-            false,
-            doc.selection.is_some(),
-        )?;
-        let matches = crate::search::literal_ranges_in(&doc.text, query, scope, options)?;
+    for mut source in documents {
+        if let Some(identity) = source.identity
+            && let Some((_, state)) = updates.iter().rev().find(|(id, _)| *id == identity)
+        {
+            source.regex_state = state.clone();
+        }
+        let doc = source.document;
+        let scope = crate::search::literal_scope_bytes(&doc.bytes, doc.selection.unwrap_or_default(), true, false, doc.selection.is_some())?;
+        if scope.is_empty() { continue; }
+        let matches = crate::search::literal_ranges_in_bytes_with_state(&doc.bytes, query, scope, options, &mut source.regex_state);
+        if matches!(options.mode, crate::search::SearchMode::Regex { .. }) && let Some(identity) = source.identity {
+            updates.push((identity, source.regex_state));
+        }
+        let matches = matches?;
         if matches.is_empty() {
             continue;
         }
@@ -798,37 +855,40 @@ pub fn from_file_search(
     options: LiteralOptions,
     one_entry_per_line: bool,
 ) -> Search {
-    let mut groups: Vec<(Document, Vec<Range<ByteOffset>>)> = Vec::new();
+    let mut groups: Vec<(usize, Document, Vec<Range<ByteOffset>>)> = Vec::new();
     for hit in result.matches {
         if groups
             .last()
-            .is_none_or(|(doc, _)| std::path::Path::new(&doc.name) != hit.path)
+            .is_none_or(|(file_index, _, _)| *file_index != hit.file_index)
         {
             groups.push((
+                hit.file_index,
                 Document {
                     name: hit.path.display().to_string(),
-                    text: hit.searched_text,
+                    bytes: hit.searched_bytes,
                     selection: None,
                 },
                 Vec::new(),
             ));
         }
-        if let Some((_, matches)) = groups.last_mut() {
+        if let Some((_, _, matches)) = groups.last_mut() {
             matches.push(hit.range);
         }
     }
     let documents = groups
         .into_iter()
-        .map(|(doc, matches)| found_document(doc, matches, one_entry_per_line))
+        .map(|(_, doc, matches)| found_document(doc, matches, one_entry_per_line))
         .collect();
-    finish_search(
+    let mut search = finish_search(
         query,
         documents,
         result.files_searched,
         false,
         options,
         result.errors,
-    )
+    );
+    search.search_error = result.search_error;
+    search
 }
 
 struct LinePreview {
@@ -839,12 +899,13 @@ struct LinePreview {
     caption: String,
 }
 
-fn line_preview(rope: &ropey::Rope, line: usize, digits: usize) -> LinePreview {
-    let text = rope.line(line, ropey::LineType::LF_CR);
-    let mut length = text.len();
-    while length > 0 && matches!(text.byte(length - 1), b'\r' | b'\n') {
-        length -= 1;
-    }
+fn line_preview(bytes: &crate::byte_buffer::ByteBuffer, line: usize, digits: usize) -> LinePreview {
+    let start = bytes.line_start(line).unwrap_or(bytes.len());
+    let mut end = bytes.line_start(line + 1).unwrap_or(bytes.len());
+    while end > start && matches!(bytes.byte(end - 1), Some(b'\r' | b'\n')) { end -= 1; }
+    let end = end.min(start.saturating_add(2044));
+    let text = bytes.slice(start..end).map(|bytes| crate::byte_projection::ByteProjection::from_bytes(&bytes).text().to_string()).unwrap_or_default();
+    let length = text.len();
     let prefix = format!("\tLine {:>digits$}: ", line + 1);
     let original_length = prefix.len() + length + 2;
     let truncated = original_length >= 2048;
@@ -858,15 +919,13 @@ fn line_preview(rope: &ropey::Rope, line: usize, digits: usize) -> LinePreview {
     }
     let mut caption = String::with_capacity(prefix.len() + end + if truncated { 4 } else { 0 });
     caption.push_str(&prefix);
-    for chunk in text.slice(..end).chunks() {
-        caption.push_str(chunk);
-    }
+    caption.push_str(&text[..end]);
     if truncated {
         caption.push_str(" ...");
     }
     LinePreview {
         line,
-        start: rope.line_to_byte_idx(line, ropey::LineType::LF_CR),
+        start,
         prefix_len: prefix.len(),
         original_length,
         caption,
@@ -878,18 +937,19 @@ fn found_document(
     matches: Vec<Range<ByteOffset>>,
     one_entry_per_line: bool,
 ) -> FoundDocument {
-    let rope = ropey::Rope::from_str(&doc.text);
-    let digits = rope.len_lines(ropey::LineType::LF_CR).to_string().len();
+    let digits = doc.bytes.line_count().to_string().len();
+    let projection = crate::byte_projection::ByteProjection::from_bytes(&doc.bytes);
     let mut lines: Vec<FoundLine> = Vec::new();
     let mut preview: Option<LinePreview> = None;
     for range in &matches {
-        let line = rope.byte_to_line_idx(range.start.0, ropey::LineType::LF_CR);
-        let preview = preview.get_or_insert_with(|| line_preview(&rope, line, digits));
+        let line = doc.bytes.line_index(range.start.0).unwrap_or(doc.bytes.line_count() - 1);
+        let preview = preview.get_or_insert_with(|| line_preview(&doc.bytes, line, digits));
         if preview.line != line {
-            *preview = line_preview(&rope, line, digits);
+            *preview = line_preview(&doc.bytes, line, digits);
         }
-        let highlight = preview.prefix_len + range.start.0 - preview.start
-            ..preview.prefix_len + range.end.0 - preview.start;
+        let display_start = projection.display_position(ByteOffset(preview.start), crate::byte_projection::Affinity::Before).map_or(preview.start, |at| at.0);
+        let highlight = preview.prefix_len + projection.display_position(range.start, crate::byte_projection::Affinity::Before).map_or(range.start.0, |at| at.0) - display_start
+            ..preview.prefix_len + projection.display_position(range.end, crate::byte_projection::Affinity::After).map_or(range.end.0, |at| at.0) - display_start;
         if one_entry_per_line
             && lines
                 .last()
@@ -930,6 +990,8 @@ fn finish_search(
     let mut settings = String::from(match options.mode {
         crate::search::SearchMode::Normal => "Normal",
         crate::search::SearchMode::Extended => "Extended",
+        crate::search::SearchMode::Regex { dot_matches_newline: true } => "RegEx.",
+        crate::search::SearchMode::Regex { dot_matches_newline: false } => "RegEx",
     });
     if options.match_case || options.whole_word {
         settings.push_str(": ");
@@ -960,6 +1022,7 @@ fn finish_search(
         hits,
         searched,
         errors,
+        search_error: None,
         collapsed: false,
     }
 }

@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import struct
 import subprocess
@@ -11,6 +12,46 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = 'aarch64-apple-darwin'
+
+
+def document_types(output):
+    source = (ROOT / 'src/ui/preferences_files_surface.rs').read_text(encoding='utf-8')
+    start = source.index('pub(super) const ASSOCIATION_GROUPS:')
+    end = source.index('\n];', start)
+    extensions = [extension for _, values in re.findall(r'\("([^\"]+)",\s*&\[(.*?)\]\)', source[start:end], re.S)
+                  for extension in re.findall(r'"([^\"]+)"', values)]
+    if not extensions:
+        raise ValueError('No source-supported document extensions found')
+    program = '''import Foundation
+import UniformTypeIdentifiers
+var types: [String: String] = [:]
+for ext in CommandLine.arguments.dropFirst() {
+    if let type = UTType(filenameExtension: ext) { types[ext] = type.identifier }
+}
+let data = try JSONSerialization.data(withJSONObject: types)
+FileHandle.standardOutput.write(data)
+'''
+    with tempfile.TemporaryDirectory(prefix='.document-types-', dir=output) as temporary:
+        script = Path(temporary) / 'document-types.swift'
+        script.write_text(program, encoding='utf-8')
+        resolved = json.loads(subprocess.check_output(['/usr/bin/swift', str(script), *extensions]))
+    types = []
+    grouped = {}
+    for extension in extensions:
+        identifier = resolved.get(extension)
+        if not identifier:
+            raise ValueError(f'macOS cannot resolve the content type for .{extension}')
+        if identifier.startswith('dyn.'):
+            types.append({'CFBundleTypeName': f'{extension.upper()} document',
+                          'CFBundleTypeRole': 'Editor', 'LSHandlerRank': 'Alternate',
+                          'CFBundleTypeExtensions': [extension]})
+        else:
+            grouped.setdefault(identifier, []).append(extension)
+    for identifier, members in grouped.items():
+        types.append({'CFBundleTypeName': identifier, 'CFBundleTypeRole': 'Editor',
+                      'LSHandlerRank': 'Alternate', 'LSItemContentTypes': [identifier],
+                      'CFBundleTypeExtensions': members})
+    return types
 
 
 def release_packages():
@@ -75,6 +116,7 @@ def package(binary, output):
     if any(output.iterdir()):
         raise ValueError('Refusing to overwrite existing package artifacts')
     packages = release_packages()
+    types = document_types(output)
     version = next(item['version'] for item in packages if item['name'] == 'notepad-matrix')
     app = output / 'notepad-matrix.app'
     with tempfile.TemporaryDirectory(prefix='.package-', dir=output) as temporary:
@@ -86,6 +128,7 @@ def package(binary, output):
         shutil.copy2(binary, executable)
         executable.chmod(0o755)
         shutil.copy2(ROOT / 'assets/notepad-plus-plus/npp.icns', resources / 'npp.icns')
+        shutil.copytree(ROOT / 'assets/themes', resources / 'themes')
         identity = {
             'CFBundleName': 'notepad-matrix',
             'CFBundleDisplayName': 'notepad-matrix',
@@ -98,6 +141,7 @@ def package(binary, output):
             'LSMinimumSystemVersion': os.environ['MACOSX_DEPLOYMENT_TARGET'],
             'NSHighResolutionCapable': True,
             'NSSupportsAutomaticGraphicsSwitching': True,
+            'CFBundleDocumentTypes': types,
         }
         (contents / 'Info.plist').write_bytes(plistlib.dumps(identity))
         install_licenses(resources, packages)

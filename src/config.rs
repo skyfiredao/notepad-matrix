@@ -144,7 +144,7 @@ impl ConfigStore {
                 "function_list_sort_default": false,
                 "docPeekOnTab": false,
                 "tabCompactLabelLen": 0,
-                "recent_files_limit": 5,
+                "recent_files_limit": 10,
                 "whiteSpaceShow": false,
                 "eolShow": false,
                 "npcShow": false,

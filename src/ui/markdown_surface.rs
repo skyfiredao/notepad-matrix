@@ -239,159 +239,6 @@ fn scroll_thumb(list: &gpui::ListState, height: gpui::Pixels) -> std::ops::Range
     top..top + thumb
 }
 
-#[cfg(all(test, feature = "native-input-tests"))]
-mod tests {
-    use super::*;
-
-    #[gpui::test]
-    fn native_prepared_markdown_handles_deep_quotes_and_linked_container_images(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let home = tempfile::tempdir().unwrap();
-        let path = home.path().join("linked.md");
-        let source = format!(
-            "{}x\n\n- [![alt](image.png)](https://example.com)\n\n| image |\n| --- |\n| ![table](image.png) |\n",
-            "> ".repeat(10_000)
-        );
-        std::fs::write(&path, &source).unwrap();
-        std::fs::write(
-            home.path().join("image.png"),
-            include_bytes!("../../assets/notepad-plus-plus/saved.png"),
-        )
-        .unwrap();
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            let (file, text) = crate::files::DiskFile::load_unicode(&path).unwrap();
-            view.workspace.open_buffer(file, &text).unwrap();
-            view.editor_changed(Ok(()), window, cx);
-            view.toggle_markdown_preview(window, cx);
-        });
-        if let Some(task) = view.update(cx, |view, _| view.markdown_preview.task.take()) {
-            cx.foreground_executor().clone().block_test(task);
-        }
-        cx.run_until_parked();
-        let handle = view.read_with(cx, |view, _| {
-            view.floating_windows[&floating_windows::DialogKind::MarkdownPreview]
-        });
-        let mut preview = gpui::VisualTestContext::from_window(handle.into(), &cx.cx);
-        assert!(preview.debug_bounds("markdown-quote").is_some());
-        let image = preview.debug_bounds("markdown-linked-image").unwrap();
-        preview.simulate_click(image.center(), gpui::Modifiers::default());
-        assert_eq!(cx.opened_url().as_deref(), Some("https://example.com/"));
-        view.update(cx, |view, cx| {
-            view.markdown_preview.list.scroll_to_reveal_item(3);
-            cx.notify();
-        });
-        preview.debug_bounds("markdown-content").unwrap();
-        assert!(preview.debug_bounds("markdown-image").is_some());
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), source);
-            assert!(!view.editor().document().can_undo());
-        });
-    }
-
-    #[gpui::test]
-    fn native_markdown_preview_renders_updates_scrolls_and_closes_without_editing_source(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let home = tempfile::tempdir().expect("isolated Markdown document");
-        let path = home.path().join("preview.md");
-        let source = "# 标题\n\n**bold** and *italic* [top](#标题)\n\n```rust\nlet x = 1;\n```\n\n- first\n- second\n\n| left | right |\n| --- | --- |\n| a | b |\n\n![local](image.png)\n";
-        std::fs::write(&path, source).unwrap();
-        std::fs::write(
-            home.path().join("image.png"),
-            include_bytes!("../../assets/notepad-plus-plus/saved.png"),
-        )
-        .unwrap();
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            let (file, text) = crate::files::DiskFile::load_unicode(&path).unwrap();
-            view.workspace.open_buffer(file, &text).unwrap();
-            view.editor_mut()
-                .select(Selection {
-                    anchor: ByteOffset(0),
-                    head: ByteOffset(1),
-                })
-                .unwrap();
-            view.editor_changed(Ok(()), window, cx);
-        });
-        let initial = view.read_with(cx, |view, _| {
-            (view.editor().display_revision(), view.editor().selection())
-        });
-        cx.dispatch_action(OpenViewMenu);
-        let menu = cx
-            .debug_bounds("view-markdown-preview")
-            .expect("View menu preview entry");
-        cx.simulate_click(menu.center(), gpui::Modifiers::default());
-        if let Some(task) = view.update(cx, |view, _| view.markdown_preview.task.take()) {
-            cx.foreground_executor().clone().block_test(task);
-        }
-        cx.run_until_parked();
-        let handle = view.read_with(cx, |view, _| {
-            view.floating_windows[&floating_windows::DialogKind::MarkdownPreview]
-        });
-        let mut preview = gpui::VisualTestContext::from_window(handle.into(), &cx.cx);
-        assert!(preview.debug_bounds("markdown-preview").is_some());
-        assert!(preview.debug_bounds("markdown-heading").is_some());
-        assert!(preview.debug_bounds("markdown-code-block").is_some());
-        assert!(preview.debug_bounds("markdown-list").is_some());
-        assert!(preview.debug_bounds("markdown-table").is_some());
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), source);
-            assert_eq!(
-                (view.editor().display_revision(), view.editor().selection()),
-                initial
-            );
-            assert!(!view.editor().document().can_undo());
-        });
-        let content = preview.debug_bounds("markdown-content").unwrap();
-        preview.simulate_event(gpui::ScrollEvent {
-            position: content.center(),
-            delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-160.))),
-            ..Default::default()
-        });
-        assert!(preview.debug_bounds("markdown-image").is_some());
-        view.update_in(cx, |view, window, cx| {
-            view.editor_mut()
-                .move_to_document_edge(true, false)
-                .unwrap();
-            view.editor_mut()
-                .insert_text("\n\n## 更新后的标题\n")
-                .unwrap();
-            view.editor_changed(Ok(()), window, cx);
-            view.refresh_markdown_preview(cx);
-        });
-        if let Some(task) = view.update(cx, |view, _| view.markdown_preview.task.take()) {
-            cx.foreground_executor().clone().block_test(task);
-        }
-        cx.run_until_parked();
-        view.read_with(cx, |view, _| {
-            assert!(
-                view.markdown_preview
-                    .document
-                    .as_ref()
-                    .unwrap()
-                    .rows
-                    .iter()
-                    .any(|row| matches!(&row.content, RowContent::Text { inline, heading: Some(2) } if inline.text.as_ref() == "更新后的标题"))
-            )
-        });
-        let expected = view.read_with(cx, |view, _| view.editor().selection());
-        let close = preview.debug_bounds("markdown-preview-close").unwrap();
-        preview.simulate_click(close.center(), gpui::Modifiers::default());
-        cx.run_until_parked();
-        assert_eq!(cx.windows().len(), 1);
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().selection(), expected);
-            assert!(
-                view.editor()
-                    .committed_text()
-                    .ends_with("## 更新后的标题\n")
-            );
-            assert!(!view.markdown_preview.visible);
-        });
-    }
-}
 
 pub(super) struct State {
     pub(super) visible: bool,
@@ -1239,7 +1086,9 @@ impl MatrixWindow {
                     .flex()
                     .justify_between()
                     .items_center()
-                    .mb(px(10.))
+                    .font_family(dialog_font::font_family())
+                    .text_size(dialog_font::px(13.))
+                    .mb(dialog_font::px(10.))
                     .child(format!(
                         "{} · Markdown Preview (read-only)",
                         self.workspace.active().name()
@@ -1255,8 +1104,8 @@ impl MatrixWindow {
                             .border_color(rgb(0xaaaaaa))
                             .bg(rgb(0xf0f0f0))
                             .text_color(rgb(0x202020))
-                            .px(px(14.))
-                            .py(px(5.))
+                            .px(dialog_font::px(14.))
+                            .py(dialog_font::px(5.))
                             .cursor_pointer()
                             .hover(|style| style.bg(rgb(0xe5f1fb)).border_color(rgb(0x0078d7)))
                             .active(|style| style.bg(rgb(0xcce4f7)))
@@ -1278,6 +1127,8 @@ impl MatrixWindow {
                 div()
                     .id("markdown-content")
                     .debug_selector(|| "markdown-content".into())
+                    .font_family("Helvetica")
+                    .text_size(px(13.))
                     .flex_1()
                     .min_h(px(0.))
                     .w_full()

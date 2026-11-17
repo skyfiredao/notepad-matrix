@@ -21,7 +21,7 @@ pub(super) struct State {
     history_original: String,
     progress: Option<ProgressView>,
     progress_focus: FocusHandle,
-    mode_focus: [FocusHandle; 2],
+    mode_focus: [FocusHandle; 3],
 }
 
 impl State {
@@ -44,6 +44,7 @@ impl State {
             mode_focus: [
                 cx.focus_handle().tab_index(4).tab_stop(true),
                 cx.focus_handle().tab_index(4).tab_stop(false),
+                cx.focus_handle().tab_index(4).tab_stop(false),
             ],
         }
     }
@@ -64,7 +65,9 @@ struct ResultPane {
     results_selected: usize,
     results_width_item: Option<usize>,
     results_width: gpui::Pixels,
+    style_revision: Option<(u64, bool)>,
     results_cursor_x: Option<gpui::Pixels>,
+    caret_affinity: Option<(u64, crate::finder::TextPoint, bool)>,
     text_anchor: Option<crate::finder::TextPoint>,
     text_head: Option<crate::finder::TextPoint>,
     dragging_text: bool,
@@ -87,7 +90,9 @@ impl ResultPane {
             results_selected: 0,
             results_width_item: None,
             results_width: px(0.),
+            style_revision: None,
             results_cursor_x: None,
+            caret_affinity: None,
             text_anchor: None,
             text_head: None,
             dragging_text: false,
@@ -115,7 +120,9 @@ impl ResultPane {
             results_selected,
             results_width_item,
             results_width,
+            style_revision,
             results_cursor_x,
+            caret_affinity,
             text_anchor,
             text_head,
             dragging_text,
@@ -130,6 +137,14 @@ impl ResultPane {
 
 impl MatrixWindow {
     fn toggle_result_check(&mut self, check: ResultCheck, cx: &mut Context<Self>) {
+        if matches!(check, ResultCheck::WholeWord)
+            && matches!(
+                self.files_search.views.options.mode,
+                crate::search::SearchMode::Regex { .. }
+            )
+        {
+            return;
+        }
         let value = match check {
             ResultCheck::FoundLines => &mut self.files_search.views.match_line_numbers,
             ResultCheck::WholeWord => &mut self.files_search.views.options.whole_word,
@@ -146,7 +161,14 @@ impl MatrixWindow {
         cx: &mut Context<Self>,
     ) {
         self.files_search.views.options.mode = mode;
-        let index = usize::from(mode == crate::search::SearchMode::Extended);
+        if matches!(mode, crate::search::SearchMode::Regex { .. }) {
+            self.files_search.views.options.whole_word = false;
+        }
+        let index = match mode {
+            crate::search::SearchMode::Normal => 0,
+            crate::search::SearchMode::Extended => 1,
+            crate::search::SearchMode::Regex { .. } => 2,
+        };
         self.files_search.views.mode_focus[index].focus(window, cx);
         cx.notify();
     }
@@ -260,7 +282,10 @@ impl MatrixWindow {
     }
 
     pub(in crate::ui) fn find_in_results_progress_visible(&self) -> bool {
-        self.files_search
+        self.files_search.progress.as_ref().is_some_and(|progress| {
+            let snapshot = progress.snapshot();
+            snapshot.discovering || snapshot.total > 1
+        }) || self.files_search
             .views
             .progress
             .as_ref()
@@ -272,6 +297,7 @@ impl MatrixWindow {
     }
 
     pub(in crate::ui) fn cancel_find_in_results_progress(&mut self, cx: &mut Context<Self>) {
+        if self.files_search.progress.is_some() { self.cancel_active_file_search(cx); return; }
         if let Some(progress) = &self.files_search.views.progress {
             progress.state.cancel();
             cx.notify();
@@ -282,24 +308,25 @@ impl MatrixWindow {
         &self,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let progress = self.files_search.views.progress.as_ref()?;
-        let (completed, hits) = progress.state.snapshot();
-        let cancelled = progress.state.is_cancelled();
-        let path = if cancelled {
-            "Cancelling operation, please wait..."
+        use super::super::dialog_font::px;
+        let (has_info, hits, cancelled, path, percent) = if let Some(progress) = &self.files_search.progress {
+            let snapshot = progress.snapshot();
+            let cancelled = self.files_search.cancel.as_ref().is_some_and(|cancel| cancel.load(Ordering::Relaxed));
+            let step = if snapshot.replacing && snapshot.total >= 200 { snapshot.total / 100 } else { 1 };
+            let percent = if snapshot.completed == 0 || snapshot.total == 0 { 0 } else { ((snapshot.completed - 1) / step * step) * 100 / snapshot.total };
+            (snapshot.discovering || snapshot.completed > 0, snapshot.hits, cancelled, snapshot.path, percent as f32)
         } else {
-            completed
-                .checked_sub(1)
-                .and_then(|index| progress.paths.get(index))
-                .map_or("", String::as_str)
+            let progress = self.files_search.views.progress.as_ref()?;
+            let (completed, hits) = progress.state.snapshot();
+            (completed > 0, hits, progress.state.is_cancelled(), completed.checked_sub(1).and_then(|index| progress.paths.get(index)).cloned().unwrap_or_default(), progress.state.percent(progress.paths.len()) as f32)
         };
-        let percent = progress.state.percent(progress.paths.len()) as f32;
+        let path = if cancelled { "Cancelling operation, please wait...".to_owned() } else { path };
         Some(
             div()
                 .id("find-results-progress")
                 .debug_selector(|| "find-results-progress".into())
                 .role(Role::Dialog)
-                .aria_label("Find In Files progress...")
+                .aria_label(self.find_in_results_progress_title())
                 .relative()
                 .size_full()
                 .bg(rgb(0xf0f0f0))
@@ -342,7 +369,7 @@ impl MatrixWindow {
                         .top(px(23.))
                         .w(px(150.))
                         .h(px(18.))
-                        .child(if completed == 0 {
+                        .child(if !has_info {
                             String::new()
                         } else {
                             hits.to_string()
@@ -408,6 +435,15 @@ impl MatrixWindow {
                 )
                 .into_any_element(),
         )
+    }
+
+    pub(in crate::ui) fn find_in_results_progress_title(&self) -> &'static str {
+        if let Some(progress) = &self.files_search.progress {
+            let snapshot = progress.snapshot();
+            if snapshot.discovering { return "Discovering file candidates..."; }
+            if snapshot.replacing { return "Replace In Files progress..."; }
+        }
+        "Find In Files progress..."
     }
 
     pub(in crate::ui) fn focus_find_in_results_progress(
@@ -501,6 +537,7 @@ impl MatrixWindow {
     }
 
     fn render_result_query_combo(&self, cx: &mut Context<Self>) -> AnyElement {
+        use super::super::dialog_font::px;
         let open = self.files_search.views.history_open;
         div()
             .id("find-in-results-query-combo")
@@ -623,6 +660,7 @@ impl MatrixWindow {
     }
 
     pub(in crate::ui) fn render_find_in_results(&self, cx: &mut Context<Self>) -> AnyElement {
+        use super::super::dialog_font::px;
         div()
             .id("find-in-results-dialog")
             .debug_selector(|| "find-in-results-dialog".into())
@@ -631,7 +669,7 @@ impl MatrixWindow {
             .key_context("MatrixFind")
             .size_full()
             .relative()
-            .font_family("Helvetica")
+            .font_family(dialog_font::font_family())
             .text_size(px(11.))
             .line_height(px(16.))
             .bg(rgb(0xf9f9f9))
@@ -682,7 +720,7 @@ impl MatrixWindow {
             .child(
                 find_surface::checkbox(
                     "find-in-results-word",
-                    "Match whole word only",
+                    "全词匹配(W)",
                     self.files_search.views.options.whole_word,
                 )
                 .absolute()
@@ -707,7 +745,7 @@ impl MatrixWindow {
             .child(
                 find_surface::checkbox(
                     "find-in-results-case",
-                    "Match case",
+                    "匹配大小写(C)",
                     self.files_search.views.options.match_case,
                 )
                 .absolute()
@@ -752,10 +790,21 @@ impl MatrixWindow {
                     )
                     .children(
                         [
-                            (crate::search::SearchMode::Normal, "Normal"),
+                            (crate::search::SearchMode::Normal, "普通(N)"),
                             (
                                 crate::search::SearchMode::Extended,
-                                r"Extended (\n, \r, \t, \0, \x...)",
+                                r"扩展(X) (\n, \r, \t, \0, \x...)",
+                            ),
+                            (
+                                crate::search::SearchMode::Regex {
+                                    dot_matches_newline: matches!(
+                                        self.files_search.views.options.mode,
+                                        crate::search::SearchMode::Regex {
+                                            dot_matches_newline: true
+                                        }
+                                    ),
+                                },
+                                "正则表达式(G)",
                             ),
                         ]
                         .into_iter()
@@ -801,23 +850,51 @@ impl MatrixWindow {
                                 }))
                                 .on_key_down(cx.listener(
                                     move |view, event: &gpui::KeyDownEvent, window, cx| {
-                                        let target = match (mode, event.keystroke.key.as_str()) {
-                                            (_, "space") => mode,
-                                            (
-                                                crate::search::SearchMode::Normal,
-                                                "right" | "down",
-                                            ) => crate::search::SearchMode::Extended,
-                                            (
-                                                crate::search::SearchMode::Extended,
-                                                "left" | "up",
-                                            ) => crate::search::SearchMode::Normal,
+                                        let target_index = match event.keystroke.key.as_str() {
+                                            "space" => index,
+                                            "right" | "down" => (index + 1) % 3,
+                                            "left" | "up" => (index + 2) % 3,
                                             _ => return,
                                         };
+                                        let target = [
+                                            crate::search::SearchMode::Normal,
+                                            crate::search::SearchMode::Extended,
+                                            crate::search::SearchMode::Regex {
+                                                dot_matches_newline: false,
+                                            },
+                                        ][target_index];
                                         view.set_result_search_mode(target, window, cx);
                                         cx.stop_propagation();
                                     },
                                 ))
                         }),
+                    )
+                    .child(
+                        find_surface::checkbox(
+                            "results-dot-newline",
+                            ". 号匹配换行符",
+                            matches!(
+                                self.files_search.views.options.mode,
+                                crate::search::SearchMode::Regex {
+                                    dot_matches_newline: true
+                                }
+                            ),
+                        )
+                        .absolute()
+                        .left(px(146.))
+                        .top(px(54.))
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            if let crate::search::SearchMode::Regex {
+                                dot_matches_newline,
+                            } = view.files_search.views.options.mode
+                            {
+                                view.files_search.views.options.mode =
+                                    crate::search::SearchMode::Regex {
+                                        dot_matches_newline: !dot_matches_newline,
+                                    };
+                                cx.notify();
+                            }
+                        })),
                     ),
             )
             .child(
@@ -892,22 +969,7 @@ impl MatrixWindow {
         let line_numbers = self.files_search.views.match_line_numbers;
         self.files_search.views.accepted = (query.clone(), options, line_numbers);
         let one_per_line = self.files_search.results_one_per_line;
-        let names: std::collections::BTreeSet<_> =
-            filter.paths().iter().map(String::as_str).collect();
-        let mut opened: std::collections::BTreeMap<_, _> = self
-            .workspace
-            .buffers()
-            .iter()
-            .filter_map(|buffer| {
-                let name = buffer
-                    .disk_file
-                    .as_ref()
-                    .map_or_else(|| buffer.name(), |file| file.path().display().to_string());
-                names
-                    .contains(name.as_str())
-                    .then(|| (name, buffer.editor.committed_text()))
-            })
-            .collect();
+        let (identities, opened) = self.capture_open_search_documents();
         self.files_search.views.visible = false;
         self.file_busy = true;
         let cancel = Arc::new(AtomicBool::new(false));
@@ -922,37 +984,45 @@ impl MatrixWindow {
             self.refresh_find_in_results_progress(progress.clone(), cx);
         }
         let task = cx.background_executor().spawn(async move {
-            filter.search_with_progress(
+            let mut updates = Vec::new();
+            let result = filter.search_with_progress_and_state(
                 &query,
                 options,
                 line_numbers,
                 one_per_line,
                 &progress,
                 |path| {
-                    let text = if let Some(text) = opened.remove(path) {
-                        Some(text)
+                    let path_buf = std::path::Path::new(path);
+                    let canonical = path_buf.canonicalize().ok();
+                    if let Some(identity) = opened.iter().position(|doc| doc.paths.iter().any(|candidate| candidate == path_buf
+                        || canonical.as_ref().is_some_and(|path| candidate == path))) {
+                        let source = &opened[identity];
+                        Some(crate::finder::SearchDocument {
+                            document: crate::finder::Document { name: path.to_owned(), bytes: source.bytes.clone(), selection: None },
+                            regex_state: source.regex_state.clone(), identity: Some(identity),
+                        })
                     } else {
-                        match crate::files::DiskFile::load_unicode(std::path::Path::new(path)) {
-                            Ok((_, text)) => Some(text),
+                        match crate::files::DiskFile::load_byte_buffer(std::path::Path::new(path)) {
+                            Ok((_, bytes)) => Some(crate::finder::Document {
+                                name: path.to_owned(), bytes, selection: None,
+                            }.into()),
                             Err(error) => {
                                 eprintln!("Find in results skipped {path}: {error}");
                                 None
                             }
                         }
-                    }?;
-                    Some(crate::finder::Document {
-                        name: path.to_owned(),
-                        text: Arc::from(text),
-                        selection: None,
-                    })
+                    }
                 },
-            )
+                &mut updates,
+            );
+            (result, updates)
         });
         let document_window = self.document_window;
         cx.spawn_in(window, async move |view, cx| {
-            let result = task.await;
+            let (result, updates) = task.await;
             match document_window.update(cx, |_, window, cx| {
                 view.update(cx, |view, cx| {
+                    view.write_search_regex_states(&identities, updates);
                     view.file_busy = false;
                     view.files_search.cancel = None;
                     view.files_search.views.progress = None;

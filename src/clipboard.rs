@@ -23,9 +23,9 @@ impl BinaryCommand {
     }
     pub fn label(self) -> &'static str {
         match self {
-            Self::Copy => "Copy Binary Content",
-            Self::Cut => "Cut Binary Content",
-            Self::Paste => "Paste Binary Content",
+            Self::Copy => "复制二进制",
+            Self::Cut => "剪切二进制",
+            Self::Paste => "粘贴二进制",
         }
     }
 }
@@ -33,23 +33,27 @@ impl BinaryCommand {
 pub fn binary_selection(
     editor: &mut crate::input::EditorSession,
 ) -> Result<Option<Vec<u8>>, crate::editor::EditError> {
-    let payload = editor.clipboard_payload();
-    if payload.line_copy || payload.text.is_empty() {
-        return Ok(None);
+    let selections = editor.selections();
+    if selections.ranges().iter().all(|range| range.is_empty()) { return Ok(None); }
+    let separator = if selections.ranges().len() > 1 { editor.line_ending().as_str().len() } else { 0 };
+    let length = selections.ranges().iter().try_fold(0usize, |length, selected| {
+        length.checked_add(selected.selection.range().end.0 - selected.selection.range().start.0)
+            .and_then(|length| length.checked_add(separator))
+            .ok_or_else(|| crate::editor::EditError::Storage("binary clipboard length overflow".into()))
+    })?;
+    if length == 0 { return Ok(None); }
+    let mut range = selections.primary().selection.range();
+    if selections.is_rectangular() {
+        for selected in selections.ranges() {
+            let selected = selected.selection.range();
+            range.start = range.start.min(selected.start);
+            range.end = range.end.max(selected.end);
+        }
     }
-    let text_len = payload.text.len();
-    if editor.selection_limits().range().is_empty() {
-        editor.expand_word_selection()?;
-    }
-    let range = editor.selection_limits().range();
-    let mut bytes = editor
-        .display_snapshot()
-        .slice(range.start.0..range.end.0)
-        .chunks()
-        .flat_map(|chunk| chunk.bytes())
-        .take(text_len)
-        .collect::<Vec<_>>();
-    bytes.resize(text_len, 0);
+    let mut bytes = editor.document().byte_snapshot().slice(range.start.0..range.end.0)
+        .map_err(|error| crate::editor::EditError::Storage(error.to_string()))?.to_vec();
+    bytes.truncate(length);
+    bytes.resize(length, 0);
     Ok(Some(bytes))
 }
 
@@ -97,11 +101,11 @@ impl CopyPath {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Full => "Copy Current Full File path",
-            Self::Name => "Copy Current Filename",
-            Self::Directory => "Copy Current Dir. Path",
-            Self::AllNames => "Copy All Filenames",
-            Self::AllPaths => "Copy All File Paths",
+            Self::Full => "复制当前文件路径",
+            Self::Name => "复制当前文件名",
+            Self::Directory => "复制当前目录路径",
+            Self::AllNames => "复制所有文件名",
+            Self::AllPaths => "复制所有文件路径",
         }
     }
 

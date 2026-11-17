@@ -27,6 +27,7 @@ pub struct CompletionOptions {
     pub minimum_prefix: usize,
     pub ignore_case: Option<bool>,
     pub auto_insert_single: bool,
+    pub api_brief: bool,
 }
 
 impl Default for CompletionOptions {
@@ -38,6 +39,7 @@ impl Default for CompletionOptions {
             minimum_prefix: 1,
             ignore_case: None,
             auto_insert_single: false,
+            api_brief: false,
         }
     }
 }
@@ -54,6 +56,7 @@ pub enum CompletionKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompletionCandidate {
     pub text: String,
+    pub bytes: Vec<u8>,
     pub kind: CompletionKind,
 }
 
@@ -92,7 +95,7 @@ impl Default for SubmitOptions {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompletionEdit {
     pub replace_range: Range<usize>,
-    pub text: String,
+    pub bytes: Vec<u8>,
     pub caret_byte: usize,
 }
 
@@ -111,104 +114,74 @@ impl CompletionResult {
             _ => String::new(),
         };
         let candidate = self.candidates.get(selected)?;
-        let text = format!("{}{suffix}", candidate.text);
+        let mut bytes = candidate.bytes.clone();
+        bytes.extend_from_slice(suffix.as_bytes());
         Some(CompletionEdit {
-            caret_byte: self.replace_range.start + text.len(),
+            caret_byte: self.replace_range.start + bytes.len(),
             replace_range: self.replace_range.clone(),
-            text,
+            bytes,
         })
     }
 }
 
-fn word_char(ch: char) -> bool {
-    ch.is_alphanumeric() || ch == '_'
-}
-
-fn word_end_char(ch: char) -> bool {
-    !ch.is_whitespace() && !".,;:\"(){}=<>'+!?[]".contains(ch)
-}
-
-fn prefix_matches(word: &str, prefix: &str, ignore_case: bool) -> bool {
+pub(crate) fn prefix_matches(word: &[u8], prefix: &[u8], ignore_case: bool) -> bool {
     if ignore_case {
-        word.to_lowercase().starts_with(&prefix.to_lowercase())
+        word.get(..prefix.len()).is_some_and(|word| word.eq_ignore_ascii_case(prefix))
     } else {
         word.starts_with(prefix)
     }
-}
-
-pub(crate) fn check_caret(text: &str, caret: usize) -> Result<(), IntelligenceError> {
-    if caret > text.len() || !text.is_char_boundary(caret) {
-        return Err(IntelligenceError(
-            "caret is not a UTF-8 byte boundary".into(),
-        ));
-    }
-    Ok(())
 }
 
 impl IntelligenceCatalog {
     pub fn complete(
         &self,
         source_key: &str,
-        text: &str,
+        text: &crate::byte_buffer::ByteBuffer,
         caret: usize,
         options: &CompletionOptions,
     ) -> Result<CompletionResult, IntelligenceError> {
-        check_caret(text, caret)?;
-        let api = self.api(source_key);
+        if caret > text.len() { return Err(IntelligenceError("The caret is outside the document".into())); }
+        let api = self.try_api(source_key)?;
         let ignore_case = options
             .ignore_case
             .unwrap_or_else(|| api.is_some_and(|api| api.environment.ignore_case));
-        let start = text[..caret]
-            .char_indices()
-            .rev()
-            .take_while(|(_, ch)| word_char(*ch))
-            .last()
-            .map_or(caret, |(offset, _)| offset);
-        let prefix = &text[start..caret];
-        let end = text[caret..]
-            .char_indices()
-            .find(|(_, ch)| !word_char(*ch))
-            .map_or(text.len(), |(offset, _)| caret + offset);
-        let excluded = &text[start..end];
+        let start = text.extend_word(caret, false).map_err(|error| IntelligenceError(error.to_string()))?;
+        let end = text.extend_word(caret, true).map_err(|error| IntelligenceError(error.to_string()))?;
+        let prefix = text.slice(start..caret).map_err(|error| IntelligenceError(error.to_string()))?.to_vec();
+        let excluded = text.slice(start..end).map_err(|error| IntelligenceError(error.to_string()))?.to_vec();
         let mut result = CompletionResult {
             replace_range: start..caret,
             candidates: Vec::new(),
             auto_insert: false,
         };
-        if prefix.chars().count() < options.minimum_prefix
-            || prefix.len() >= 256
-            || prefix.is_empty()
-        {
+        let full_api = options.mode == CompletionMode::Api && !options.api_brief;
+        let maximum = if full_api {
+            api.map_or(0, |api| api.keywords.iter().map(|keyword| keyword.name.len()).max().unwrap_or(0))
+        } else { 256 };
+        if prefix.len() < options.minimum_prefix || prefix.len() >= maximum || prefix.is_empty()
+            || !full_api && excluded.len() >= 256 {
             return Ok(result);
         }
         let mut seen = BTreeSet::new();
         if options.mode != CompletionMode::Api
-            && !(options.ignore_numbers && prefix.chars().all(|c| c.is_ascii_digit()))
+            && !(options.ignore_numbers && prefix.iter().all(u8::is_ascii_digit))
         {
-            let mut previous_is_word = false;
-            for (cursor, ch) in text.char_indices() {
-                let is_word = word_char(ch);
-                let is_start = is_word && !previous_is_word;
-                previous_is_word = is_word;
-                if !is_start {
-                    continue;
+            let mut cursor = 0;
+            while cursor < text.len() {
+                let Some(found) = text.find_literal_bytes(&prefix, cursor, text.len(), !ignore_case, false, true)
+                    .map_err(|error| IntelligenceError(error.to_string()))? else { break; };
+                let mut end = found.end;
+                while let Some(byte) = text.byte(end) {
+                    if b" \t\n\r.,;:\"(){}=<>'+!?[]".contains(&byte) { break; }
+                    end += 1;
                 }
-                let length = text[cursor..]
-                    .char_indices()
-                    .find(|(_, ch)| !word_end_char(*ch))
-                    .map_or(text.len() - cursor, |(offset, _)| offset);
-                if length == 0 {
-                    continue;
-                }
-                let word = &text[cursor..cursor + length];
-                if word.len() > prefix.len()
-                    && word.len() < 256
-                    && word != excluded
-                    && prefix_matches(word, prefix, ignore_case)
-                    && seen.insert(word.to_owned())
-                {
+                cursor = end.max(found.end);
+                if end == found.end || end - found.start >= 256 { continue; }
+                let mut word = text.slice(found.start..end).map_err(|error| IntelligenceError(error.to_string()))?.to_vec();
+                if let Some(end) = word.iter().position(|&byte| byte == 0) { word.truncate(end); }
+                if word != excluded && seen.insert(word.clone()) {
                     let kind = api
-                        .and_then(|api| api.keywords.iter().find(|kw| kw.name == word))
+                        .and_then(|api| api.keywords.iter().find(|kw| kw.name.as_bytes() == word))
                         .map_or(CompletionKind::Word, |kw| {
                             if kw.is_function {
                                 CompletionKind::Function
@@ -217,7 +190,8 @@ impl IntelligenceCatalog {
                             }
                         });
                     result.candidates.push(CompletionCandidate {
-                        text: word.into(),
+                        text: String::from_utf8_lossy(&word).into_owned(),
+                        bytes: word,
                         kind,
                     });
                 }
@@ -227,11 +201,12 @@ impl IntelligenceCatalog {
             && let Some(api) = api
         {
             for keyword in &api.keywords {
-                if prefix_matches(&keyword.name, prefix, ignore_case)
-                    && seen.insert(keyword.name.clone())
+                if (full_api || prefix_matches(keyword.name.as_bytes(), &prefix, ignore_case))
+                    && seen.insert(keyword.name.as_bytes().to_vec())
                 {
                     result.candidates.push(CompletionCandidate {
                         text: keyword.name.clone(),
+                        bytes: keyword.name.as_bytes().to_vec(),
                         kind: if keyword.is_function {
                             CompletionKind::Function
                         } else {
@@ -242,14 +217,11 @@ impl IntelligenceCatalog {
             }
         }
         if options.order == CompletionOrder::Sorted {
-            result.candidates.sort_by(|left, right| {
+            result.candidates.sort_unstable_by(|left, right| {
                 if ignore_case {
-                    left.text
-                        .to_lowercase()
-                        .cmp(&right.text.to_lowercase())
-                        .then_with(|| left.text.cmp(&right.text))
+                    left.bytes.iter().map(u8::to_ascii_uppercase).cmp(right.bytes.iter().map(u8::to_ascii_uppercase))
                 } else {
-                    left.text.cmp(&right.text)
+                    left.bytes.cmp(&right.bytes)
                 }
             });
         }
@@ -261,11 +233,11 @@ impl IntelligenceCatalog {
 
     pub fn complete_path(
         &self,
-        text: &str,
+        text: &crate::byte_buffer::ByteBuffer,
         caret: usize,
         base_directory: &Path,
     ) -> Result<CompletionResult, IntelligenceError> {
-        check_caret(text, caret)?;
+        if caret > text.len() { return Err(IntelligenceError("The caret is outside the document".into())); }
         let context = path_context(text, caret)?;
         let Some((range, raw)) = context else {
             return Ok(CompletionResult {
@@ -280,14 +252,14 @@ impl IntelligenceCatalog {
         } else {
             base_directory.join(path)
         };
-        if resolved_path.is_file() {
+        if Path::new(raw.trim_end_matches('/')).is_file() {
             return Ok(CompletionResult {
                 replace_range: range,
                 candidates: Vec::new(),
                 auto_insert: false,
             });
         }
-        let separator = if raw.contains('\\') { '\\' } else { '/' };
+        let separator = '/';
         let last = raw
             .rfind(separator)
             .map_or(0, |offset| offset + separator.len_utf8());
@@ -301,38 +273,34 @@ impl IntelligenceCatalog {
         } else {
             base_directory.join(&directory_text)
         };
-        let entries = std::fs::read_dir(&directory).map_err(|error| {
-            IntelligenceError(format!("path completion {}: {error}", directory.display()))
-        })?;
+        let entries = match std::fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(_) => return Ok(CompletionResult { replace_range: range, candidates: Vec::new(), auto_insert: false }),
+        };
         let mut candidates = Vec::new();
         for entry in entries.take(2000) {
             let entry = entry
                 .map_err(|error| IntelligenceError(format!("path completion entry: {error}")))?;
-            let name = entry.file_name().to_string_lossy().into_owned();
+            let name = entry.file_name();
             let is_directory = entry
                 .file_type()
                 .map_err(|error| IntelligenceError(error.to_string()))?
                 .is_dir();
-            let mut value = directory_text.clone();
-            if !value.ends_with(separator) && !value.is_empty() {
-                value.push(separator);
+            let mut value = directory_text.as_bytes().to_vec();
+            if !value.ends_with(b"/") && !value.is_empty() {
+                value.push(b'/');
             }
-            value.push_str(&name);
+            use std::os::unix::ffi::OsStrExt;
+            value.extend_from_slice(name.as_bytes());
             if is_directory {
-                value.push(separator);
+                value.push(b'/');
             }
-            if prefix_matches(&value, &raw, true) {
-                candidates.push(CompletionCandidate {
-                    text: value,
-                    kind: if is_directory {
-                        CompletionKind::Directory
-                    } else {
-                        CompletionKind::File
-                    },
-                });
-            }
+            candidates.push(CompletionCandidate {
+                text: String::from_utf8_lossy(&value).into_owned(),
+                bytes: value,
+                kind: if is_directory { CompletionKind::Directory } else { CompletionKind::File },
+            });
         }
-        candidates.sort_by_key(|candidate| candidate.text.to_lowercase());
         Ok(CompletionResult {
             replace_range: range,
             candidates,
@@ -342,40 +310,21 @@ impl IntelligenceCatalog {
 }
 
 pub fn path_context(
-    text: &str,
+    text: &crate::byte_buffer::ByteBuffer,
     caret: usize,
 ) -> Result<Option<(Range<usize>, String)>, IntelligenceError> {
-    check_caret(text, caret)?;
-    let before = &text[..caret];
-    let line_start = before.rfind('\n').map_or(0, |at| at + 1);
-    let line = &before[line_start..];
-    let drive = line.rfind(':').and_then(|colon| {
-        if colon == 0 || !line.as_bytes()[colon - 1].is_ascii_alphabetic() {
-            return None;
-        }
-        if colon >= 2
-            && !line[..colon - 1]
-                .chars()
-                .next_back()
-                .is_some_and(|c| c.is_whitespace() || "\"'(".contains(c))
-        {
-            return None;
-        }
-        Some(colon - 1)
-    });
-    let start = drive.or_else(|| {
-        let quote = line.rfind(['\'', '"']).map(|at| at + 1);
-        if let Some(at) = quote
-            && line[at..].contains('/')
-        {
-            return Some(at);
-        }
-        let at = line.rfind(char::is_whitespace).map_or(0, |at| at + 1);
-        if line[at..].contains('/') {
+    if caret > text.len() { return Err(IntelligenceError("The caret is outside the document".into())); }
+    let raw = text.slice(caret.saturating_sub(260)..caret).map_err(|error| IntelligenceError(error.to_string()))?.to_vec();
+    let raw = &raw[..raw.iter().position(|&byte| byte == 0).unwrap_or(raw.len())];
+    let input = String::from_utf8_lossy(raw);
+    let start = input.char_indices().rev().find_map(|(at, ch)| {
+        if ch != '/' { return None; }
+        if at == 0 || input[..at].chars().next_back().is_some_and(|ch| ch.is_ascii_whitespace() || "\"'(".contains(ch)) {
             Some(at)
-        } else {
-            None
-        }
+        } else { None }
     });
-    Ok(start.map(|at| (line_start + at..caret, line[at..].to_owned())))
+    Ok(start.map(|at| {
+        let path = input[at..].to_owned();
+        (caret.saturating_sub(path.encode_utf16().count())..caret, path)
+    }))
 }

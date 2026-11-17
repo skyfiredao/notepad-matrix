@@ -6,8 +6,7 @@ publish = false
 
 [features]
 default = ["native-ui"]
-native-ui = ["dep:gpui", "dep:gpui-platform", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-web-kit", "dep:futures", "dep:raw-window-handle", "dep:unicode-linebreak"]
-native-input-tests = ["native-ui", "gpui/test-support", "gpui-platform/test-support"]
+native-ui = ["dep:gpui", "dep:gpui-platform", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-web-kit", "dep:futures", "dep:raw-window-handle", "dep:unicode-linebreak", "dep:block2", "dep:flate2"]
 
 [[bin]]
 name = "notepad-matrix"
@@ -28,12 +27,24 @@ pulldown-cmark = { version = "=0.13.6", default-features = false }
 url = "=2.5.8"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"], optional = true }
 gpui = { package = "gpui-pre", version = "=0.3.11", default-features = false, optional = true }
 gpui-platform = { package = "gpui-pre-platform", version = "=0.3.11", default-features = false, features = ["font-kit", "runtime_shaders"], optional = true }
 objc2 = { version = "=0.6.5", optional = true }
-objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSWindow", "NSView", "NSButton", "NSControl", "NSResponder", "NSTextInputContext", "NSApplication", "NSPasteboard", "NSPasteboardItem", "NSGraphics", "NSPrintOperation", "NSPrintInfo", "NSTextView", "NSText", "NSFont", "NSAlert", "NSTextField", "NSWorkspace"], optional = true }
+block2 = { version = "=0.6.2", optional = true }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSWindow", "NSView", "NSButton", "NSControl", "NSResponder", "NSTextInputContext", "NSApplication", "NSPasteboard", "NSPasteboardItem", "NSGraphics", "NSPrintOperation", "NSPrintInfo", "NSTextView", "NSText", "NSFont", "NSAlert", "NSTextField", "NSWorkspace", "NSOpenPanel", "NSSavePanel"], optional = true }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSObject", "NSNotification", "NSArray", "NSData", "NSString", "NSDate", "NSDateFormatter", "NSLocale", "NSRange", "NSObjCRuntime", "NSFileManager", "NSURL", "NSError"], optional = true }
 raw-window-handle = { version = "=0.6.2", optional = true }
 objc2-web-kit = { version = "=0.3.2", default-features = false, features = ["std", "objc2-app-kit", "objc2-core-foundation", "WKWebView", "WKWebViewConfiguration", "WKPreferences", "WKNavigation", "WKFrameInfo", "WKUserContentController", "WKUserScript", "WKScriptMessage", "WKScriptMessageHandler", "WKWebsiteDataStore"], optional = true }
 futures = { version = "=0.3.34", default-features = false, features = ["std"], optional = true }
 unicode-linebreak = { version = "=0.1.5", optional = true }
+
+[build-dependencies]
+serde_json = { version = "=1.0.154", features = ["preserve_order"] }
+flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

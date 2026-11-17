@@ -1,4 +1,5 @@
 use super::*;
+use super::dialog_font::px;
 
 impl MatrixWindow {
     pub(super) fn show_about(&mut self, window: &mut Window, cx: &mut Context<Self>) {

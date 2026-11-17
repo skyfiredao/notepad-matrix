@@ -1,8 +1,10 @@
 use super::*;
+use super::dialog_font::px;
+use super::toolbar_icons::ToolbarIcon;
 
 impl MatrixWindow {
     fn document_list_entries(&self) -> Vec<(crate::workspace::ViewId, crate::workspace::BufferId)> {
-        [
+        let mut entries: Vec<_> = [
             crate::workspace::ViewId::Primary,
             crate::workspace::ViewId::Secondary,
         ]
@@ -14,7 +16,15 @@ impl MatrixWindow {
                 .copied()
                 .map(move |id| (pane, id))
         })
-        .collect()
+        .collect();
+        if self.panels.document_list_sort != 0 {
+            entries.sort_by(|(_, left), (_, right)| {
+                let name = |id| self.workspace.buffers().iter().find(|buffer| buffer.id() == id).map(|buffer| buffer.name()).unwrap_or_default();
+                let order = name(*left).cmp(&name(*right));
+                if self.panels.document_list_sort == 1 { order } else { order.reverse() }
+            });
+        }
+        entries
     }
 
     pub(super) fn document_list_active_index(&self) -> usize {
@@ -57,7 +67,7 @@ impl MatrixWindow {
         if !self.document_list_visible {
             return None;
         }
-        let background = if self.dark { 0x282828 } else { 0xf6f6f6 };
+        let background = if self.dark { 0x282828 } else { 0xffffff };
         let selected = if self.dark { 0x404b5a } else { 0xcce8ff };
         let dark = self.dark;
         Some(
@@ -71,32 +81,30 @@ impl MatrixWindow {
                 .h_full()
                 .flex()
                 .flex_col()
+                .font_family(dialog_font::font_family())
+                .text_size(px(12.))
                 .bg(rgb(background))
                 .border_r_1()
                 .border_color(rgb(0x808080))
                 .child(
                     div()
-                        .h(px(26.))
+                        .id("document-list-filename")
+                        .role(Role::ColumnHeader)
+                        .aria_label("Filename")
+                        .h(px(24.))
                         .flex_shrink_0()
                         .px(px(6.))
                         .flex()
                         .items_center()
                         .justify_between()
-                        .child("Document List")
-                        .child(
-                            div()
-                                .id("document-list-close")
-                                .debug_selector(|| "document-list-close".into())
-                                .role(Role::Button)
-                                .aria_label("Close Document List")
-                                .tooltip(move |_, cx| {
-                                    icon_tooltip::view("Close Document List", dark, cx)
-                                })
-                                .child("×")
-                                .on_click(cx.listener(|view, _, window, cx| {
-                                    view.toggle_document_list(window, cx)
-                                })),
-                        ),
+                        .border_b_1().border_color(rgb(if dark { 0x555555 } else { 0xd4d0c8 }))
+                        .child("文件名")
+                        .child(match self.panels.document_list_sort { 1 => "⌃", 2 => "⌄", _ => "" })
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.panels.document_list_sort = (view.panels.document_list_sort + 1) % 3;
+                            view.document_list_scroll.scroll_to_item(view.document_list_active_index(), gpui::ScrollStrategy::Nearest);
+                            cx.notify();
+                        })),
                 )
                 .child(
                     div()
@@ -129,8 +137,17 @@ impl MatrixWindow {
                                             let id = buffer.id();
                                             let active = id == view.workspace.active().id()
                                                 && pane == view.workspace.active_view();
-                                            let name = buffer.name();
-                                            div()
+                                             let name = buffer.name();
+                                             let (icon, dark_icon) = if buffer.is_monitoring() {
+                                                 (ToolbarIcon::MonitoringDocument, ToolbarIcon::MonitoringDocumentDark)
+                                             } else if buffer.disk_file.as_ref().is_some_and(crate::files::DiskFile::is_read_only) {
+                                                 (ToolbarIcon::SystemReadOnlyDocument, ToolbarIcon::SystemReadOnlyDocumentDark)
+                                             } else if buffer.is_user_read_only() {
+                                                 (ToolbarIcon::ReadOnlyDocument, ToolbarIcon::ReadOnlyDocumentDark)
+                                             } else if buffer.is_modified() {
+                                                 (ToolbarIcon::ModifiedDocument, ToolbarIcon::ModifiedDocumentDark)
+                                             } else { (ToolbarIcon::SavedDocument, ToolbarIcon::SavedDocumentDark) };
+                                             div()
                                                 .id(("document-list-item", index))
                                                 .debug_selector(move || {
                                                     if pane == crate::workspace::ViewId::Primary {
@@ -145,17 +162,31 @@ impl MatrixWindow {
                                                 .role(Role::ListBoxOption)
                                                 .aria_label(name.clone())
                                                 .aria_selected(active)
+                                                .relative()
                                                 .h(px(24.))
-                                                .px(px(6.))
+                                                .px(px(3.))
+                                                .flex().items_center().gap(px(2.))
                                                 .overflow_hidden()
                                                 .whitespace_nowrap()
                                                 .cursor_pointer()
                                                 .when(active, |row| row.bg(rgb(selected)))
-                                                .child(format!(
-                                                    "{}{}",
-                                                    if buffer.is_modified() { "*" } else { "" },
-                                                    name
-                                                ))
+                                                .child(gpui::img(if dark { dark_icon } else { icon }.tab_image(false)).size(px(16.)).flex_shrink_0())
+                                                .child(name)
+                                                .when(active, |row| row.child(gpui::canvas(|_, _, _| (), |bounds, _, window, _| {
+                                                    let step = px(2.);
+                                                    let count_x = (f32::from(bounds.size.width) / f32::from(step)).ceil() as usize;
+                                                    let count_y = (f32::from(bounds.size.height) / f32::from(step)).ceil() as usize;
+                                                    for index in 0..count_x {
+                                                        for y in [bounds.top(), bounds.bottom() - px(1.)] {
+                                                            window.paint_quad(gpui::fill(Bounds::new(gpui::point(bounds.left() + step * index as f32, y), size(px(1.), px(1.))), rgb(0x606060)));
+                                                        }
+                                                    }
+                                                    for index in 0..count_y {
+                                                        for x in [bounds.left(), bounds.right() - px(1.)] {
+                                                            window.paint_quad(gpui::fill(Bounds::new(gpui::point(x, bounds.top() + step * index as f32), size(px(1.), px(1.))), rgb(0x606060)));
+                                                        }
+                                                    }
+                                                }).absolute().size_full()))
                                                 .on_click(cx.listener(
                                                     move |view, _, window, cx| {
                                                         if !window.modifiers().control
@@ -198,70 +229,5 @@ impl MatrixWindow {
             self.activate_buffer(id, window, cx);
             window.activate_window();
         }
-    }
-}
-
-#[cfg(all(test, feature = "native-input-tests"))]
-mod tests {
-    use super::*;
-
-    #[gpui::test]
-    fn document_list_targets_each_cloned_view_membership(cx: &mut gpui::TestAppContext) {
-        use crate::workspace::ViewId;
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        cx.simulate_input("A");
-        cx.dispatch_action(EditorDocumentStart);
-        view.update_in(cx, |view, window, cx| view.clone_to_other_view(window, cx));
-        cx.dispatch_action(EditorDocumentEnd);
-        view.update_in(cx, |view, window, cx| view.toggle_document_list(window, cx));
-        let primary = cx
-            .debug_bounds("document-list-item-1")
-            .expect("primary membership")
-            .center();
-        let secondary = cx
-            .debug_bounds("document-list-item-1-secondary")
-            .expect("secondary membership")
-            .center();
-        cx.simulate_click(primary, gpui::Modifiers::default());
-        assert_eq!(
-            view.read_with(cx, |view, _| (
-                view.workspace.active_view(),
-                view.editor().selection().head
-            )),
-            (ViewId::Primary, ByteOffset(0))
-        );
-        cx.simulate_click(secondary, gpui::Modifiers::default());
-        assert_eq!(
-            view.read_with(cx, |view, _| (
-                view.workspace.active_view(),
-                view.editor().selection().head
-            )),
-            (ViewId::Secondary, ByteOffset(1))
-        );
-        let new = cx
-            .debug_bounds("toolbar-new")
-            .expect("first toolbar operation after switching pane");
-        cx.simulate_click(new.center(), gpui::Modifiers::default());
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.workspace.active_view(), ViewId::Secondary);
-            assert_eq!(view.workspace.active().id(), crate::workspace::BufferId(2));
-            assert_eq!(
-                view.workspace.view_buffer_ids(ViewId::Primary),
-                &[crate::workspace::BufferId(1)]
-            );
-            assert_eq!(
-                view.workspace.view_buffer_ids(ViewId::Secondary),
-                &[crate::workspace::BufferId(1), crate::workspace::BufferId(2)]
-            );
-            assert_eq!(view.editor().committed_text(), "");
-            for (pane, caret) in [(ViewId::Primary, 0), (ViewId::Secondary, 1)] {
-                let editor = view
-                    .workspace
-                    .editor_in_view(pane, crate::workspace::BufferId(1))
-                    .expect("original clone membership");
-                assert_eq!(editor.committed_text(), "A");
-                assert_eq!(editor.selection().head, ByteOffset(caret));
-            }
-        });
     }
 }

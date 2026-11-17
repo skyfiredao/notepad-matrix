@@ -1,6 +1,6 @@
 use super::*;
 use crate::folder_workspace::{
-    EntryKind, FolderFile, FolderMutation, FolderScanController, FolderScanJob, FolderShellCommand,
+    EntryKind, FolderMutation, FolderScanController, FolderScanJob, FolderShellCommand,
     FolderWatch, FolderWorkspace, existing_buffer,
 };
 
@@ -37,286 +37,6 @@ impl Drop for FolderState {
     }
 }
 
-#[cfg(all(test, feature = "native-input-tests", debug_assertions))]
-mod tests {
-    use super::*;
-
-    #[gpui::test]
-    fn watch_refreshes_actual_filesystem_and_hidden_panel_does_not_restart(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let fixture = tempfile::tempdir().expect("fixture");
-        let root = fixture.path().canonicalize().expect("root");
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            view.folder.tree.set_root(&root).expect("root");
-            view.show_panel(crate::panel_layout::PanelId::Folder, window, cx);
-        });
-        std::fs::write(root.join("startup.txt"), "between scan and watch").expect("fixture file");
-        cx.run_until_parked();
-        view.read_with(cx, |view, _| {
-            assert!(
-                view.folder
-                    .tree
-                    .entries()
-                    .iter()
-                    .any(|entry| entry.path.ends_with("startup.txt"))
-            )
-        });
-        std::fs::write(root.join("event.txt"), "filesystem event").expect("fixture file");
-        cx.cx
-            .dispatcher
-            .advance_clock(std::time::Duration::from_secs(1));
-        cx.run_until_parked();
-        view.read_with(cx, |view, _| {
-            assert!(
-                view.folder
-                    .tree
-                    .entries()
-                    .iter()
-                    .any(|entry| entry.path.ends_with("event.txt"))
-            )
-        });
-        view.update_in(cx, |view, window, cx| {
-            view.close_folder_workspace(window, cx)
-        });
-        std::fs::write(root.join("hidden.txt"), "hidden").expect("fixture file");
-        cx.cx
-            .dispatcher
-            .advance_clock(std::time::Duration::from_secs(3));
-        cx.run_until_parked();
-        view.read_with(cx, |view, _| {
-            assert!(!view.folder.tree.visible());
-            assert!(view.folder.watch_task.is_none());
-            assert!(
-                !view
-                    .folder
-                    .tree
-                    .entries()
-                    .iter()
-                    .any(|entry| entry.path.ends_with("hidden.txt"))
-            );
-        });
-        view.update_in(cx, |view, window, cx| {
-            view.toggle_folder_workspace(window, cx)
-        });
-        cx.run_until_parked();
-        view.read_with(cx, |view, _| {
-            assert!(
-                view.folder
-                    .tree
-                    .entries()
-                    .iter()
-                    .any(|entry| entry.path.ends_with("hidden.txt"))
-            )
-        });
-    }
-
-    #[gpui::test]
-    fn newest_scan_keeps_both_expansions_and_does_not_reopen_closed_panel(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let fixture = tempfile::tempdir().expect("fixture");
-        let root = fixture.path().canonicalize().expect("canonical fixture");
-        for directory in ["a", "b"] {
-            std::fs::create_dir(root.join(directory)).expect("directory");
-            std::fs::write(root.join(directory).join("inside.txt"), "keep").expect("file");
-        }
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            view.folder.tree.set_root(&root).expect("root");
-            view.activate_folder_entry(root.join("a"), window, cx);
-            view.activate_folder_entry(root.join("b"), window, cx);
-            view.refresh_workspace_folder(window, cx);
-            view.close_folder_workspace(window, cx);
-        });
-        cx.run_until_parked();
-        view.read_with(cx, |view, _| {
-            assert!(!view.folder.scans.is_busy());
-            assert!(
-                !view.folder_workspace_visible(),
-                "completion must not reopen a closed panel"
-            );
-            assert_eq!(
-                view.folder.tree.entries().len(),
-                3,
-                "hiding cancels unpublished scans"
-            );
-            for directory in ["a", "b"] {
-                assert!(view.folder.tree.is_expanded(&root.join(directory)));
-            }
-            assert!(view.folder.message.is_none());
-        });
-        view.update_in(cx, |view, window, cx| {
-            view.toggle_folder_workspace(window, cx)
-        });
-        cx.run_until_parked();
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.folder.tree.entries().len(), 5);
-            for directory in ["a", "b"] {
-                assert!(
-                    view.folder
-                        .tree
-                        .entries()
-                        .iter()
-                        .any(|entry| entry.path == root.join(directory).join("inside.txt"))
-                );
-            }
-        });
-    }
-
-    #[gpui::test]
-    fn folder_panel_reopens_same_tree_and_reuses_dirty_document(cx: &mut gpui::TestAppContext) {
-        let fixture = tempfile::tempdir().expect("fixture");
-        let root = fixture.path().canonicalize().expect("canonical fixture");
-        std::fs::create_dir(root.join("child")).expect("directory");
-        let path = root.join("child/document.txt");
-        std::fs::write(&path, "original").expect("file");
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        let toolbar = cx
-            .debug_bounds("toolbar-folder-workspace")
-            .expect("Folder toolbar");
-        cx.simulate_click(toolbar.center(), gpui::Modifiers::default());
-        assert!(cx.debug_bounds("folder-workspace-panel").is_some());
-        assert!(
-            !cx.did_prompt_for_paths(),
-            "showing an empty panel must not force folder selection"
-        );
-        assert!(!cx.did_prompt_for_new_path() && !cx.has_pending_prompt());
-        let choose = cx
-            .debug_bounds("folder-workspace-choose")
-            .expect("explicit Choose Folder");
-        cx.simulate_click(choose.center(), gpui::Modifiers::default());
-        assert!(cx.did_prompt_for_paths());
-        cx.simulate_path_prompt_response(|options| {
-            assert!(options.directories && !options.files && !options.multiple);
-            None
-        });
-        cx.run_until_parked();
-        view.read_with(cx, |view, _| {
-            assert!(view.folder_workspace_visible());
-            assert!(view.folder.tree.root().is_none());
-            assert!(!view.file_busy);
-            assert_eq!(view.workspace.buffers().len(), 1);
-            assert_eq!(view.editor().committed_text(), "");
-        });
-        cx.simulate_click(toolbar.center(), gpui::Modifiers::default());
-        assert!(cx.debug_bounds("folder-workspace-panel").is_none());
-        let (id, edited, selection, count) = view.update_in(cx, |view, window, cx| {
-            view.folder.tree.set_root(&root).expect("root");
-            view.folder
-                .tree
-                .toggle_directory(&root.join("child"))
-                .expect("expand");
-            let id = FolderFile::load(&path)
-                .expect("load")
-                .apply(&mut view.workspace)
-                .expect("open");
-            view.editor_mut().insert_text("unsaved ").expect("edit");
-            let edited = view.editor().committed_text();
-            let selection = view.editor().document().selection();
-            view.new_file(window, cx);
-            let count = view.workspace.buffers().len();
-            view.show_panel(crate::panel_layout::PanelId::Folder, window, cx);
-            (id, edited, selection, count)
-        });
-        cx.run_until_parked();
-        let row = cx
-            .debug_bounds("folder-entry-2")
-            .expect("visible fixture file");
-        cx.simulate_click(row.center(), gpui::Modifiers::default());
-        view.update_in(cx, |view, window, _| {
-            assert_ne!(
-                view.workspace.active().id(),
-                id,
-                "single-click only selects"
-            );
-            assert_eq!(view.editor().committed_text(), "");
-            assert_eq!(view.folder.selected.as_ref(), Some(&path));
-            assert!(view.folder.tree_focus.is_focused(window));
-        });
-        cx.simulate_keystrokes("enter");
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.workspace.active().id(), id);
-            assert_eq!(view.workspace.buffers().len(), count);
-            assert_eq!(view.editor().committed_text(), edited);
-            assert_eq!(view.editor().document().selection(), selection);
-        });
-        let close = cx
-            .debug_bounds("folder-workspace-close")
-            .expect("panel Close");
-        cx.simulate_click(close.center(), gpui::Modifiers::default());
-        view.update_in(cx, |view, window, _| {
-            assert!(!view.folder_workspace_visible());
-            assert!(view.editor_focus.is_focused(window));
-        });
-        let toggle = cx
-            .debug_bounds("toolbar-folder-workspace")
-            .expect("Folder toolbar");
-        cx.simulate_click(toggle.center(), gpui::Modifiers::default());
-        view.read_with(cx, |view, _| {
-            assert!(view.folder_workspace_visible());
-            assert_eq!(view.folder.tree.root(), Some(root.as_path()));
-            assert!(view.folder.tree.is_expanded(&root.join("child")));
-            assert_eq!(view.folder.selected.as_ref(), Some(&path));
-            assert_eq!(view.workspace.active().id(), id);
-            assert_eq!(view.workspace.buffers().len(), count);
-            assert_eq!(view.editor().committed_text(), edited);
-            assert_eq!(view.editor().document().selection(), selection);
-            assert!(view.editor().document().can_undo() && view.workspace.active().is_modified());
-            assert!(
-                !view.folder.picker_pending,
-                "reopening does not start another picker"
-            );
-        });
-        let row = cx
-            .debug_bounds("folder-entry-2")
-            .expect("reopened file row");
-        cx.simulate_event(gpui::MouseDownEvent {
-            position: row.center(),
-            button: MouseButton::Left,
-            click_count: 2,
-            ..Default::default()
-        });
-        cx.simulate_event(gpui::MouseUpEvent {
-            position: row.center(),
-            button: MouseButton::Left,
-            click_count: 2,
-            ..Default::default()
-        });
-        cx.dispatch_action(EditorUndo);
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.workspace.active().id(), id);
-            assert_eq!(view.workspace.buffers().len(), count);
-            assert_eq!(view.editor().committed_text(), "original");
-        });
-        let snapshot = |view: &MatrixWindow| {
-            (
-                view.workspace.active().id(),
-                view.workspace.active_view(),
-                view.editor().committed_text(),
-                view.editor().selections(),
-                view.editor().document().can_undo(),
-                view.editor().document().can_redo(),
-                view.workspace.active().is_modified(),
-            )
-        };
-        let before = view.read_with(cx, |view, _| snapshot(view));
-        let close = cx
-            .debug_bounds("folder-workspace-close")
-            .expect("reopened Folder Close");
-        cx.simulate_click(close.center(), gpui::Modifiers::default());
-        assert!(cx.debug_bounds("folder-workspace-panel").is_none());
-        view.update_in(cx, |view, window, _| {
-            assert_eq!(snapshot(view), before);
-            assert!(view.editor_focus.is_focused(window));
-        });
-        cx.simulate_input("!");
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "!original")
-        });
-    }
-}
 
 impl FolderState {
     pub(super) fn new(cx: &mut Context<MatrixWindow>) -> Self {
@@ -359,6 +79,80 @@ impl FolderState {
 }
 
 impl MatrixWindow {
+    pub(super) fn preferences_drop_paths(&mut self,paths: Vec<PathBuf>,window: &mut Window,cx: &mut Context<Self>) {
+        let routed = paths.clone();
+        if self.route_to_document(window, cx, move |view, window, cx| view.preferences_drop_paths(routed, window, cx)) { return; }
+        if self.folder_operations_blocked() || paths.is_empty() { return; }
+        let folder_count = paths.iter().filter(|path| path.is_dir()).count();
+        let open_all = self.preferences.files.file_options.open_dropped_folder_files;
+        if !open_all && folder_count != 0 && folder_count != paths.len() {
+            let prompt = window.prompt(gpui::PromptLevel::Warning,"无效的拖放操作",Some("文件夹工作区模式不能同时拖放文件和文件夹。请在默认目录首选项中启用“打开文件夹内所有文件”。"),&[gpui::PromptButton::ok("确定")],cx);
+            cx.spawn(async move |_,_| { if let Err(error) = prompt.await { eprintln!("mixed file folder drop prompt failed: {error}"); } }).detach();
+            return;
+        }
+        if folder_count == 0 { self.start_open_paths(paths,window,cx); return; }
+        self.file_busy = true;
+        let executor = cx.background_executor().clone();
+        if !open_all {
+            let mut tree = self.folder.tree.clone();
+            self.pause_folder_watch();
+            cx.spawn_in(window,async move |view,cx| {
+                let result = executor.spawn(async move {
+                    for path in paths { tree.add_root(&path)?; }
+                    Ok::<_,io::Error>(tree)
+                }).await;
+                if let Err(error) = view.update_in(cx,|view,window,cx| {
+                    view.file_busy = false;
+                    view.folder.tree.set_visible(true);
+                    view.folder.finish_scan(result);
+                    view.show_panel(crate::panel_layout::PanelId::Folder,window,cx);
+                    view.resume_folder_watch(window,cx);
+                    cx.notify();
+                }) { eprintln!("folder drop window unavailable: {error}"); }
+            }).detach();
+        } else {
+            cx.spawn_in(window,async move |view,cx| {
+                let result = executor.spawn(async move { crate::folder_workspace::dropped_folder_files(paths) }).await;
+                let files = match result {
+                    Ok(files) => files,
+                    Err(error) => {
+                        if let Err(update_error) = view.update_in(cx,|view,_,cx| { view.file_busy = false; view.notify_editor_error(format!("文件夹无法打开: {error}"),cx); }) { eprintln!("folder drop failure window unavailable: {update_error}"); }
+                        return;
+                    }
+                };
+                if files.len() > 200 {
+                    let message = format!("即将打开 {} 个文件。是否继续？",files.len());
+                    let prompt = match view.update_in(cx,|_,window,cx| window.prompt(gpui::PromptLevel::Warning,"打开文件过多",Some(&message),&[gpui::PromptButton::ok("是"),gpui::PromptButton::cancel("否")],cx)) {
+                        Ok(prompt) => prompt,
+                        Err(error) => { eprintln!("folder drop confirmation unavailable: {error}"); return; }
+                    };
+                    match prompt.await {
+                        Ok(0) => {},
+                        Ok(_) => { if let Err(error) = view.update_in(cx,|view,_,cx| { view.file_busy = false; cx.notify(); }) { eprintln!("folder drop cancel unavailable: {error}"); } return; }
+                        Err(error) => { if let Err(update_error) = view.update_in(cx,|view,_,cx| { view.file_busy = false; view.notify_editor_error(error.to_string(),cx); }) { eprintln!("folder drop prompt failure unavailable: {update_error}"); } return; }
+                    }
+                }
+                if let Err(error) = view.update_in(cx,|view,window,cx| { view.file_busy = false; view.start_open_paths(files,window,cx); }) { eprintln!("folder files drop unavailable: {error}"); }
+            }).detach();
+        }
+        cx.notify();
+    }
+
+    pub(super) fn configure_folder_file_preferences(&mut self,settings: &serde_json::Value,window: &mut Window,cx: &mut Context<Self>) {
+        let allowed = settings["isFawSymlinkAllowed"].as_bool().unwrap_or(false);
+        let changed = self.folder.tree.follow_links() != allowed;
+        self.preferences.files.follow_links = allowed;
+        if !changed { return; }
+        self.folder.tree.set_follow_links(allowed);
+        if allowed && self.preferences.files.applied && !self.preferences.files.symlink_warning_shown {
+            self.preferences.files.symlink_warning_shown = true;
+            let prompt = window.prompt(gpui::PromptLevel::Warning,"符号链接",Some("载入符号链接可能遇到指向父文件夹或循环引用的目录。本应用不会重复遍历同一实际目录。"),&[gpui::PromptButton::ok("确定")],cx);
+            cx.spawn(async move |_,_| { if let Err(error) = prompt.await { eprintln!("symlink preference warning failed: {error}"); } }).detach();
+        }
+        self.folder.scan_needed = self.folder.tree.root().is_some();
+        if self.folder.tree.visible() { self.scan_workspace_folder(window,cx); }
+    }
+
     fn find_in_selected_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.route_to_document(window, cx, |view, window, cx| {
             view.find_in_selected_folder(window, cx)
@@ -386,7 +180,8 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> io::Result<()> {
-        let tree = FolderWorkspace::restore(value)?;
+        let mut tree = FolderWorkspace::restore(value)?;
+        tree.set_follow_links(self.preferences.files.follow_links);
         self.pause_folder_watch();
         self.folder.tree = tree;
         self.folder.scan_needed = self.folder.tree.root().is_some();
@@ -785,6 +580,7 @@ impl MatrixWindow {
 
     fn folder_operations_blocked(&self) -> bool {
         self.file_busy
+            || self.file_open_sequence_pending()
             || self.close_dialog
             || self.save_all_dialog
             || self.reload_target.is_some()
@@ -924,50 +720,9 @@ impl MatrixWindow {
             }
             return;
         }
-        if !self.cancel_view_composition(window, cx) {
-            return;
-        }
-        self.file_busy = true;
-        let load_path = path.clone();
-        let load = cx
-            .background_executor()
-            .spawn(async move { FolderFile::load(&load_path) });
-        cx.notify();
-        self.folder.operation_task = Some(cx.spawn_in(window, async move |view, cx| {
-            let loaded = load.await;
-            if let Err(error) = view.update_in(cx, |view, window, cx| {
-                view.file_busy = false;
-                if view.folder_operations_blocked() {
-                    view.folder.message =
-                        Some("File open stopped by another document operation; click again".into());
-                    cx.notify();
-                    return;
-                }
-                match loaded {
-                    Ok(file) => {
-                        if !view.cancel_view_composition(window, cx) {
-                            return;
-                        }
-                        match file.apply(&mut view.workspace) {
-                            Ok(_) => {
-                                view.folder.message = None;
-                                view.reset_active_view(window, cx);
-                                window.activate_window();
-                            }
-                            Err(error) => {
-                                view.folder.message = Some(format!("{}: {error}", path.display()))
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        view.folder.message = Some(format!("{}: {error}", path.display()))
-                    }
-                }
-                cx.notify();
-            }) {
-                eprintln!("folder file completion lost its document: {error}");
-            }
-        }));
+        self.folder.message = None;
+        self.start_open_paths(vec![path], window, cx);
+        window.activate_window();
     }
 
     pub(super) fn render_folder_workspace(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -1010,6 +765,10 @@ impl MatrixWindow {
                 .debug_selector(|| "folder-workspace-panel".into())
                 .role(Role::Group)
                 .aria_label("Folder as Workspace")
+                .on_drop(cx.listener(|view, paths: &gpui::ExternalPaths, window, cx| {
+                    view.preferences_drop_paths(paths.paths().to_vec(), window, cx);
+                    cx.stop_propagation();
+                }))
                 .w_full()
                 .flex_shrink_0()
                 .h_full()

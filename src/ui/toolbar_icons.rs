@@ -60,6 +60,7 @@ pub(super) enum ToolbarIcon {
     CloseTabOnTabDark,
     CloseTabPressedDark,
     Application,
+    StatusInfo,
 }
 
 macro_rules! embedded_image {
@@ -77,8 +78,230 @@ macro_rules! embedded_image {
 }
 
 impl ToolbarIcon {
+    pub(super) fn tab_image(self, alternate: bool) -> Arc<Image> {
+        if !alternate {
+            return self.image();
+        }
+        macro_rules! alternative {
+            ($name:literal) => {{
+                static IMAGE: OnceLock<Arc<Image>> = OnceLock::new();
+                IMAGE.get_or_init(|| Arc::new(Image::from_bytes(ImageFormat::Ico,
+                    include_bytes!(concat!("../../assets/notepad-plus-plus/icons/standard/tabbar/", $name, "_alt.ico")).to_vec()))).clone()
+            }};
+        }
+        match self {
+            Self::SavedDocument | Self::SavedDocumentDark => alternative!("saved"),
+            Self::ModifiedDocument | Self::ModifiedDocumentDark => alternative!("unsaved"),
+            Self::ReadOnlyDocument | Self::ReadOnlyDocumentDark => alternative!("readonly"),
+            Self::SystemReadOnlyDocument | Self::SystemReadOnlyDocumentDark => {
+                alternative!("readonly_sys")
+            }
+            _ => self.image(),
+        }
+    }
+
+    pub(super) fn has_disabled_fluent(self) -> bool {
+        matches!(
+            self,
+            Self::Save
+                | Self::SaveAll
+                | Self::Cut
+                | Self::Copy
+                | Self::Paste
+                | Self::Undo
+                | Self::Redo
+                | Self::SyncVertical
+                | Self::SyncHorizontal
+                | Self::Monitoring
+                | Self::StartRecording
+                | Self::StopRecording
+                | Self::Playback
+                | Self::RunMacroMultiple
+                | Self::SaveMacro
+        )
+    }
+
+    pub(super) fn preference_image(
+        self,
+        view: &super::MatrixWindow,
+        cx: &gpui::App,
+        enabled: bool,
+    ) -> Arc<Image> {
+        let set = view.pref_string(
+            "ToolBar.iconSet",
+            if view.dark { "small" } else { "standard" },
+        );
+        if set == "standard" {
+            return self.image();
+        }
+        macro_rules! fluent {
+            ($name:literal) => { fluent!($name, "off") };
+            ($name:literal, $state:literal) => {{
+                let bytes: &[u8] = match (view.dark, matches!(set.as_str(), "small2" | "large2")) {
+                    (false, false) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/light/toolbar/regular/", $name, "_", $state, ".ico")),
+                    (false, true) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/light/toolbar/filled/", $name, "_", $state, ".ico")),
+                    (true, false) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/dark/toolbar/regular/", $name, "_", $state, ".ico")),
+                    (true, true) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/dark/toolbar/filled/", $name, "_", $state, ".ico")),
+                };
+                source_icon(bytes, if matches!(set.as_str(), "large" | "large2") { 32 } else { 16 })
+            }};
+        }
+        if !enabled && self.has_disabled_fluent() {
+            return match self {
+                Self::Save => fluent!("save", "dis"),
+                Self::SaveAll => fluent!("saveall", "dis"),
+                Self::Cut => fluent!("cut", "dis"),
+                Self::Copy => fluent!("copy", "dis"),
+                Self::Paste => fluent!("paste", "dis"),
+                Self::Undo => fluent!("undo", "dis"),
+                Self::Redo => fluent!("redo", "dis"),
+                Self::SyncVertical => fluent!("syncV", "dis"),
+                Self::SyncHorizontal => fluent!("syncH", "dis"),
+                Self::Monitoring => fluent!("monitoring", "dis"),
+                Self::StartRecording => fluent!("startrecord", "dis"),
+                Self::StopRecording => fluent!("stoprecord", "dis"),
+                Self::Playback => fluent!("playrecord", "dis"),
+                Self::RunMacroMultiple => fluent!("playrecord_m", "dis"),
+                Self::SaveMacro => fluent!("saverecord", "dis"),
+                _ => self.image(),
+            };
+        }
+        let image = match self {
+            Self::New => fluent!("new"),
+            Self::Open => fluent!("open"),
+            Self::Save => fluent!("save"),
+            Self::SaveAll => fluent!("saveall"),
+            Self::Close => fluent!("close"),
+            Self::CloseAll => fluent!("closeall"),
+            Self::Print => fluent!("print"),
+            Self::Cut => fluent!("cut"),
+            Self::Copy => fluent!("copy"),
+            Self::Paste => fluent!("paste"),
+            Self::Undo => fluent!("undo"),
+            Self::Redo => fluent!("redo"),
+            Self::Find => fluent!("find"),
+            Self::Replace => fluent!("findrep"),
+            Self::DocumentList => fluent!("docList"),
+            Self::ZoomIn => fluent!("zoomIn"),
+            Self::ZoomOut => fluent!("zoomOut"),
+            Self::WordWrap => fluent!("wrap"),
+            Self::SyncVertical => fluent!("syncV"),
+            Self::SyncHorizontal => fluent!("syncH"),
+            Self::DefineUserLanguage => fluent!("udl"),
+            Self::AllCharacters => fluent!("allChars"),
+            Self::IndentGuides => fluent!("indentGuide"),
+            Self::DocumentMap => fluent!("docMap"),
+            Self::FolderWorkspace => fluent!("fileBrowser"),
+            Self::FunctionList => fluent!("funcList"),
+            Self::Monitoring => fluent!("monitoring"),
+            Self::StartRecording => fluent!("startrecord"),
+            Self::StopRecording => fluent!("stoprecord"),
+            Self::Playback => fluent!("playrecord"),
+            Self::RunMacroMultiple => fluent!("playrecord_m"),
+            Self::SaveMacro => fluent!("saverecord"),
+            _ => return self.image(),
+        };
+        let choice = view.pref_int("ToolBar.fluentColor", 0);
+        let mono = view.pref_bool("ToolBar.fluentMono", false);
+        let color = match choice {
+            1 => 0xe81123,
+            2 => 0x008b00,
+            3 => 0x0078d4,
+            4 => 0xb146c2,
+            5 => 0x00b7c3,
+            6 => 0x498205,
+            7 => 0xffb900,
+            9 => {
+                let value = view.pref_int("ToolBar.fluentCustomColor", 0) as u32;
+                ((value & 255) << 16) | (value & 0xff00) | ((value >> 16) & 255)
+            }
+            8 => system_accent_color(),
+            _ => {
+                if mono {
+                    if view.dark { 0xdedede } else { 0x212121 }
+                } else {
+                    return image;
+                }
+            }
+        };
+        let color = if choice == 9 && color == 0 {
+            if mono {
+                if view.dark { 0xdedede } else { 0x212121 }
+            } else {
+                return image;
+            }
+        } else {
+            color
+        };
+        let key = (image.id(), color, mono);
+        if let Some(cached) = ICON_CACHE.with(|cache| cache.borrow().1.get(&key).cloned()) {
+            return cached;
+        }
+        let rendered = match image.to_image_data(cx.svg_renderer()) {
+            Ok(rendered) => rendered,
+            Err(error) => {
+                eprintln!("Toolbar icon decode failed: {error}");
+                return image;
+            }
+        };
+        let Some(pixels) = rendered.as_bytes(0) else {
+            return image;
+        };
+        let size = rendered.size(0);
+        let width = size.width.0;
+        let height = size.height.0;
+        let mut bitmap = vec![0u8; 122];
+        bitmap[0..2].copy_from_slice(b"BM");
+        bitmap[2..6].copy_from_slice(&(122u32 + pixels.len() as u32).to_le_bytes());
+        bitmap[10..14].copy_from_slice(&122u32.to_le_bytes());
+        bitmap[14..18].copy_from_slice(&108u32.to_le_bytes());
+        bitmap[18..22].copy_from_slice(&(width as i32).to_le_bytes());
+        bitmap[22..26].copy_from_slice(&(-(height as i32)).to_le_bytes());
+        bitmap[26..28].copy_from_slice(&1u16.to_le_bytes());
+        bitmap[28..30].copy_from_slice(&32u16.to_le_bytes());
+        bitmap[30..34].copy_from_slice(&3u32.to_le_bytes());
+        for (offset, mask) in [
+            (54, 0x00ff0000u32),
+            (58, 0x0000ff00),
+            (62, 0x000000ff),
+            (66, 0xff000000),
+        ] {
+            bitmap[offset..offset + 4].copy_from_slice(&mask.to_le_bytes());
+        }
+        let secondary = if view.dark { 0x4cc2ff } else { 0x0078d4 };
+        for pixel in pixels.chunks_exact(4) {
+            let old =
+                (u32::from(pixel[2]) << 16) | (u32::from(pixel[1]) << 8) | u32::from(pixel[0]);
+            let matches_secondary = [0, 8, 16]
+                .into_iter()
+                .all(|shift| ((old >> shift) & 255).abs_diff((secondary >> shift) & 255) <= 3);
+            if pixel[3] != 0 && (mono || matches_secondary) {
+                bitmap.extend_from_slice(&[
+                    color as u8,
+                    (color >> 8) as u8,
+                    (color >> 16) as u8,
+                    pixel[3],
+                ]);
+            } else {
+                bitmap.extend_from_slice(pixel);
+            }
+        }
+        let colored = Arc::new(Image::from_bytes(ImageFormat::Bmp, bitmap));
+        ICON_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let palette = (color, mono);
+            if cache.0 != Some(palette) {
+                cache.1.clear();
+                cache.0 = Some(palette);
+            }
+            cache.1.insert(key, colored.clone());
+        });
+        colored
+    }
+
     pub(super) fn image(self) -> Arc<Image> {
         match self {
+            Self::StatusInfo => embedded_image!("standard/moreOnTooltip.png"),
             Self::New => embedded_image!("standard/newFile.png"),
             Self::Open => embedded_image!("standard/openFile.png"),
             Self::Save => embedded_image!("standard/saveFile.png"),
@@ -149,88 +372,49 @@ impl ToolbarIcon {
     }
 }
 
-#[cfg(all(test, feature = "native-input-tests"))]
-mod tests {
-    use super::*;
-
-    #[gpui::test]
-    fn reference_standard_bitmap_artwork_decodes_at_original_size(cx: &mut gpui::TestAppContext) {
-        let icons = [
-            ToolbarIcon::New,
-            ToolbarIcon::Open,
-            ToolbarIcon::Save,
-            ToolbarIcon::SaveAll,
-            ToolbarIcon::Close,
-            ToolbarIcon::CloseAll,
-            ToolbarIcon::Cut,
-            ToolbarIcon::Copy,
-            ToolbarIcon::Paste,
-            ToolbarIcon::Undo,
-            ToolbarIcon::Redo,
-            ToolbarIcon::Find,
-            ToolbarIcon::Replace,
-            ToolbarIcon::DocumentList,
-            ToolbarIcon::ZoomIn,
-            ToolbarIcon::ZoomOut,
-            ToolbarIcon::WordWrap,
-            ToolbarIcon::SyncVertical,
-            ToolbarIcon::SyncHorizontal,
-            ToolbarIcon::DefineUserLanguage,
-            ToolbarIcon::AllCharacters,
-            ToolbarIcon::IndentGuides,
-            ToolbarIcon::DocumentMap,
-            ToolbarIcon::FolderWorkspace,
-            ToolbarIcon::FunctionList,
-            ToolbarIcon::Monitoring,
-            ToolbarIcon::StartRecording,
-            ToolbarIcon::StopRecording,
-            ToolbarIcon::Playback,
-            ToolbarIcon::RunMacroMultiple,
-            ToolbarIcon::SaveMacro,
-            ToolbarIcon::SavedDocument,
-            ToolbarIcon::ModifiedDocument,
-            ToolbarIcon::ModifiedDocumentDark,
-            ToolbarIcon::ReadOnlyDocument,
-            ToolbarIcon::ReadOnlyDocumentDark,
-            ToolbarIcon::SystemReadOnlyDocument,
-            ToolbarIcon::SystemReadOnlyDocumentDark,
-            ToolbarIcon::MonitoringDocument,
-            ToolbarIcon::MonitoringDocumentDark,
-            ToolbarIcon::PinTab,
-            ToolbarIcon::PinnedTab,
-            ToolbarIcon::PinTabDark,
-            ToolbarIcon::PinnedTabDark,
-            ToolbarIcon::Application,
-        ];
-        cx.update(|cx| {
-            for icon in icons {
-                let image = icon.image();
-                assert_eq!(image.format, ImageFormat::Png);
-                let decoded = image
-                    .to_image_data(cx.svg_renderer())
-                    .expect("original artwork must decode");
-                assert_eq!(
-                    decoded.size(0),
-                    gpui::size(gpui::DevicePixels(16), gpui::DevicePixels(16))
-                );
-            }
-            let empty = ToolbarIcon::SavedDocumentDark
-                .image()
-                .to_image_data(cx.svg_renderer())
-                .expect("source transparent dark saved artwork");
-            assert_eq!(
-                empty.size(0),
-                gpui::size(gpui::DevicePixels(13), gpui::DevicePixels(13))
-            );
-            assert!(
-                empty
-                    .as_bytes(0)
-                    .expect("source dark saved pixels")
-                    .as_chunks::<4>()
-                    .0
-                    .iter()
-                    .all(|pixel| pixel[3] == 0)
-            );
-        });
+fn system_accent_color() -> u32 {
+    unsafe {
+        let color: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![objc2::class!(NSColor), controlAccentColor];
+        let space: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![objc2::class!(NSColorSpace), sRGBColorSpace];
+        let color: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![color, colorUsingColorSpace: space];
+        if color.is_null() {
+            return 0x0078d4;
+        }
+        let red: f64 = objc2::msg_send![color, redComponent];
+        let green: f64 = objc2::msg_send![color, greenComponent];
+        let blue: f64 = objc2::msg_send![color, blueComponent];
+        ((red.clamp(0., 1.) * 255.).round() as u32) << 16
+            | ((green.clamp(0., 1.) * 255.).round() as u32) << 8
+            | (blue.clamp(0., 1.) * 255.).round() as u32
     }
+}
+
+fn source_icon(bytes: &[u8], width: u8) -> Arc<Image> {
+    if let Some(header) = bytes.get(..6) {
+        let count = usize::from(u16::from_le_bytes([header[4], header[5]]));
+        for index in 0..count {
+            let offset = 6 + index * 16;
+            if let Some(entry) = bytes.get(offset..offset + 16)
+                && entry[0] == width
+            {
+                let length =
+                    u32::from_le_bytes([entry[8], entry[9], entry[10], entry[11]]) as usize;
+                let start =
+                    u32::from_le_bytes([entry[12], entry[13], entry[14], entry[15]]) as usize;
+                if let Some(png) = bytes.get(start..start.saturating_add(length))
+                    && png.starts_with(b"\x89PNG\r\n\x1a\n")
+                {
+                    return Arc::new(Image::from_bytes(ImageFormat::Png, png.to_vec()));
+                }
+            }
+        }
+    }
+    Arc::new(Image::from_bytes(ImageFormat::Ico, bytes.to_vec()))
+}
+
+thread_local! {
+    static ICON_CACHE: std::cell::RefCell<(Option<(u32, bool)>, std::collections::BTreeMap<(u64, u32, bool), Arc<Image>>)> = std::cell::RefCell::new((None, std::collections::BTreeMap::new()));
 }

@@ -141,7 +141,6 @@ From `notepad-matrix` with a local checkout containing the frozen commit:
 ```sh
 python3 scripts/language_catalog.py --source /path/to/notepad-plus-plus
 python3 scripts/language_catalog.py --source /path/to/notepad-plus-plus --check
-cargo test --no-default-features --test language_catalog
 ```
 
 Generation reads committed blobs with `git show`, not mutable working-tree

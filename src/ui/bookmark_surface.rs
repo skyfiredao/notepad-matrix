@@ -1,6 +1,152 @@
 use std::sync::{Arc, OnceLock};
 
 use super::*;
+use gpui::{fill, point};
+
+#[derive(Default)]
+pub(super) struct HistoryState {
+    next_session: Option<u8>,
+    runtime_flags: u8,
+    stopped: bool,
+    warning_given: bool,
+}
+
+impl HistoryState {
+    fn initialize(&mut self, settings: &serde_json::Value) {
+        let state = settings["ScintillaPrimaryView"]["isChangeHistoryEnabled"].as_u64().unwrap_or(1).min(3) as u8;
+        self.next_session = Some(state);
+        self.runtime_flags = if state == 0 { 0 } else { 1 | (state << 1) };
+        self.stopped = state == 0;
+    }
+}
+
+fn fold_art(
+    style: &str,
+    marker: Option<bool>,
+    above: bool,
+    below: bool,
+    tail: bool,
+    foreground: u32,
+    background: u32,
+) -> AnyElement {
+    let style = style.to_owned();
+    gpui::canvas(
+        |_, _, _| (),
+        move |bounds, _, window, _| {
+            let x = bounds.center().x.floor();
+            let y = bounds.center().y.floor();
+            let ink = rgb(background);
+            let tree = matches!(style.as_str(), "circle" | "box");
+            if tree {
+                if above {
+                    window.paint_quad(fill(
+                        Bounds::new(
+                            point(x, bounds.top()),
+                            size(px(1.), (y - bounds.top()).max(px(0.))),
+                        ),
+                        ink,
+                    ));
+                }
+                if below {
+                    window.paint_quad(fill(
+                        Bounds::new(point(x, y), size(px(1.), (bounds.bottom() - y).max(px(0.)))),
+                        ink,
+                    ));
+                }
+                if tail {
+                    if style == "circle" {
+                        window.paint_quad(fill(
+                            Bounds::new(point(x, y - px(2.)), size(px(1.), px(1.))),
+                            ink,
+                        ));
+                        window.paint_quad(fill(
+                            Bounds::new(point(x + px(1.), y - px(1.)), size(px(1.), px(1.))),
+                            ink,
+                        ));
+                        window.paint_quad(fill(
+                            Bounds::new(
+                                point(x + px(2.), y),
+                                size((bounds.right() - x - px(2.)).max(px(0.)), px(1.)),
+                            ),
+                            ink,
+                        ));
+                    } else {
+                        window.paint_quad(fill(
+                            Bounds::new(
+                                point(x, y),
+                                size((bounds.right() - x).max(px(0.)), px(1.)),
+                            ),
+                            ink,
+                        ));
+                    }
+                }
+            }
+            if let Some(collapsed) = marker {
+                if tree {
+                    let dimension = (f32::from(bounds.size.width)
+                        .min(f32::from(bounds.size.height) - 2.)
+                        .floor()
+                        - 1.) as i32;
+                    if dimension <= 0 {
+                        return;
+                    }
+                    let dimension = if dimension % 2 == 0 {
+                        dimension - 1
+                    } else {
+                        dimension
+                    };
+                    let half = (dimension as f32 / 2.).round();
+                    window.paint_quad(
+                        fill(
+                            Bounds::new(
+                                point(x - px(half), y - px(half)),
+                                size(px(dimension as f32), px(dimension as f32)),
+                            ),
+                            rgb(foreground),
+                        )
+                        .border_widths(px(1.))
+                        .border_color(ink)
+                        .corner_radii(px(if style == "circle" {
+                            dimension as f32 / 2.
+                        } else {
+                            0.
+                        })),
+                    );
+                }
+                if style == "arrow" {
+                    for step in 0..4 {
+                        let step = step as f32;
+                        let rectangle = if collapsed {
+                            Bounds::new(
+                                point(x - px(2.) + px(step), y - px(3.) + px(step)),
+                                size(px(1.), px(7. - step * 2.)),
+                            )
+                        } else {
+                            Bounds::new(
+                                point(x - px(3.) + px(step), y - px(2.) + px(step)),
+                                size(px(7. - step * 2.), px(1.)),
+                            )
+                        };
+                        window.paint_quad(fill(rectangle, ink));
+                    }
+                } else {
+                    window.paint_quad(fill(
+                        Bounds::new(point(x - px(2.), y), size(px(5.), px(1.))),
+                        ink,
+                    ));
+                    if collapsed {
+                        window.paint_quad(fill(
+                            Bounds::new(point(x, y - px(2.)), size(px(1.), px(5.))),
+                            ink,
+                        ));
+                    }
+                }
+            }
+        },
+    )
+    .size_full()
+    .into_any_element()
+}
 
 fn bookmark_image() -> Arc<gpui::Image> {
     static IMAGE: OnceLock<Arc<gpui::Image>> = OnceLock::new();
@@ -14,7 +160,7 @@ fn bookmark_image() -> Arc<gpui::Image> {
         .clone()
 }
 
-fn change_marker_style(edition: u8, dark: bool) -> (u32, &'static str) {
+pub(super) fn change_history_style(edition: u8, view: &MatrixWindow, attribute: &str) -> (u32, &'static str) {
     let (name, style, fallback) = match edition {
         1 => ("revert-origin", "Change History revert origin", 0x40a0bf),
         2 => ("saved", "Change History saved", 0x00a000),
@@ -25,386 +171,84 @@ fn change_marker_style(edition: u8, dark: bool) -> (u32, &'static str) {
             0xa0c000,
         ),
     };
-    (change_history_colour(style, dark, fallback), name)
-}
-
-fn change_history_colour(style: &str, dark: bool, fallback: u32) -> u32 {
-    crate::languages::catalog()
-        .ok()
-        .and_then(|catalog| {
-            catalog
-                .themes()
-                .theme(dark)
-                .global_styles
-                .iter()
-                .find(|entry| {
-                    entry
-                        .attributes
-                        .get("name")
-                        .is_some_and(|name| name == style)
-                })
-        })
-        .and_then(|entry| entry.attributes.get("bgColor"))
-        .and_then(|colour| u32::from_str_radix(colour, 16).ok())
-        .unwrap_or(fallback)
-}
-
-#[cfg(all(test, feature = "native-input-tests"))]
-mod tests {
-    use super::*;
-
-    #[gpui::test]
-    fn wrapped_line_number_digit_growth_preserves_the_document_viewport_anchor(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        cx.simulate_resize(size(px(480.), px(500.)));
-        view.update_in(cx, |view, window, cx| {
-            *view.editor_mut() = EditorSession::new(&format!("{}\n", "x".repeat(64)).repeat(1100));
-            view.reset_active_view(window, cx);
-        });
-        cx.dispatch_action(ToggleWordWrap);
-        for _ in 0..2 {
-            cx.update(|window, cx| window.draw(cx).clear(cx));
-        }
-        let editor = cx.debug_bounds("matrix-editor").unwrap();
-        cx.simulate_event(gpui::ScrollEvent {
-            position: editor.origin + gpui::point(px(100.), px(100.)),
-            delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-52000.))),
-            ..Default::default()
-        });
-        let mut lines = Vec::new();
-        for _ in 0..6 {
-            cx.update(|window, cx| window.draw(cx).clear(cx));
-            lines.push(view.read_with(cx, |view, _| {
-                view.editor_logical_line_for_visual_row(view.editor_top_line)
-            }));
-        }
-        assert_eq!(
-            lines,
-            vec![1000; 6],
-            "source margin growth reflows around the existing document position, not the old visual row index"
-        );
-        view.read_with(cx, |view, _| {
-            assert!(!view.editor().document().can_undo());
-            assert!(!view.editor_follow_caret);
-        });
-    }
-
-    #[gpui::test]
-    fn wrapped_change_history_bars_keep_source_column_and_follow_zoom(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        cx.simulate_resize(size(px(480.), px(500.)));
-        cx.simulate_input(&"word ".repeat(80));
-        cx.dispatch_action(ToggleWordWrap);
-        cx.dispatch_action(EditorDocumentStart);
-        cx.run_until_parked();
-        for _ in 0..2 {
-            cx.update(|window, cx| window.draw(cx).clear(cx));
-        }
-        let first = cx.debug_bounds("change-marker-modified-0-0").unwrap();
-        let wrapped = cx
-            .debug_bounds("change-marker-modified-0-0-wrap-1")
-            .unwrap();
-        assert_eq!(
-            first.left(),
-            wrapped.left(),
-            "wrapped lines retain all preceding margin slots"
-        );
-        assert_eq!(
-            first.bottom(),
-            wrapped.top(),
-            "source bar continues across visual fragments"
-        );
-        assert_eq!(wrapped.size, size(px(3.), px(26.)));
-        cx.dispatch_action(ZoomIn);
-        cx.run_until_parked();
-        for _ in 0..2 {
-            cx.update(|window, cx| window.draw(cx).clear(cx));
-        }
-        assert_eq!(
-            cx.debug_bounds("change-marker-modified-0-0").unwrap().size,
-            size(px(3.), px(28.))
-        );
-        assert_eq!(
-            cx.debug_bounds("editor-gutter").unwrap().size.width,
-            px(74.)
-        );
-        cx.dispatch_action(EditorUndo);
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "");
-            assert!(!view.editor().document().can_undo());
-        });
-    }
-
-    #[gpui::test]
-    fn line_number_gutter_uses_source_digit_width_order_and_text_origin(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            *view.editor_mut() = EditorSession::new(&"row\n".repeat(2000));
-            view.reset_active_view(window, cx);
-        });
-        cx.run_until_parked();
-        let editor = cx.debug_bounds("matrix-editor").unwrap();
-        let gutter = cx.debug_bounds("editor-gutter").unwrap();
-        assert_eq!(
-            gutter.size.width,
-            px(71.),
-            "source 8+3*8 line number, 16 symbol, 9 history, 14 fold margins"
-        );
-        assert_eq!(
-            cx.debug_bounds("bookmark-line-0").unwrap().left() - editor.left(),
-            px(32.),
-            "source line numbers precede the symbol margin"
-        );
-        view.update_in(cx, |view, window, cx| {
-            assert_eq!(
-                view.editor_text_origin(),
-                px(72.),
-                "source one-pixel left text margin follows all margins"
-            );
-            view.editor_mut()
-                .select(Selection {
-                    anchor: ByteOffset(3),
-                    head: ByteOffset(3),
-                })
-                .unwrap();
-            view.editor_changed(Ok(()), window, cx);
-        });
-        cx.simulate_click(
-            editor.origin + gpui::point(px(72.), px(10.)),
-            gpui::Modifiers::default(),
-        );
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().selection().head, ByteOffset(0))
-        });
-        cx.dispatch_action(EditorDocumentEnd);
-        cx.run_until_parked();
-        for _ in 0..2 {
-            cx.update(|window, cx| window.draw(cx).clear(cx));
-        }
-        assert_eq!(
-            cx.debug_bounds("editor-gutter").unwrap().size.width,
-            px(79.),
-            "four visible digits expand the margin by one measured digit"
-        );
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor_text_origin(), px(80.));
-            assert!(!view.editor().document().can_undo());
-            assert!(!view.workspace.active().is_modified());
-        });
-    }
-
-    #[gpui::test]
-    fn change_history_markers_use_source_full_line_bars(cx: &mut gpui::TestAppContext) {
-        let files = tempfile::tempdir().unwrap();
-        let path = files.path().join("history.txt");
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        cx.simulate_input("first\nsecond");
-        let first = cx.debug_bounds("change-marker-modified-0-0").unwrap();
-        let second = cx.debug_bounds("change-marker-modified-0-1").unwrap();
-        assert_eq!(
-            first.size.width,
-            px(3.),
-            "source SC_MARK_BAR is ceil(9/3) wide"
-        );
-        assert_eq!(
-            first.size.height,
-            px(26.),
-            "source history bar fills the visual line height"
-        );
-        assert_eq!(
-            first.bottom(),
-            second.top(),
-            "adjacent modified lines have no dot gaps"
-        );
-        cx.dispatch_action(SaveFile);
-        cx.simulate_new_path_selection(|_| Some(path.clone()));
-        cx.run_until_parked();
-        let saved = cx.debug_bounds("change-marker-saved-0-0").unwrap();
-        assert_eq!(saved.size, first.size);
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "first\nsecond");
-            assert!(!view.workspace.active().is_modified());
-            assert!(view.editor().document().can_undo());
-        });
-    }
-
-    #[gpui::test]
-    fn native_change_history_menu_navigates_blocks_and_clears_only_source_history(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            *view.editor_mut() = EditorSession::new("0\n1\n2\n3\n4\n5");
-            for line in [0, 1, 4, 5] {
-                let start = view.editor().document().line_start(line).unwrap();
-                view.editor_mut()
-                    .select(Selection {
-                        anchor: start,
-                        head: start,
-                    })
-                    .unwrap();
-                view.editor_mut().insert_text("x").unwrap();
-            }
-            view.editor_mut()
-                .select(Selection {
-                    anchor: ByteOffset(0),
-                    head: ByteOffset(0),
-                })
-                .unwrap();
-            view.editor_changed(Ok(()), window, cx);
-        });
-        for (command, line) in [
-            (crate::menu::ChangeHistoryCommand::Next, 4),
-            (crate::menu::ChangeHistoryCommand::Previous, 1),
-        ] {
-            view.update_in(cx, |view, window, cx| {
-                view.menu_input(
-                    MenuEvent::OpenSubmenu("search-change-history-menu"),
-                    window,
-                    cx,
-                );
-                view.menu_input(MenuEvent::First, window, cx);
-                if command == crate::menu::ChangeHistoryCommand::Previous {
-                    view.menu_input(MenuEvent::Down, window, cx);
-                }
-                view.menu_input(MenuEvent::Activate, window, cx);
-                assert_eq!(
-                    view.editor().selection().head,
-                    view.editor().document().line_start(line).unwrap()
-                );
-            });
-        }
-        let before = view.read_with(cx, |view, _| view.editor().committed_text());
-        view.update_in(cx, |view, window, cx| {
-            view.menu_input(
-                MenuEvent::OpenSubmenu("search-change-history-menu"),
-                window,
-                cx,
-            );
-            view.menu_input(MenuEvent::Last, window, cx);
-            view.menu_input(MenuEvent::Activate, window, cx);
-            assert!(!view.editor().document().can_undo());
-            assert!(!view.editor().document().can_redo());
-            assert!(view.workspace.active().is_modified());
-            assert_eq!(view.editor().document().change_marker_bits(0), 0);
-            assert_eq!(view.editor().committed_text(), before);
-        });
-    }
-
-    #[test]
-    fn change_history_palette_reaches_the_renderer_for_both_themes()
-    -> Result<(), Box<dyn std::error::Error>> {
-        for dark in [false, true] {
-            let mut app = gpui::HeadlessAppContext::with_platform(
-                std::sync::Arc::new(gpui::NoopTextSystem),
-                std::sync::Arc::new(()),
-                gpui_platform::current_headless_renderer,
-            );
-            let handle = app.open_window(size(px(640.), px(480.)), |window, cx| {
-                cx.new(|cx| {
-                    let mut view = MatrixWindow::new(dark, window, cx);
-                    *view.editor_mut() = EditorSession::new("one\ntwo");
-                    view
-                })
-            })?;
-            for (step, (name, colour)) in [
-                ("modified", [0xff, 0x80, 0x00]),
-                ("saved", [0x00, 0xa0, 0x00]),
-                ("revert-origin", [0x40, 0xa0, 0xbf]),
-                ("saved", [0x00, 0xa0, 0x00]),
-                ("modified", [0xff, 0x80, 0x00]),
-                ("revert-modified", [0xa0, 0xc0, 0x00]),
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                handle.update(&mut app, |view, window, cx| {
-                    match step {
-                        0 => view.editor_mut().insert_text("x")?,
-                        1 => {
-                            let saved = view.editor().save_snapshot();
-                            view.editor_mut().acknowledge_save(&saved)?;
-                        }
-                        2 | 5 => assert!(view.editor_mut().undo()),
-                        3 => assert!(view.editor_mut().redo()),
-                        _ => {
-                            view.editor_mut().select(Selection {
-                                anchor: ByteOffset(0),
-                                head: ByteOffset(8),
-                            })?;
-                            view.editor_mut().insert_text("replacement")?;
-                        }
-                    }
-                    view.editor_changed(Ok(()), window, cx);
-                    Ok::<(), crate::editor::EditError>(())
-                })??;
-                for _ in 0..3 {
-                    app.update_window(handle.into(), |_, window, cx| window.draw(cx).clear(cx))?;
-                    app.run_until_parked();
-                }
-                let image = app.capture_screenshot(handle.into())?;
-                let scale = image.width() / 640;
-                let (x, y, _) = image
-                    .enumerate_pixels()
-                    .find(|(x, y, pixel)| {
-                        *x < 72 * scale
-                            && *y >= 110 * scale
-                            && *y < 125 * scale
-                            && pixel.0[..3] == colour
-                    })
-                    .ok_or_else(|| {
-                        format!("source {name} absent in history gutter, dark={dark}")
-                    })?;
-                let margin = if dark {
-                    [0x0c, 0x0c, 0x0c]
-                } else {
-                    [0xe0, 0xe0, 0xe0]
-                };
-                assert_eq!(
-                    image.get_pixel(x.saturating_sub(2 * scale), y).0[..3],
-                    margin,
-                    "source history margin next to {name}, dark={dark}"
-                );
-            }
-        }
-        Ok(())
-    }
-
-    #[gpui::test]
-    fn native_change_markers_turn_from_modified_to_saved_without_adding_undo(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let home = tempfile::tempdir().expect("isolated change-marker save");
-        let path = home.path().join("saved.txt");
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        cx.simulate_input("alpha\nbeta");
-        assert!(cx.debug_bounds("change-marker-modified-0-0").is_some());
-        assert!(cx.debug_bounds("change-marker-modified-0-1").is_some());
-        cx.dispatch_action(SaveFile);
-        cx.simulate_new_path_selection(|_| Some(path.clone()));
-        cx.run_until_parked();
-        assert!(path.exists());
-        assert!(cx.debug_bounds("change-marker-saved-0-0").is_some());
-        assert!(cx.debug_bounds("change-marker-saved-0-1").is_some());
-        assert!(cx.debug_bounds("change-marker-modified-0-0").is_none());
-        cx.dispatch_action(EditorUndo);
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.editor().committed_text(), "alpha\n");
-            assert_eq!(view.editor().document().change_marker_bits(0), 2);
-        });
-        assert!(cx.debug_bounds("change-marker-revert-origin-0-1").is_some());
-        cx.dispatch_action(EditorRedo);
-        assert!(cx.debug_bounds("change-marker-saved-0-0").is_some());
-    }
+    (view.style_colour(style, attribute, fallback), name)
 }
 
 impl MatrixWindow {
+    pub(super) fn initialize_change_history(&mut self, settings: &serde_json::Value) {
+        if self.preferences.history.next_session.is_none() {
+            self.preferences.history.initialize(settings);
+        }
+        let enabled = self.preferences.history.runtime_flags & 1 != 0;
+        for buffer in self.workspace.buffers() {
+            buffer.editor.document().set_change_history_capture(enabled);
+        }
+    }
+
+    pub(super) fn initialize_buffer_change_history(&self, document: &crate::editor::Document) {
+        document.set_change_history_capture(self.preferences.history.runtime_flags & 1 != 0);
+    }
+
+    pub(super) fn initialize_active_change_history(&self) {
+        self.initialize_buffer_change_history(self.editor().document());
+    }
+
+    pub(super) fn change_history_runtime_flags(&self) -> u8 {
+        self.preferences.history.runtime_flags
+    }
+
+    pub(super) fn configure_change_history(
+        &mut self,
+        settings: &serde_json::Value,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.preferences.history.next_session.is_none() {
+            self.initialize_change_history(settings);
+            return;
+        }
+        let next = settings["ScintillaPrimaryView"]["isChangeHistoryEnabled"].as_u64().unwrap_or(1).min(3) as u8;
+        let previous = self.preferences.history.next_session.replace(next);
+        if previous == Some(next) {
+            return;
+        }
+        if previous == Some(0) && next != 0 {
+            if !self.preferences.history.warning_given {
+                self.preferences.history.warning_given = true;
+                let response = window.prompt(
+                    gpui::PromptLevel::Info,
+                    "需要重新启动 Notepad Matrix",
+                    Some("必须重新启动 Notepad Matrix 才能启用变更历史。"),
+                    &[gpui::PromptButton::ok("确定")],
+                    cx,
+                );
+                cx.spawn_in(window, async move |view, cx| {
+                    if let Err(error) = response.await {
+                        if let Err(error) = view.update_in(cx, |view, _, cx| {
+                            view.notify_editor_error(error.to_string(), cx);
+                        }) {
+                            eprintln!("Could not report change history warning: {error}");
+                        }
+                    }
+                }).detach();
+            }
+            return;
+        }
+        if self.preferences.history.stopped {
+            return;
+        }
+        self.preferences.history.runtime_flags = if next == 0 { 0 } else { 1 | (next << 1) };
+        self.preferences.history.stopped = next == 0;
+        let enabled = next != 0;
+        for buffer in self.workspace.buffers() {
+            buffer.editor.document().set_change_history_capture(enabled);
+        }
+        self.editor_chrome.invalidate_layout();
+        self.editor_painted_revision = None;
+        window.notify_text_input_changed(&self.editor_focus);
+        cx.notify();
+    }
+
     pub(super) fn change_history_command(
         &mut self,
         command: crate::menu::ChangeHistoryCommand,
@@ -412,7 +256,8 @@ impl MatrixWindow {
         cx: &mut Context<Self>,
     ) {
         use crate::menu::ChangeHistoryCommand;
-        if self.file_busy
+        if self.change_history_runtime_flags() == 0
+            || self.file_busy
             || self.close_dialog
             || self.save_all_dialog
             || self.batch_editing_blocked()
@@ -429,7 +274,7 @@ impl MatrixWindow {
                         self.editor_follow_caret = true;
                         self.editor_preferred_x = None;
                         self.editor_scroll_remainder = 0.;
-                    } else if !self.mute_sounds && !cx.is_test() {
+                    } else if !self.mute_sounds {
                         objc2_app_kit::NSBeep();
                     }
                 }),
@@ -459,6 +304,18 @@ impl MatrixWindow {
                     .editor_mut()
                     .goto_bookmark(command == BookmarkCommand::Next);
                 if matches!(result, Ok(true)) {
+                    let document = self.editor().document();
+                    let line = match document
+                        .byte_snapshot()
+                        .line_index(document.selection().head.0)
+                    {
+                        Ok(line) => line,
+                        Err(error) => {
+                            self.notify_editor_error(error.to_string(), cx);
+                            return;
+                        }
+                    };
+                    self.ensure_editor_line_visible(line);
                     self.editor_follow_caret = true;
                     self.editor_preferred_x = None;
                     self.editor_scroll_remainder = 0.;
@@ -477,19 +334,31 @@ impl MatrixWindow {
     pub(super) fn render_bookmark_gutter(&self, cx: &mut Context<Self>) -> AnyElement {
         let dark = self.dark;
         let pane = self.pane;
-        let fold_headers: std::collections::BTreeSet<_> = self
-            .udl_fold_ranges()
-            .into_iter()
-            .map(|(header, _)| header)
-            .collect();
+        let folds = self.udl_fold_ranges();
+        let fold_headers: std::collections::BTreeSet<_> =
+            folds.iter().map(|(header, _)| *header).collect();
+        let fold_style = self.pref_string("ScintillaPrimaryView.folderMarkStyle", "box");
+        let fold_foreground = self.style_colour("Fold", "bgColor", 0xffffff);
+        let fold_background = self.style_colour("Fold", "fgColor", 0x808080);
+        let fold_margin = self.style_colour("Fold margin", "bgColor", 0xe9e9e9);
+        let fold_margin_highlight = self.style_colour("Fold margin", "fgColor", 0xffffff);
         let owner = self.workspace.active().id();
         let text = self.editor().display_snapshot();
         let capacity = self.editor_visible_capacity();
         let row_height = self.editor_line_height();
         let line_number_width = self.editor_line_number_width();
         let (line_number_family, line_number_size) = self.editor_line_number_font();
-        let caret_line =
-            text.byte_to_line_idx(self.editor().selection().head.0, ropey::LineType::LF_CR);
+        let line_number_font_style = self.editor_line_number_font_style();
+        let caret_line = text.byte_to_line_idx(
+            self.editor().display_selection().head.0,
+            ropey::LineType::LF_CR,
+        );
+        let active_fold = folds
+            .iter()
+            .filter(|(header, end)| *header <= caret_line && caret_line <= *end)
+            .max_by_key(|(header, _)| *header)
+            .copied();
+        let active_fold_color = self.style_colour("Fold active", "fgColor", 0xff0000);
         let mut lines = self.editor_visible_gutter_rows();
         if lines.is_empty() {
             lines = crate::editor::visible_rows(
@@ -512,7 +381,28 @@ impl MatrixWindow {
             .enumerate()
             .map(|(index, (line, first))| {
                 let marked = bookmarks.contains(&line);
-                let changes = self.editor().document().change_marker_bits(line);
+                let changes = if self.change_history_runtime_flags() & 2 != 0 {
+                    self.editor().document().change_marker_bits(line)
+                } else {
+                    0
+                };
+                let header = fold_headers.contains(&line);
+                let collapsed = header && self.editor_fold_collapsed(line);
+                let above = folds
+                    .iter()
+                    .any(|(start, end)| *start < line && line <= *end)
+                    || (!first && header && !collapsed);
+                let below = folds
+                    .iter()
+                    .any(|(start, end)| *start < line && line < *end)
+                    || (header && !collapsed);
+                let tail = first && !header && folds.iter().any(|(_, end)| *end == line);
+                let marker_background =
+                    if active_fold.is_some_and(|(header, end)| header <= line && line <= end) {
+                        active_fold_color
+                    } else {
+                        fold_background
+                    };
                 div()
                     .id(("editor-gutter", index))
                     .h(row_height)
@@ -526,10 +416,14 @@ impl MatrixWindow {
                             .flex_shrink_0()
                             .pr(px(3.))
                             .text_right()
-                            .font_family(line_number_family)
+                            .font_family(line_number_family.clone())
+                            .when(line_number_font_style & 1 != 0, |number| number.font_weight(gpui::FontWeight::BOLD))
+                            .when(line_number_font_style & 2 != 0, |number| number.italic())
+                            .when(line_number_font_style & 4 != 0, |number| number.underline())
                             .text_size(line_number_size)
                             .line_height(row_height)
-                            .child(if first {
+                            .overflow_hidden()
+                            .child(if first && line_number_width > px(0.) {
                                 (line + 1).to_string()
                             } else {
                                 String::new()
@@ -550,10 +444,19 @@ impl MatrixWindow {
                             .role(Role::CheckBox)
                             .aria_label(format!("Bookmark line {}", line + 1))
                             .aria_toggled(marked.into())
-                            .w(px(16.))
+                            .w(self.editor_bookmark_margin_width())
+                            .overflow_hidden()
                             .h(row_height)
                             .flex_shrink_0()
-                            .bg(rgb(if self.dark { 0x303030 } else { 0xe0e0e0 }))
+                            .bg(rgb(self.style_colour(
+                                "Bookmark margin",
+                                "bgColor",
+                                self.style_colour(
+                                    "Line number margin",
+                                    "bgColor",
+                                    if self.dark { 0x303030 } else { 0xe0e0e0 },
+                                ),
+                            )))
                             .flex()
                             .items_center()
                             .justify_center()
@@ -598,20 +501,21 @@ impl MatrixWindow {
                     .child(
                         div()
                             .id(("change-history-line", index))
-                            .w(px(9.))
+                            .w(self.editor_history_margin_width())
+                            .overflow_hidden()
                             .h(row_height)
                             .flex_shrink_0()
                             .relative()
-                            .bg(rgb(change_history_colour(
+                            .bg(rgb(self.style_colour(
                                 "Change History margin",
-                                self.dark,
+                                "bgColor",
                                 if self.dark { 0x0c0c0c } else { 0xe0e0e0 },
                             )))
                             .children((1u8..=4).filter_map(|edition| {
                                 if changes & (1 << (edition - 1)) == 0 {
                                     return None;
                                 }
-                                let (colour, name) = change_marker_style(edition, self.dark);
+                                 let (colour, name) = change_history_style(edition, self, "bgColor");
                                 Some(
                                     div()
                                         .id(("change-marker", usize::from(edition)))
@@ -645,56 +549,97 @@ impl MatrixWindow {
                             .w(self.editor_fold_margin_width())
                             .h(row_height)
                             .flex_shrink_0()
-                            .when(first && fold_headers.contains(&line), |margin| {
-                                let collapsed = self.editor_fold_collapsed(line);
-                                margin.child(
-                                    div()
-                                        .id(("fold-line", line))
-                                        .debug_selector(move || {
-                                            if pane == crate::workspace::ViewId::Primary {
-                                                format!("fold-line-{line}")
-                                            } else {
-                                                format!("fold-line-secondary-{line}")
-                                            }
-                                        })
-                                        .role(Role::Button)
-                                        .aria_label(format!(
-                                            "{} fold on line {}",
-                                            if collapsed { "Expand" } else { "Collapse" },
-                                            line + 1
-                                        ))
-                                        .tooltip(move |_, cx| {
-                                            icon_tooltip::view(
-                                                if collapsed {
-                                                    "Expand fold"
+                            .overflow_hidden()
+                            .bg(rgb(fold_margin))
+                            .relative()
+                            .child(gpui::canvas(|_, _, _| (), move |bounds, _, window, _| {
+                                if fold_margin == fold_margin_highlight { return; }
+                                for y in 0..f32::from(bounds.size.height).ceil() as usize {
+                                    for x in 0..f32::from(bounds.size.width).ceil() as usize {
+                                        if ((f32::from(bounds.left()).floor() as i64 + x as i64)
+                                            + (f32::from(bounds.top()).floor() as i64 + y as i64)) & 1 != 0 {
+                                            window.paint_quad(fill(
+                                                Bounds::new(point(bounds.left() + px(x as f32), bounds.top() + px(y as f32)), size(px(1.), px(1.))),
+                                                rgb(fold_margin_highlight),
+                                            ));
+                                        }
+                                    }
+                                }
+                            }).absolute().size_full())
+                            .when(!(first && header), |margin| {
+                                margin.child(fold_art(
+                                    &fold_style,
+                                    None,
+                                    above,
+                                    below,
+                                    tail,
+                                    fold_foreground,
+                                    marker_background,
+                                ))
+                            })
+                            .when(
+                                first
+                                    && fold_headers.contains(&line)
+                                    && self.editor_fold_margin_width() > px(0.),
+                                |margin| {
+                                    let collapsed = self.editor_fold_collapsed(line);
+                                    margin.child(
+                                        div()
+                                            .id(("fold-line", line))
+                                            .debug_selector(move || {
+                                                if pane == crate::workspace::ViewId::Primary {
+                                                    format!("fold-line-{line}")
                                                 } else {
-                                                    "Collapse fold"
-                                                },
-                                                dark,
-                                                cx,
-                                            )
-                                        })
-                                        .w(px(14.))
-                                        .h(row_height)
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .cursor_pointer()
-                                        .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                                            cx.stop_propagation()
-                                        })
-                                        .on_click(cx.listener(move |view, _, window, cx| {
-                                            if view.focus_editor_pane(pane, window, cx)
-                                                && view.workspace.active().id() == owner
-                                                && !view.batch_editing_blocked()
-                                            {
-                                                view.toggle_editor_fold(line, window, cx);
-                                            }
-                                            cx.stop_propagation();
-                                        }))
-                                        .child(if collapsed { "+" } else { "−" }),
-                                )
-                            }),
+                                                    format!("fold-line-secondary-{line}")
+                                                }
+                                            })
+                                            .role(Role::Button)
+                                            .aria_label(format!(
+                                                "{} fold on line {}",
+                                                if collapsed { "Expand" } else { "Collapse" },
+                                                line + 1
+                                            ))
+                                            .tooltip(move |_, cx| {
+                                                icon_tooltip::view(
+                                                    if collapsed {
+                                                        "Expand fold"
+                                                    } else {
+                                                        "Collapse fold"
+                                                    },
+                                                    dark,
+                                                    cx,
+                                                )
+                                            })
+                                            .w(px(14.))
+                                            .h(row_height)
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .cursor_pointer()
+                                            .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                                cx.stop_propagation()
+                                            })
+                                            .on_click(cx.listener(move |view, _, window, cx| {
+                                                if view.focus_editor_pane(pane, window, cx)
+                                                    && view.workspace.active().id() == owner
+                                                    && !view.batch_editing_blocked()
+                                                {
+                                                    view.toggle_editor_fold(line, window, cx);
+                                                }
+                                                cx.stop_propagation();
+                                            }))
+                                            .child(fold_art(
+                                                &fold_style,
+                                                Some(collapsed),
+                                                above,
+                                                below,
+                                                false,
+                                                fold_foreground,
+                                                marker_background,
+                                            )),
+                                    )
+                                },
+                            ),
                     )
             })
             .collect::<Vec<_>>();
@@ -718,8 +663,16 @@ impl MatrixWindow {
             .overflow_hidden()
             .flex()
             .flex_col()
-            .bg(rgb(if self.dark { 0x303030 } else { 0xe4e4e4 }))
-            .text_color(rgb(if self.dark { 0xb0b0b0 } else { 0x808080 }))
+            .bg(rgb(self.style_colour(
+                "Line number margin",
+                "bgColor",
+                self.appearance_colour("DarkMode.customColorActive", 0xe4e4e4),
+            )))
+            .text_color(rgb(self.style_colour(
+                "Line number margin",
+                "fgColor",
+                self.appearance_colour("DarkMode.customColorDarkText", 0x808080),
+            )))
             .text_size(self.editor_font_size())
             .children(rows)
             .into_any_element()

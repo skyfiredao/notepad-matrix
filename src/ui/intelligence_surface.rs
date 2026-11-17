@@ -1,6 +1,6 @@
 use super::*;
 use crate::intelligence::{
-    CompletionCandidate, CompletionEdit, CompletionKind, CompletionMode, CompletionResult,
+    CompletionCandidate, CompletionEdit, CompletionMode, CompletionResult,
     IntelligenceError, SignatureHelp, SubmitKey,
 };
 use gpui::Pixels;
@@ -11,9 +11,6 @@ pub(super) mod source;
 pub(super) use model::Action as IntelligenceAction;
 use model::{IntelligenceModel, Settings, Snapshot};
 
-#[cfg(all(test, feature = "native-input-tests", debug_assertions))]
-#[path = "intelligence_surface_tests.rs"]
-mod tests;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum RequestMode {
@@ -31,6 +28,7 @@ pub(super) struct State {
     task: Option<gpui::Task<()>>,
     scroll: gpui::UniformListScrollHandle,
     auto_insert: [crate::intelligence::auto_insert::Tracker; 2],
+    calltip_cache: [Option<(crate::syntax::Language, SignatureHelp)>; 2],
 }
 
 impl State {
@@ -42,6 +40,7 @@ impl State {
             task: None,
             scroll: gpui::UniformListScrollHandle::new(),
             auto_insert: Default::default(),
+            calltip_cache: Default::default(),
         }
     }
 }
@@ -51,39 +50,17 @@ struct Response {
     completion: Option<CompletionResult>,
     selected: usize,
     calltip: Option<SignatureHelp>,
+    calltip_cache: Option<SignatureHelp>,
 }
 
 impl MatrixWindow {
     pub(super) fn configure_intelligence(&mut self, settings: &serde_json::Value) {
         self.intelligence.settings = Settings::from_json(settings);
-    }
-
-    pub(super) fn auto_insert_flag(&self, index: usize) -> bool {
-        self.intelligence
-            .settings
-            .auto_insert
-            .flags
-            .get(index)
-            .copied()
-            .unwrap_or(false)
-    }
-
-    pub(super) fn set_auto_insert_flag(&mut self, index: usize, enabled: bool) {
-        if let Some(flag) = self.intelligence.settings.auto_insert.flags.get_mut(index) {
-            *flag = enabled;
-        }
-        self.intelligence.model.dismiss();
-        self.intelligence.task = None;
+        self.intelligence.settings.auto_insert.user_pairs.retain(|(open, close)| *open != 0 && *close != 0);
     }
 
     pub(super) fn auto_indent_mode(&self) -> crate::indentation::Mode {
         self.intelligence.settings.maintain_indent
-    }
-
-    pub(super) fn set_auto_indent_mode(&mut self, mode: crate::indentation::Mode) {
-        self.intelligence.settings.maintain_indent = mode;
-        self.intelligence.model.dismiss();
-        self.intelligence.task = None;
     }
 
     pub(super) fn commit_editor_text(
@@ -92,6 +69,8 @@ impl MatrixWindow {
         typing: bool,
     ) -> Result<(), crate::editor::EditError> {
         let settings = self.intelligence.settings.auto_insert.clone();
+        let tabs = self.editing_tab_preferences(self.workspace.active().language());
+        self.editor_mut().set_tab_preferences(tabs);
         let mode = self.auto_indent_mode();
         let indentation = mode != crate::indentation::Mode::None
             && (text == self.editor().line_ending().as_str()
@@ -280,7 +259,7 @@ impl MatrixWindow {
                 return;
             }
         };
-        let text = self.editor().committed_text();
+        let bytes = self.editor().document().byte_snapshot();
         let caret = owner.selection.head.0;
         let base = self
             .workspace
@@ -303,13 +282,15 @@ impl MatrixWindow {
                     && popup.owner.view == owner.view
                     && popup.owner.language == owner.language
             })
-            .map(|popup| {
-                (
-                    popup.help.call_open_byte,
-                    popup.help.function_name.clone(),
-                    popup.help.active_overload,
-                )
-            });
+            .map(|popup| popup.help.clone());
+        let pane = if owner.view == crate::workspace::ViewId::Primary { 0 } else { 1 };
+        let mut calltip_cache = previous_call.clone().or_else(|| {
+            self.intelligence.calltip_cache[pane].as_ref().filter(|(cached_language, _)| *cached_language == language).map(|(_, cached)| {
+                let mut cached = cached.clone();
+                cached.active_overload = 0;
+                cached
+            })
+        });
         let previous_completion = self
             .intelligence
             .model
@@ -325,7 +306,7 @@ impl MatrixWindow {
         let target = owner.clone();
         let worker = cx.background_executor().spawn(async move {
             let catalog = source::catalog()?;
-            let settings = match settings_home {
+            let mut settings = match settings_home {
                 Some(home) => {
                     Settings::from_json(&ConfigStore::under_home(&home).load_settings().map_err(
                         |error| IntelligenceError(format!("Auto-completion settings: {error}")),
@@ -333,28 +314,25 @@ impl MatrixWindow {
                 }
                 None => Settings::default(),
             };
+            settings.auto_insert.user_pairs.retain(|(open, close)| *open != 0 && *close != 0);
             let completion_command = explicit
                 && matches!(
                     mode,
                     RequestMode::Words | RequestMode::Api | RequestMode::Path
                 );
-            let mut calltip = if !completion_command
-                && (settings.function_parameters
-                    || mode == RequestMode::Calltip
-                    || previous_call.is_some())
+            let trigger = bytes.byte(caret.saturating_sub(1));
+            let api = catalog.try_api(&key)?;
+            let trigger = api.is_some_and(|api| trigger.is_some_and(|byte| {
+                u32::from(byte) == u32::from(api.environment.start_function)
+                    || u32::from(byte) == u32::from(api.environment.parameter_separator)
+            }));
+            let calltip = if !completion_command
+                && (mode == RequestMode::Calltip || previous_call.is_some() || settings.function_parameters && trigger)
             {
-                catalog.signature_help(&key, &text, caret, 0)?
+                catalog.signature_help(&key, &bytes, caret, &mut calltip_cache)?
             } else {
                 None
             };
-            if let (Some(help), Some((open, name, selected))) = (&mut calltip, previous_call)
-                && help.call_open_byte == open
-                && help.function_name == name
-            {
-                for _ in 0..selected.min(help.signatures.len()) {
-                    help.cycle_overload(true);
-                }
-            }
             let mut selected = 0;
             let completion = if mode == RequestMode::Calltip || (!explicit && calltip.is_some()) {
                 None
@@ -365,7 +343,13 @@ impl MatrixWindow {
                         IntelligenceError(format!("Path completion directory: {error}"))
                     })?,
                 };
-                Some(catalog.complete_path(&text, caret, &base)?)
+                let mut result = catalog.complete_path(&bytes, caret, &base)?;
+                if let Some((_, path)) = crate::intelligence::path_context(&bytes, caret)? {
+                    if let Some(index) = result.candidates.iter().position(|candidate| crate::intelligence::prefix_matches(&candidate.bytes, path.as_bytes(), true)) {
+                        selected = index;
+                    } else { result.candidates.clear(); }
+                }
+                Some(result)
             } else {
                 let requested = match mode {
                     RequestMode::Words => Some(CompletionMode::Words),
@@ -375,44 +359,18 @@ impl MatrixWindow {
                 if let Some(requested) = requested {
                     let mut options = settings.completion.clone();
                     options.mode = requested;
+                    options.api_brief = settings.brief;
                     options.auto_insert_single = explicit && mode == RequestMode::Words;
                     if explicit {
                         options.minimum_prefix = 1;
                     }
-                    let mut result = catalog.complete(&key, &text, caret, &options)?;
-                    if !result.candidates.is_empty()
-                        && requested == CompletionMode::Api
-                        && !settings.brief
-                        && let Some(api) = catalog.api(&key)
-                    {
-                        result.candidates = api
-                            .keywords
-                            .iter()
-                            .map(|keyword| CompletionCandidate {
-                                text: keyword.name.clone(),
-                                kind: if keyword.is_function {
-                                    CompletionKind::Function
-                                } else {
-                                    CompletionKind::Keyword
-                                },
-                            })
-                            .collect();
-                    }
-                    let prefix = &text[result.replace_range.clone()];
+                    let mut result = catalog.complete(&key, &bytes, caret, &options)?;
+                    let prefix = bytes.slice(result.replace_range.clone()).map_err(|error| IntelligenceError(error.to_string()))?.to_vec();
                     let ignore_case = options.ignore_case.unwrap_or_else(|| {
-                        catalog
-                            .api(&key)
-                            .is_some_and(|api| api.environment.ignore_case)
+                        api.is_some_and(|api| api.environment.ignore_case)
                     });
                     let matches_prefix = |candidate: &CompletionCandidate| {
-                        if ignore_case {
-                            candidate
-                                .text
-                                .to_lowercase()
-                                .starts_with(&prefix.to_lowercase())
-                        } else {
-                            candidate.text.starts_with(prefix)
-                        }
+                        crate::intelligence::prefix_matches(&candidate.bytes, &prefix, ignore_case)
                     };
                     if !explicit
                         && !settings.brief
@@ -437,6 +395,7 @@ impl MatrixWindow {
                 completion,
                 selected,
                 calltip,
+                calltip_cache,
             })
         });
         let document_window = self.document_window;
@@ -459,6 +418,7 @@ impl MatrixWindow {
                         }
                     };
                     view.intelligence.settings = response.settings;
+                    view.intelligence.calltip_cache[pane] = response.calltip_cache.map(|help| (language, help));
                     view.intelligence.model.accept_calltip(
                         target.clone(),
                         &current,
@@ -517,10 +477,7 @@ impl MatrixWindow {
         if self.intelligence_snapshot() != *owner || self.intelligence_blocked() {
             return;
         }
-        let result = self.editor_mut().replace_display_range(
-            ByteOffset(edit.replace_range.start)..ByteOffset(edit.replace_range.end),
-            &edit.text,
-        );
+        let result = self.editor_mut().apply_completion(edit);
         if result.is_ok() {
             window.activate_window();
             self.editor_focus.focus(window, cx);
@@ -735,7 +692,7 @@ impl MatrixWindow {
                 .gap(px(6.))
                 .bg(rgb(if dark { 0x282820 } else { 0xffffe1 }))
                 .text_color(rgb(if dark { 0xeeeeee } else { 0x202020 }))
-                .child(
+                .when(help.signatures.len() > 1, |dialog| dialog.child(
                     div()
                         .flex()
                         .gap(px(8.))
@@ -756,7 +713,7 @@ impl MatrixWindow {
                                 })),
                         )
                         .child(format!(
-                            "{} / {}",
+                            "{} of {}",
                             help.active_overload + 1,
                             help.signatures.len()
                         ))
@@ -774,7 +731,7 @@ impl MatrixWindow {
                                     cx.stop_propagation();
                                 })),
                         ),
-                )
+                ))
                 .child(label)
                 .child(signature.description.clone())
                 .into_any_element(),

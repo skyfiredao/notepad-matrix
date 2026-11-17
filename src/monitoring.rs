@@ -48,6 +48,7 @@ pub struct PollRequest {
     observation: FileObservation,
     generation: u64,
     revision: DisplayRevision,
+    codepage: Option<crate::files::ByteFormatCodePage>,
 }
 
 pub struct PollResult {
@@ -76,7 +77,7 @@ impl PollRequest {
             if observation == self.observation {
                 return Ok((observation, None));
             }
-            let loaded = DiskFile::load_unicode(&self.path)?;
+            let loaded = DiskFile::load_with_code_page(&self.path,self.codepage)?;
             if FileObservation::read(&self.path)? != observation {
                 return Err(io::Error::other("monitored file changed while loading"));
             }
@@ -219,6 +220,7 @@ impl Monitoring {
                     observation: entry.observation.clone(),
                     generation: entry.generation,
                     revision: buffer.editor.display_revision(),
+                    codepage: buffer.byte_code_page(),
                 })
             })
             .take(16)
@@ -285,5 +287,118 @@ impl Monitoring {
             entry.observation = observation;
         }
         Ok(MonitorUpdate::Reloaded { id, follow_tail })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AutoDetectionOptions {
+    pub mode: u8,
+    pub update_silently: bool,
+    pub go_to_end: bool,
+}
+
+impl Default for AutoDetectionOptions {
+    fn default() -> Self { Self { mode: 2,update_silently: false,go_to_end: false } }
+}
+
+impl AutoDetectionOptions {
+    pub fn from_settings(settings: &serde_json::Value) -> io::Result<Self> {
+        let value = match settings.get("FileAutoDetection") {
+            None => 2,
+            Some(value) => value.as_u64().filter(|value| *value <= 15).ok_or_else(|| io::Error::other("FileAutoDetection must be a bitmask from 0 to 15"))?,
+        };
+        Ok(Self { mode: if value & 1 != 0 { 1 } else if value & 2 != 0 { 2 } else { 0 },update_silently: value & 4 != 0,go_to_end: value & 8 != 0 })
+    }
+}
+
+#[derive(Default)]
+pub struct AutoDetection {
+    options: AutoDetectionOptions,
+    observations: BTreeMap<BufferId,(PathBuf,Option<FileObservation>,bool,Option<SystemTime>)>,
+    generation: u64,
+}
+
+pub struct AutoDetectionRequest {
+    id: BufferId,
+    path: PathBuf,
+    previous: Option<FileObservation>,
+    read_only: bool,
+    generation: u64,
+    revision: DisplayRevision,
+}
+
+pub struct AutoDetectionResult {
+    request: AutoDetectionRequest,
+    observed: io::Result<(Option<FileObservation>,bool)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AutoChange {
+    Modified(BufferId),
+    Deleted(BufferId),
+    ReadOnly(BufferId,bool),
+}
+
+impl AutoDetectionRequest {
+    pub fn poll(self) -> AutoDetectionResult {
+        let observed = match std::fs::metadata(&self.path) {
+            Ok(metadata) => FileObservation::read(&self.path).map(|observation| (Some(observation),metadata.permissions().readonly())),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok((None,true)),
+            Err(error) => Err(error),
+        };
+        AutoDetectionResult { request:self,observed }
+    }
+}
+
+impl AutoDetection {
+    pub fn configure(&mut self,options: AutoDetectionOptions) {
+        if self.options != options {
+            self.options = options;
+            self.generation = self.generation.wrapping_add(1);
+        }
+    }
+
+    pub fn options(&self) -> AutoDetectionOptions { self.options }
+
+    pub fn requests(&mut self,workspace: &Workspace) -> Vec<AutoDetectionRequest> {
+        self.observations.retain(|id,_| workspace.buffers().iter().any(|buffer| buffer.id() == *id));
+        if self.options.mode == 0 { return Vec::new(); }
+        let mut requests = Vec::new();
+        for buffer in workspace.buffers() {
+            if buffer.is_monitoring() || buffer.editor.has_composition()
+                || (self.options.mode == 2 && buffer.id() != workspace.active().id()) { continue; }
+            let Some(file) = &buffer.disk_file else { continue; };
+            let baseline = file.original_modified().map(|modified| FileObservation { length:file.loaded_len() as u64,modified,identity:file.identity() });
+            let entry = self.observations.entry(buffer.id()).or_insert_with(|| (file.path().to_owned(),baseline.clone(),file.is_read_only(),file.original_modified()));
+            if entry.0 != file.path() || entry.3 != file.original_modified() { *entry = (file.path().to_owned(),baseline,file.is_read_only(),file.original_modified()); }
+            requests.push(AutoDetectionRequest { id:buffer.id(),path:file.path().to_owned(),previous:entry.1.clone(),read_only:entry.2,generation:self.generation,revision:buffer.editor.display_revision() });
+        }
+        requests
+    }
+
+    pub fn apply(&mut self,workspace: &mut Workspace,result: AutoDetectionResult) -> io::Result<Option<AutoChange>> {
+        let request = result.request;
+        if request.generation != self.generation { return Ok(None); }
+        let Some(buffer) = workspace.buffers_mut().find(|buffer| buffer.id() == request.id) else { return Ok(None); };
+        if buffer.editor.display_revision() != request.revision
+            || !buffer.disk_file.as_ref().is_some_and(|file| file.path() == request.path) { return Ok(None); }
+        let (observation,read_only) = result.observed?;
+        let Some(entry) = self.observations.get_mut(&request.id) else { return Ok(None); };
+        if entry.1 != request.previous { return Ok(None); }
+        entry.1 = observation.clone();
+        entry.2 = read_only;
+        if observation != request.previous {
+            return Ok(Some(if observation.is_none() { AutoChange::Deleted(request.id) } else { AutoChange::Modified(request.id) }));
+        }
+        if request.read_only != read_only {
+            let user_read_only = buffer.is_user_read_only();
+            if let Some(file) = &mut buffer.disk_file {
+                let metadata = std::fs::metadata(file.path())?;
+                file.refresh_recovery_read_only(&metadata);
+            }
+            buffer.set_user_read_only(user_read_only);
+            return Ok(Some(AutoChange::ReadOnly(request.id,read_only)));
+        }
+        Ok(None)
     }
 }

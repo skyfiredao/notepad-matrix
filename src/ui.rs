@@ -25,54 +25,67 @@ mod bookmark_surface;
 mod builtin_language_surface;
 mod caption_icons;
 mod character_panel_surface;
+mod character_range_surface;
 mod clipboard_surface;
 mod column_editor_surface;
+mod context_menu_config_surface;
 mod converter_surface;
 mod document_list_surface;
 mod document_map_surface;
 mod document_session_surface;
-#[cfg(all(test, feature = "native-input-tests", debug_assertions))]
-mod document_session_tests;
+mod dialog_font;
+mod edit_search_surface;
 mod editor_surface;
 mod file_actions;
 mod file_menu_surface;
 mod file_search_surface;
+mod find_options_surface;
+mod finder_layout;
 mod find_surface;
-#[cfg(all(test, feature = "native-input-tests"))]
-mod floating_tests;
 mod floating_windows;
 mod folder_surface;
 mod function_list_surface;
 mod goto_surface;
 mod hash_surface;
+mod help_surface;
+mod encoding_surface;
 mod html_export_surface;
 mod icon_tooltip;
+mod incremental_surface;
 mod instance_surface;
 mod intelligence_surface;
 mod language_surface;
+mod launch_request_surface;
 mod macro_dialog_surface;
 mod macro_surface;
+mod mark_surface;
 mod markdown_surface;
 mod menu_surface;
 mod mermaid;
 mod mime_surface;
 mod monitoring_surface;
 mod native_quit;
+mod native_path_prompt;
 mod panel_surface;
 mod preferences_surface;
+mod preferences_appearance_surface;
+mod preferences_editing_surface;
+mod preferences_files_surface;
 mod print_surface;
 mod project_surface;
 mod recovery_surface;
-#[cfg(feature = "native-input-tests")]
-pub mod reference_frame;
 mod reload_actions;
+mod replace_surface;
 mod run_surface;
 mod search_history_surface;
+mod selection_actions_surface;
+mod shortcut_surface;
+pub(crate) mod shortcut_layout;
 mod split_view;
 mod split_view_geometry;
-#[cfg(all(test, feature = "native-input-tests", debug_assertions))]
-mod split_view_tests;
 mod status_surface;
+mod source_surface;
+mod style_config_surface;
 mod summary_surface;
 mod tab_preview;
 mod text_field;
@@ -81,6 +94,8 @@ mod toolbar_icons;
 mod toolbar_surface;
 mod udl_surface;
 mod windows_surface;
+mod window_manager_surface;
+mod view_surface;
 mod workspace_surface;
 
 actions!(
@@ -266,8 +281,11 @@ struct MatrixWindow {
     previous_focus: Option<FocusHandle>,
     menu_bar: MenuBar,
     menu_scroll: Vec<gpui::ScrollHandle>,
+    menu_highlight_depth: usize,
     menu_anchor: Option<gpui::Point<gpui::Pixels>>,
     menu_submenu_only: bool,
+    menu_right_shortcuts_hidden: bool,
+    language_menu_compact: bool,
     alt_pressed: bool,
     alt_used: bool,
     workspace: crate::workspace::Workspace,
@@ -284,6 +302,7 @@ struct MatrixWindow {
     editor_bounds: Option<gpui::Bounds<gpui::Pixels>>,
     editor_dragging: bool,
     editor_error: Option<String>,
+    editor_error_revision: u64,
     editor_painted_revision: Option<crate::input::DisplayRevision>,
     editor_accessibility: Option<(crate::input::DisplayRevision, gpui::SharedString)>,
     editor_top_line: usize,
@@ -294,6 +313,8 @@ struct MatrixWindow {
     editor_observed_selection: crate::editor::Selection,
     editor_preferred_x: Option<gpui::Pixels>,
     file_busy: bool,
+    file_prompt: file_actions::FilePromptState,
+    launch_receiver: Option<gpui::Task<()>>,
     printing: bool,
     close_dialog: bool,
     close_choice: usize,
@@ -341,11 +362,26 @@ struct MatrixWindow {
     application_quit_pending: bool,
     recovery: Option<crate::recovery::RecoveryManager>,
     find_visible: bool,
+    find_created: bool,
     files_search: file_search_surface::FileSearchState,
     find_replace_mode: bool,
     find_query: gpui::Entity<text_field::TextField>,
     replace_input: gpui::Entity<text_field::TextField>,
     find_options: crate::search::LiteralOptions,
+    find_regex_dot: bool,
+    find_regex_backward: bool,
+    find_mode_focus: [FocusHandle; 3],
+    find_tabs_focus: FocusHandle,
+    find_mark_mode: bool,
+    mark_bookmark: bool,
+    mark_purge: bool,
+    mark_all_case_sensitive: bool,
+    mark_all_word_only: bool,
+    incremental: incremental_surface::State,
+    character_range: character_range_surface::State,
+    find_project_mode: bool,
+    find_project_panels: [bool; 3],
+    find_controls: find_options_surface::State,
     search_history: search_history_surface::SearchHistoryState,
     find_backward: bool,
     find_in_selection: bool,
@@ -358,13 +394,26 @@ struct MatrixWindow {
     find_fill_selected: bool,
     find_fill_caret: bool,
     find_message: String,
+    find_status: find_surface::FindStatus,
+    find_status_tooltip: String,
     goto_visible: bool,
+    goto: goto_surface::State,
     goto_input: gpui::Entity<text_field::TextField>,
-    goto_message: String,
     status_visible: bool,
     mute_sounds: bool,
     preferences_visible: bool,
+    preferences: preferences_surface::State,
+    style_config: style_config_surface::State,
+    shortcut_mapper: shortcut_surface::State,
+    context_menu: crate::context_menu::ContextMenu,
     about_visible: bool,
+    help_state: help_surface::State,
+    run_state: run_surface::State,
+    converter_state: converter_surface::State,
+    encoding_state: encoding_surface::EncodingState,
+    hash_state: hash_surface::State,
+    view_state: view_surface::State,
+    window_manager: window_manager_surface::State,
     summary_visible: bool,
     markdown_preview: markdown_surface::State,
     preferences_focus: FocusHandle,
@@ -379,6 +428,7 @@ struct MatrixWindow {
     macro_recording: bool,
     macro_dialogs: macro_dialog_surface::MacroDialogs,
     overwrite_mode: bool,
+    line_copy_cut_without_selection: bool,
     column_editor: column_editor_surface::ColumnEditorState,
     udl: udl_surface::UdlState,
     builtin: builtin_language_surface::BuiltinState,
@@ -456,8 +506,11 @@ impl MatrixWindow {
             previous_focus: None,
             menu_bar: MenuBar::default(),
             menu_scroll: Vec::new(),
+            menu_highlight_depth: 0,
             menu_anchor: None,
             menu_submenu_only: false,
+            menu_right_shortcuts_hidden: false,
+            language_menu_compact: true,
             alt_pressed: false,
             alt_used: false,
             workspace,
@@ -474,6 +527,7 @@ impl MatrixWindow {
             editor_bounds: None,
             editor_dragging: false,
             editor_error: None,
+            editor_error_revision: 0,
             editor_painted_revision: None,
             editor_accessibility: None,
             editor_top_line: 0,
@@ -484,6 +538,8 @@ impl MatrixWindow {
             editor_observed_selection,
             editor_preferred_x: None,
             file_busy: false,
+            file_prompt: file_actions::FilePromptState::default(),
+            launch_receiver: None,
             printing: false,
             close_dialog: false,
             close_choice: 0,
@@ -531,12 +587,31 @@ impl MatrixWindow {
             application_quit_pending: false,
             recovery: None,
             find_visible: false,
+            find_created: false,
             files_search: file_search_surface::FileSearchState::new(cx),
             find_replace_mode: false,
-            find_query: cx.new(|cx| text_field::TextField::compact("Find what", "find-query", cx)),
+            find_query: cx.new(|cx| text_field::TextField::compact("查找目标", "find-query", cx)),
             replace_input: cx
-                .new(|cx| text_field::TextField::compact("Replace with", "replace-input", cx)),
+                .new(|cx| text_field::TextField::compact("替换为", "replace-input", cx).with_tab_index(1)),
             find_options: crate::search::LiteralOptions::default(),
+            find_regex_dot: false,
+            find_regex_backward: false,
+            find_mode_focus: [
+                cx.focus_handle().tab_index(18).tab_stop(true),
+                cx.focus_handle().tab_index(18).tab_stop(false),
+                cx.focus_handle().tab_index(18).tab_stop(false),
+            ],
+            find_tabs_focus: cx.focus_handle().tab_index(-1),
+            find_mark_mode: false,
+            mark_bookmark: false,
+            mark_purge: false,
+            mark_all_case_sensitive: false,
+            mark_all_word_only: true,
+            incremental: incremental_surface::State::new(window, cx),
+            character_range: character_range_surface::State::new(cx),
+            find_project_mode: false,
+            find_project_panels: [false; 3],
+            find_controls: find_options_surface::State::new(cx),
             search_history: search_history_surface::SearchHistoryState::new(),
             find_backward: false,
             find_in_selection: false,
@@ -549,14 +624,27 @@ impl MatrixWindow {
             find_fill_selected: true,
             find_fill_caret: true,
             find_message: String::new(),
+            find_status: find_surface::FindStatus::NoMessage,
+            find_status_tooltip: String::new(),
             goto_visible: false,
+            goto: goto_surface::State::new(cx),
             goto_input: cx
                 .new(|cx| text_field::TextField::new("Line number", "goto-line-input", cx)),
-            goto_message: String::new(),
             status_visible: true,
             mute_sounds: false,
             preferences_visible: false,
+            preferences: preferences_surface::State::new(cx),
+            style_config: style_config_surface::State::new(cx),
+            shortcut_mapper: shortcut_surface::State::new(cx),
+            context_menu: crate::context_menu::ContextMenu::default(),
             about_visible: false,
+            help_state: help_surface::State::default(),
+            run_state: run_surface::State::new(cx),
+            converter_state: converter_surface::State::new(cx),
+            encoding_state: Default::default(),
+            hash_state: hash_surface::State::new(cx),
+            view_state: view_surface::State::default(),
+            window_manager: window_manager_surface::State::new(cx),
             summary_visible: false,
             preferences_focus: cx.focus_handle(),
             settings_store: None,
@@ -564,12 +652,13 @@ impl MatrixWindow {
             converter_enabled: true,
             html_export_enabled: true,
             run_visible: false,
-            run_input: cx.new(|cx| text_field::TextField::new("Program to Run", "run-input", cx)),
+            run_input: cx.new(|cx| text_field::TextField::compact("输入运行程序名", "run-input", cx).without_history_arrow().with_compact_height(22.)),
             run_message: String::new(),
             run_button_focus: [cx.focus_handle(), cx.focus_handle()],
             macro_recording: false,
             macro_dialogs: macro_dialog_surface::MacroDialogs::new(cx),
             overwrite_mode: false,
+            line_copy_cut_without_selection: true,
             column_editor: column_editor_surface::ColumnEditorState::new(cx),
             udl: udl_surface::UdlState::new(cx),
             builtin: builtin_language_surface::BuiltinState::new(),
@@ -599,6 +688,7 @@ impl MatrixWindow {
             || self.reload_target.is_some()
             || self.application_quit_pending
             || self.macro_interaction_blocked()
+            || self.window_manager_blocks_document()
     }
 
     fn editor_mut(&mut self) -> &mut EditorSession {
@@ -694,6 +784,7 @@ impl MatrixWindow {
         if matches!(
             &input,
             MenuEvent::ToggleBar
+                | MenuEvent::OpenContext(_, _)
                 | MenuEvent::OpenRoot(_)
                 | MenuEvent::OpenSubmenu(_)
                 | MenuEvent::OpenSubmenuLimited { .. }
@@ -704,7 +795,25 @@ impl MatrixWindow {
             self.menu_submenu_only = false;
         }
         let old = self.menu_bar.mode();
-        let availability = menu_surface::availability(self, cx);
+        let root = match &input {
+            MenuEvent::OpenContext(root, _) | MenuEvent::OpenRoot(root) | MenuEvent::ToggleRoot(root) | MenuEvent::HoverRoot(root) => *root,
+            _ => self.menu_bar.active_root(),
+        };
+        if self.menu_bar.definitions().get(root).is_some_and(|menu| menu.selector == "search-menu-trigger") {
+            self.refresh_builtin_syntax();
+        }
+        let availability = menu_surface::availability(self, window, cx);
+        let input = if self.menu_bar.mode() == MenuMode::Open
+            && self.menu_highlight_depth < self.menu_bar.popup_count()
+        {
+            match input { MenuEvent::Down => MenuEvent::First, MenuEvent::Up => MenuEvent::Last, other => other }
+        } else { input };
+        self.menu_highlight_depth = match &input {
+            MenuEvent::ToggleRoot(_) | MenuEvent::HoverRoot(_) | MenuEvent::OpenContext(_, _) | MenuEvent::OpenDocuments(_) => 0,
+            MenuEvent::Hover { path, .. } | MenuEvent::Click { path, .. } | MenuEvent::ClickAtRevision { path, .. } => path.len(),
+            MenuEvent::Dismiss => 0,
+            _ => usize::MAX,
+        };
         let effect = self
             .menu_bar
             .handle(input, &|command| availability.allows(command));
@@ -724,14 +833,7 @@ impl MatrixWindow {
                 self.focus.focus(window, cx);
             }
         }
-        while self.menu_scroll.len() < self.menu_bar.popup_count() {
-            self.menu_scroll.push(gpui::ScrollHandle::new());
-        }
-        for (depth, index) in self.menu_bar.selected_path().iter().enumerate() {
-            if let Some(scroll) = self.menu_scroll.get(depth) {
-                scroll.scroll_to_item(*index);
-            }
-        }
+        menu_surface::scroll_selected(self, window);
         cx.notify();
         match effect {
             MenuOutcome::Activate(MenuCommand::ActivateDocument(id)) => {
@@ -757,6 +859,14 @@ impl MatrixWindow {
             }
             MenuOutcome::Activate(MenuCommand::TextTransform(id)) => {
                 self.text_transform_command(id, window, cx)
+            }
+            MenuOutcome::Activate(MenuCommand::Source(id)) => {
+                match id {
+                    48016 => self.show_shortcut_mapper(1, window, cx),
+                    48017 => self.show_shortcut_mapper(2, window, cx),
+                    21000..=21999 => self.activate_shortcut_command(crate::shortcuts::CommandKey::Run((id - 21000) as usize), window, cx),
+                    _ => self.execute_source_command(id, window, cx),
+                }
             }
             MenuOutcome::Activate(MenuCommand::MultiSelection(command)) => {
                 self.multi_selection_command(command, window, cx);
@@ -801,12 +911,22 @@ impl MatrixWindow {
                 }
             }
             MenuOutcome::Activate(MenuCommand::ConvertEncoding(format)) => {
-                self.workspace.active_mut().convert_format(format);
-                cx.notify();
+                let id = match format {
+                    crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Plain) => 45010,
+                    crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Bom) => 45011,
+                    crate::files::UnicodeFormat::Utf16BeBom => 45012,
+                    crate::files::UnicodeFormat::Utf16LeBom => 45013,
+                };
+                self.select_source_encoding(id, window, cx);
             }
             MenuOutcome::Activate(MenuCommand::SelectEncoding(format)) => {
-                self.workspace.active_mut().select_format(format);
-                cx.notify();
+                let id = match format {
+                    crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Plain) => 45008,
+                    crate::files::UnicodeFormat::Utf8(crate::files::Utf8Format::Bom) => 45005,
+                    crate::files::UnicodeFormat::Utf16BeBom => 45006,
+                    crate::files::UnicodeFormat::Utf16LeBom => 45007,
+                };
+                self.select_source_encoding(id, window, cx);
             }
             MenuOutcome::None => {}
             MenuOutcome::Activate(MenuCommand::File(FileCommand::New)) => self.new_file(window, cx),
@@ -924,6 +1044,10 @@ impl MatrixWindow {
             MenuOutcome::Activate(MenuCommand::Settings(SettingsCommand::Preferences)) => {
                 self.show_preferences(window, cx)
             }
+            MenuOutcome::Activate(MenuCommand::Settings(SettingsCommand::StyleConfigurator)) => self.show_style_configurator(window, cx),
+            MenuOutcome::Activate(MenuCommand::Settings(SettingsCommand::ShortcutMapper)) => self.show_shortcut_mapper(0, window, cx),
+            MenuOutcome::Activate(MenuCommand::Settings(SettingsCommand::ImportStyleThemes)) => self.import_style_theme(window, cx),
+            MenuOutcome::Activate(MenuCommand::Settings(SettingsCommand::EditContextMenu)) => self.edit_context_menu(window, cx),
             MenuOutcome::Activate(MenuCommand::Mime(operation)) => {
                 self.mime_transform(operation, window, cx)
             }
@@ -960,8 +1084,7 @@ impl MatrixWindow {
             }
             MenuOutcome::Activate(MenuCommand::Edit(EditCommand::Delete)) => {
                 self.record_macro_step(crate::macros::MacroStep::ClearSelection);
-                let range = self.editor().selection().range();
-                let result = self.editor_mut().replace_display_range(range, "");
+                let result = self.editor_mut().delete_forward();
                 self.editor_changed(result, window, cx);
                 self.editor_focus.focus(window, cx);
             }
@@ -983,14 +1106,24 @@ impl MatrixWindow {
 
 impl Render for MatrixWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.menu_bar
-            .set_recent_files(self.workspace.recently_closed());
+        let recent_entries = self.recent_file_menu_entries();
+        self.menu_bar.set_recent_file_entries(recent_entries);
+        let run_commands = self.shortcut_mapper.bindings.run_commands.iter().enumerate().map(|(index, command)| {
+            (command.name.clone(), self.shortcut_mapper.bindings.shortcuts.iter().find(|item| item.key == crate::shortcuts::CommandKey::Run(index)).map(|item| item.label()).unwrap_or_default())
+        }).collect();
+        self.menu_bar.set_saved_run_commands(run_commands);
         self.refresh_udl_registry(cx);
         self.flush_udl_style_invalidation(window, cx);
+        self.sync_window_manager(window, cx);
         self.sync_floating_windows(window, cx);
         self.sync_panel_windows(window, cx);
         self.refresh_function_list(window, cx);
         self.refresh_markdown_preview(cx);
+        let title_document = if self.pref_bool("titleBar.short", false) {
+            self.workspace.active().name()
+        } else {
+            self.disk_file().map(|file| file.path().display().to_string()).unwrap_or_else(|| self.workspace.active().name())
+        };
         let title = format!(
             "{}{} - Notepad Matrix",
             if self.workspace.active().is_modified() {
@@ -998,23 +1131,33 @@ impl Render for MatrixWindow {
             } else {
                 ""
             },
-            self.workspace.active().name()
+            title_document
         );
         window.set_window_title(&title);
-        let background = if self.dark { 0x202020 } else { 0xffffff };
-        let toolbar = if self.dark { 0x2b2b2b } else { 0xffffff };
-        let foreground = if self.dark { 0xeeeeee } else { 0x202020 };
-        let hover_background = if self.dark { 0x444444 } else { 0xdedede };
-        let menu = menu_surface::render(self, window, cx);
-        let editing_toolbar = toolbar_surface::render(self, cx);
+        let background = self.appearance_colour("DarkMode.customColorTop", if self.dark { 0x202020 } else { 0xffffff });
+        let toolbar = self.appearance_colour("DarkMode.customColorMain", if self.dark { 0x2b2b2b } else { 0xffffff });
+        let foreground = self.appearance_colour("DarkMode.customColorText", if self.dark { 0xeeeeee } else { 0x202020 });
+        let hover_background = self.appearance_colour("DarkMode.customColorMenuHotTrack", if self.dark { 0x444444 } else { 0xdedede });
+        self.menu_bar.set_window_documents(self.workspace.view_buffer_ids(self.workspace.active_view()).iter().filter_map(|id| {
+            self.workspace.buffers().iter().find(|buffer| buffer.id() == *id).map(|buffer|
+                (*id, format!("{}{}", buffer.name(), if buffer.is_modified() { "*" } else { "" })))
+        }).collect());
+        let menu = self.view_chrome_visible().then(|| menu_surface::render(self, window, cx));
+        let editing_toolbar = self.view_chrome_visible().then(|| toolbar_surface::render(self, window, cx));
         self.reconcile_editor_panes();
         let editor = self.render_split_editors(window, cx);
-        let panels_left = self.render_panel_region(crate::panel_layout::DockSide::Left, cx);
-        let panels_right = self.render_panel_region(crate::panel_layout::DockSide::Right, cx);
-        let panels_top = self.render_panel_region(crate::panel_layout::DockSide::Top, cx);
-        let panels_bottom = self.render_panel_region(crate::panel_layout::DockSide::Bottom, cx);
+        let panels_left = self.view_panels_other_pane_visible().then(|| self.render_panel_region(crate::panel_layout::DockSide::Left, cx));
+        let panels_right = self.view_panels_other_pane_visible().then(|| self.render_panel_region(crate::panel_layout::DockSide::Right, cx));
+        let panels_top = self.view_panels_other_pane_visible().then(|| self.render_panel_region(crate::panel_layout::DockSide::Top, cx));
+        let panels_bottom = self.view_panels_other_pane_visible().then(|| self.render_panel_region(crate::panel_layout::DockSide::Bottom, cx));
         let files_results = self.render_file_results(cx);
-        let status_bar = self.status_visible.then(|| self.render_status(cx));
+        let incremental = self.render_incremental(cx);
+        let (incremental_top, incremental_bottom) = if self.incremental_at_top() {
+            (incremental, None)
+        } else {
+            (None, incremental)
+        };
+        let status_bar = (self.status_visible && self.view_tabs_status_visible()).then(|| self.render_status(cx));
         let dark = self.dark;
         let button = |id: &'static str,
                       label: &'static str,
@@ -1046,6 +1189,7 @@ impl Render for MatrixWindow {
                 "Light color scheme"
             })
             .track_focus(&self.focus)
+            .on_action(cx.listener(Self::apply_shortcut_action))
             .on_action(cx.listener(|view, _: &CompleteWord, window, cx| {
                 view.complete_word(window, cx);
                 cx.stop_propagation();
@@ -1437,12 +1581,36 @@ impl Render for MatrixWindow {
                 view.replace_all(window, cx);
                 cx.stop_propagation();
             }))
+            .on_action(cx.listener(
+                |view, action: &text_transform_surface::TransformAction, window, cx| {
+                    view.apply_transform_action(action, window, cx);
+                    cx.stop_propagation();
+                },
+            ))
             .on_action(cx.listener(|view, _: &FindNext, window, cx| {
                 view.find_next(false, window, cx);
                 cx.stop_propagation();
             }))
+            .on_action(
+                cx.listener(|view, action: &mark_surface::SourceAction, window, cx| {
+                    view.execute_source_command(action.0, window, cx);
+                    cx.stop_propagation();
+                }),
+            )
             .on_action(cx.listener(|view, _: &FindDialogNext, window, cx| {
-                view.find_next(view.find_backward, window, cx);
+                view.activate_find_default(false, window, cx);
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, action: &find_surface::FindOptionAction, window, cx| {
+                view.find_option_command(action.0, window, cx);
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, action: &find_surface::FindButtonAction, window, cx| {
+                view.find_button_command(action.0, action.1, window, cx);
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, action: &find_surface::FindFieldWarning, _, cx| {
+                view.find_field_warning(action.0, cx);
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|view, _: &CountFind, window, cx| {
@@ -1450,7 +1618,7 @@ impl Render for MatrixWindow {
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|view, _: &FindDialogReverse, window, cx| {
-                view.find_next(!view.find_backward, window, cx);
+                view.activate_find_default(true, window, cx);
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|view, _: &FindPrevious, window, cx| {
@@ -1472,7 +1640,7 @@ impl Render for MatrixWindow {
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|view, _: &CloseGoTo, window, cx| {
-                view.goto_visible = false;
+                view.clear_goto(window, cx);
                 view.editor_focus.focus(window, cx);
                 cx.notify();
                 cx.stop_propagation();
@@ -1496,9 +1664,7 @@ impl Render for MatrixWindow {
                 view.dismiss_floating(floating_windows::DialogKind::MarkdownPreview, window, cx);
             }))
             .on_action(cx.listener(|view, _: &ClosePreferences, window, cx| {
-                view.preferences_visible = false;
-                view.editor_focus.focus(window, cx);
-                cx.notify();
+                view.dismiss_floating(floating_windows::DialogKind::Preferences, window, cx);
                 cx.stop_propagation();
             }))
             .when(
@@ -1667,7 +1833,7 @@ impl Render for MatrixWindow {
             .text_color(rgb(foreground))
             .font_family("Helvetica")
             .text_size(px(13.))
-            .child(
+            .children(self.view_chrome_visible().then(||
                 div()
                     .h(px(32.))
                     .flex_shrink_0()
@@ -1751,10 +1917,11 @@ impl Render for MatrixWindow {
                                     }),
                                 ),
                             ),
-                    ),
-            )
-            .child(menu)
-            .child(editing_toolbar)
+                    )
+            ))
+            .children(menu)
+            .children(editing_toolbar)
+            .children(incremental_top)
             .child(
                 div()
                     .flex_1()
@@ -1762,22 +1929,35 @@ impl Render for MatrixWindow {
                     .w_full()
                     .flex()
                     .flex_col()
-                    .child(panels_top)
+                    .children(panels_top)
                     .child(
                         div()
                             .flex()
                             .flex_1()
                             .min_h(px(0.))
                             .w_full()
-                            .child(panels_left)
+                            .children(panels_left)
                             .child(editor)
-                            .child(panels_right),
+                            .children(panels_right),
                     )
-                    .child(panels_bottom),
+                    .children(panels_bottom),
             )
+            .children(incremental_bottom)
             .when_some(files_results, |root, results| root.child(results))
             .when_some(status_bar, |root, status| root.child(status))
             .children(self.render_tab_preview(cx))
+            .children(self.window_manager_blocks_document().then(|| div().id("window-manager-modal-shield")
+                .absolute().inset_0().occlude()
+                .on_mouse_down(MouseButton::Left, cx.listener(|view, _, window, cx| {
+                    view.present_floating(floating_windows::DialogKind::WindowManager, window, cx);
+                    cx.stop_propagation();
+                }))))
+            .children(self.view_restore_command().map(|id| div().id("view-restore-mode")
+                .debug_selector(|| "view-restore-mode".into()).role(Role::Button).aria_label("退出当前显示模式")
+                .absolute().top(px(2.)).right(px(2.)).px(px(8.)).py(px(3.))
+                .bg(rgb(toolbar)).border_1().border_color(rgb(hover_background)).cursor_pointer()
+                .on_click(cx.listener(move |view, _, window, cx| { view.execute_view_source(id, window, cx); }))
+                .child("↙")))
     }
 }
 
@@ -1809,8 +1989,6 @@ fn hide_host_buttons(window: &Window) -> io::Result<()> {
 fn discard_host_composition(window: &Window) -> io::Result<bool> {
     let handle = match HasWindowHandle::window_handle(window) {
         Ok(handle) => handle,
-        // GPUI's test platform explicitly has no native window/input context.
-        Err(raw_window_handle::HandleError::NotSupported) => return Ok(false),
         Err(error) => return Err(io::Error::other(error.to_string())),
     };
     MainThreadMarker::new()
@@ -1829,12 +2007,33 @@ fn discard_host_composition(window: &Window) -> io::Result<bool> {
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let launch = crate::launch::LaunchOptions::parse(std::env::args_os().skip(1))?;
+    let mut launch = crate::launch::LaunchOptions::parse(std::env::args_os().skip(1))?;
     let home = std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
-    let settings = ConfigStore::under_home(&home).load_settings()?;
+    let mut settings = ConfigStore::under_home(&home).load_settings()?;
+    let normalize_threshold = |settings: &mut serde_json::Value| {
+        let mut changed = false;
+        for section in ["largeFileRestriction", "large_file_restriction"] {
+            for key in ["fileSizeMB", "file_size_mb"] {
+                if let Some(value) = settings.get_mut(section).and_then(|section| section.get_mut(key))
+                    && value.as_u64() == Some(0) {
+                    *value = 200.into();
+                    changed = true;
+                }
+            }
+        }
+        changed
+    };
+    if normalize_threshold(&mut settings) {
+        settings = ConfigStore::under_home(&home).update_settings(|document| { normalize_threshold(document); Ok(()) })?;
+    }
+    let mut instance_server = match crate::launch::InstanceServer::prepare(&home, &mut launch, &settings)? {
+        crate::launch::InstanceStartup::Forwarded => return Ok(()),
+        crate::launch::InstanceStartup::Primary(server) => Some(server),
+        crate::launch::InstanceStartup::Secondary => None,
+    };
     let dark = settings["theme"] == "dark";
     let mime_enabled = settings["features"]["mime_tools"].as_bool().unwrap_or(true);
     let converter_enabled = settings["features"]["converter"].as_bool().unwrap_or(true);
@@ -1876,7 +2075,28 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let result = failure.clone();
     let quit_guard: Rc<RefCell<Option<native_quit::QuitGuard>>> = Rc::new(RefCell::new(None));
     let guard_slot = quit_guard.clone();
-    gpui_platform::application().run(move |cx: &mut App| {
+    let native_paths: launch_request_surface::NativePaths = Default::default();
+    let incoming_paths = native_paths.clone();
+    let application_launched = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let incoming_launched = application_launched.clone();
+    let application = gpui_platform::application();
+    application.on_open_urls(move |urls| {
+        let mut request = launch_request_surface::NativeOpenPaths {
+            paths: Vec::new(), errors: Vec::new(),
+            during_launch: !incoming_launched.load(std::sync::atomic::Ordering::Acquire),
+        };
+        for value in urls {
+            match url::Url::parse(&value).map_err(|error| format!("打开文件 URL 无效：{error}"))
+                .and_then(|url| url.to_file_path().map_err(|_| format!("打开请求不是本地文件 URL：{value}")))
+            {
+                Ok(path) => request.paths.push(path),
+                Err(error) => request.errors.push(error),
+            }
+        }
+        incoming_paths.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push_back(request);
+    });
+    application.run(move |cx: &mut App| {
+        dialog_font::initialize(&settings, cx);
         let quit_control = Rc::new(native_quit::QuitControl::default());
         let root: Rc<RefCell<Option<gpui::WindowHandle<MatrixWindow>>>> =
             Rc::new(RefCell::new(None));
@@ -1923,18 +2143,24 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 return;
             }
         }
-        cx.bind_keys(MatrixWindow::reload_bindings());
-        cx.bind_keys(MatrixWindow::file_dialog_bindings());
-        cx.bind_keys(menu_surface::bindings());
+        let mut original_bindings = Vec::new();
+        original_bindings.extend(MatrixWindow::reload_bindings());
+        original_bindings.extend(MatrixWindow::file_dialog_bindings());
+        original_bindings.extend(menu_surface::bindings());
         if mime_enabled || converter_enabled || html_export_enabled {
-            cx.bind_keys([KeyBinding::new("alt-p", OpenPluginsMenu, None)]);
+            original_bindings.extend([KeyBinding::new("alt-p", OpenPluginsMenu, None)]);
         }
-        cx.bind_keys(text_field::bindings());
-        cx.bind_keys(find_surface::bindings());
-        cx.bind_keys(editor_surface::bindings());
-        cx.bind_keys(column_editor_surface::bindings());
-        cx.bind_keys(document_session_surface::bindings());
-        cx.bind_keys([
+        original_bindings.extend(text_field::bindings());
+        original_bindings.extend(find_surface::bindings());
+        original_bindings.extend(editor_surface::bindings());
+        original_bindings.extend(text_transform_surface::bindings());
+        original_bindings.extend(mark_surface::bindings());
+        original_bindings.extend(incremental_surface::bindings());
+        original_bindings.extend(character_range_surface::bindings());
+        original_bindings.extend(goto_surface::bindings());
+        original_bindings.extend(column_editor_surface::bindings());
+        original_bindings.extend(document_session_surface::bindings());
+        original_bindings.extend([
             KeyBinding::new("ctrl-f", ShowFind, None),
             KeyBinding::new("cmd-p", PrintFile, None),
             KeyBinding::new("cmd-w", CloseWindow, Some("MatrixAuxiliary")),
@@ -1952,7 +2178,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             KeyBinding::new("ctrl-g", ShowGoTo, None),
             KeyBinding::new("ctrl-+", ZoomIn, Some("MatrixEditor")),
             KeyBinding::new("ctrl--", ZoomOut, Some("MatrixEditor")),
-            KeyBinding::new("ctrl-/", ZoomReset, Some("MatrixEditor")),
             KeyBinding::new("f5", ShowRun, None),
             KeyBinding::new("ctrl-shift-p", PlaybackMacro, None),
             KeyBinding::new("enter", ConfirmRun, Some("MatrixRun")),
@@ -1965,7 +2190,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             KeyBinding::new("escape", ClosePreferences, Some("MatrixPreferences")),
             KeyBinding::new("escape", CloseMarkdownPreview, Some("MatrixMarkdown")),
         ]);
-        cx.bind_keys([
+        original_bindings.extend([
             KeyBinding::new("alt-f4", CloseWindow, None),
             KeyBinding::new("cmd-q", QuitApplication, None),
             KeyBinding::new("backspace", EditorBackspace, Some("MatrixEditor")),
@@ -1980,6 +2205,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             KeyBinding::new("ctrl-a", EditorSelectAll, Some("MatrixEditor")),
             KeyBinding::new("insert", ToggleOverwrite, Some("MatrixEditor")),
             KeyBinding::new("ctrl-z", EditorUndo, Some("MatrixEditor")),
+            KeyBinding::new("alt-backspace", EditorUndo, Some("MatrixEditor")),
             KeyBinding::new("ctrl-y", EditorRedo, Some("MatrixEditor")),
             KeyBinding::new("ctrl-x", EditorCut, Some("MatrixEditor")),
             KeyBinding::new("ctrl-c", EditorCopy, Some("MatrixEditor")),
@@ -2029,6 +2255,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 Some("MatrixEditor"),
             ),
         ]);
+        cx.bind_keys(original_bindings.clone());
         cx.set_quit_mode(gpui::QuitMode::LastWindowClosed);
         let bounds = Bounds::centered(None, size(px(1080.), px(668.)), cx);
         let opened = cx.open_window(
@@ -2050,6 +2277,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     view.status_visible = status_visible;
                     view.mute_sounds = settings["muteSounds"].as_bool().unwrap_or(false);
                     view.settings_store = Some(ConfigStore::under_home(&home));
+                    view.preferences.files.launch_no_session = launch.no_session;
+                    view.initialize_localization(&mut settings, cx);
+                    view.refresh_udl_registry(cx);
+                    view.preferences.settings = settings.clone();
+                    view.language_menu_compact = settings["langsExcluded"]["langMenuCompact"].as_bool().unwrap_or(true);
+                    view.refresh_style_config(cx);
+                    match crate::context_menu::ContextMenu::load(view.settings_store.as_ref()) {
+                        Ok(menu) => view.context_menu = menu,
+                        Err(error) => view.notify_editor_error(format!("弹出菜单无法读取：{error}"), cx),
+                    }
                     view.set_tab_preview_enabled(
                         settings["docPeekOnTab"].as_bool().unwrap_or(false),
                         cx,
@@ -2076,6 +2313,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .unwrap_or(0)
                         .min(257) as usize;
                     view.configure_editor_symbols(&settings);
+                    view.line_copy_cut_without_selection = settings["lineCopyCutWithoutSelection"].as_bool().unwrap_or(true);
                     view.mru_switching = settings
                         .get("mru_switching")
                         .and_then(serde_json::Value::as_bool)
@@ -2090,6 +2328,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         converter_enabled,
                         html_export_enabled,
                     );
+                    view.initialize_converter(window, cx);
                     view.native_quit = Some(quit_control.clone());
                     if let Err(error) = view.workspace.configure_recent_files(&settings) {
                         view.notify_editor_error(
@@ -2103,13 +2342,33 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     view.workspace
                         .set_large_file_restriction(large_file_restriction);
-                    if !launch.files.is_empty()
-                        || launch.language.is_some()
+                    view.initialize_change_history(&settings);
+                    view.apply_preferences(&settings, window, cx);
+                    view.workspace.synchronize_udl_names(view.udl.registry.named().map(|(id, definition)| (id, definition.name.clone())));
+                    match view.editing_new_document_language() {
+                        Ok(language) => view.workspace.set_new_document_language(language),
+                        Err(error) => view.notify_editor_error(format!("无法读取新建文档设置：{error}"), cx),
+                    }
+                    view.begin_file_preferences_startup(&settings, &launch, window, cx);
+                    view.initialize_scintilla_shortcut_integration(window, cx);
+                    if launch.language.is_some() || launch.udl_name.is_some() || launch.byte_code_page.is_some()
                         || launch.line.is_some()
                         || launch.column.is_some()
+                        || launch.open_session
                     {
                         view.apply_launch_options(&launch, window, cx);
+                    } else if !launch.files.is_empty() {
+                        view.start_open_paths(launch.files.clone(), window, cx);
+                    } else if native_paths.lock().unwrap_or_else(std::sync::PoisonError::into_inner).is_empty() {
+                        view.complete_file_preferences_startup(window, cx);
                     }
+                    let defaults = view.annotate_shortcut_bindings(original_bindings.clone());
+                    if let Err(error) = view.set_shortcut_runtime_defaults(defaults, Vec::new(), cx) {
+                        view.notify_editor_error(format!("快捷键无法初始化：{error}"), cx);
+                    }
+                    view.refresh_shortcuts(window, cx);
+                    view.update_file_prompt_directory();
+                    view.start_launch_receiver(instance_server.take(), native_paths.clone(), window, cx);
                     view
                 })
             },
@@ -2127,6 +2386,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             quit_control.approve();
             cx.quit();
         } else {
+            application_launched.store(true, std::sync::atomic::Ordering::Release);
             cx.activate(true);
         }
     });

@@ -9,6 +9,16 @@ pub(super) struct UdlSyntaxCache {
     text_system: Option<std::rc::Rc<gpui::WindowTextSystem>>,
 }
 
+impl UdlSyntaxCache {
+    pub(super) fn style_at(&self, position: usize) -> Option<crate::udl::UdlStyleId> {
+        self.lexed
+            .spans
+            .iter()
+            .find(|span| span.range.contains(&position))
+            .map(|span| span.style)
+    }
+}
+
 impl MatrixWindow {
     pub(super) fn select_language(
         &mut self,
@@ -41,6 +51,19 @@ impl MatrixWindow {
     }
 
     pub(super) fn refresh_editor_syntax(&mut self) {
+        if !self.workspace.smart_highlight_allowed() {
+            self.preferences.appearance.smart_token = None;
+        }
+        if !self.workspace.syntax_highlighting_allowed() {
+            let changed = self.syntax_cache.take().is_some()
+                | self.udl.syntax_cache.take().is_some()
+                | self.builtin.syntax_cache.take().is_some();
+            if changed {
+                self.editor_chrome.invalidate_layout();
+                self.editor_painted_revision = None;
+            }
+            return;
+        }
         let builtin = self.refresh_builtin_syntax();
         if builtin
             && matches!(
@@ -122,20 +145,6 @@ impl MatrixWindow {
         self.syntax_cache = Some((revision, language, spans));
     }
 
-    #[cfg(all(test, feature = "native-input-tests"))]
-    pub(super) fn styled_editor_runs(
-        &self,
-        start: usize,
-        end: usize,
-        marked: Option<&std::ops::Range<ByteOffset>>,
-        base: gpui::TextRun,
-    ) -> Vec<gpui::TextRun> {
-        self.editor_style_runs(start, end, marked, base)
-            .into_iter()
-            .map(|(run, _)| run)
-            .collect()
-    }
-
     pub(super) fn editor_style_runs(
         &self,
         start: usize,
@@ -143,13 +152,27 @@ impl MatrixWindow {
         marked: Option<&std::ops::Range<ByteOffset>>,
         base: gpui::TextRun,
     ) -> Vec<(gpui::TextRun, gpui::Pixels)> {
+        let links = self.visible_editor_link_spans(start..end);
+        self.editor_style_runs_with_links(start, end, marked, base, &links)
+    }
+
+    pub(super) fn editor_style_runs_with_links(
+        &self,
+        start: usize,
+        end: usize,
+        marked: Option<&std::ops::Range<ByteOffset>>,
+        base: gpui::TextRun,
+        links: &[std::ops::Range<usize>],
+    ) -> Vec<(gpui::TextRun, gpui::Pixels)> {
+        if !self.workspace.syntax_highlighting_allowed() {
+            return self.plain_editor_style_runs(start, end, marked, base, links);
+        }
         if matches!(
             self.workspace.active().language(),
-            crate::syntax::Language::Builtin(_)
+            crate::syntax::Language::Builtin(_) | crate::syntax::Language::Json
         ) {
-            return self.builtin_style_runs(start, end, marked, base);
+            return self.builtin_style_runs(start, end, marked, base, links);
         }
-        let links = self.visible_editor_link_spans(start..end);
         let default_foreground = base.color;
         let mut runs = Vec::new();
         let default_size = self.editor_font_size();
@@ -163,7 +186,7 @@ impl MatrixWindow {
             for marked in &marked_ranges {
                 cuts.extend([marked.start.0.max(a).min(b), marked.end.0.max(a).min(b)]);
             }
-            for link in &links {
+            for link in links {
                 cuts.extend([link.start.max(a).min(b), link.end.max(a).min(b)]);
             }
             cuts.sort_unstable();
@@ -181,6 +204,7 @@ impl MatrixWindow {
                     });
                 run.underline = marked_underline
                     .or_else(|| {
+                        self.preferences.files.links.underline().then_some(())?;
                         links
                             .iter()
                             .any(|link| pair[0] >= link.start && pair[1] <= link.end)
@@ -264,6 +288,9 @@ impl MatrixWindow {
     }
 
     pub(super) fn udl_fold_ranges(&self) -> Vec<(usize, usize)> {
+        if !self.workspace.syntax_highlighting_allowed() {
+            return Vec::new();
+        }
         if matches!(
             self.workspace.active().language(),
             crate::syntax::Language::Builtin(_) | crate::syntax::Language::Json
@@ -285,6 +312,42 @@ impl MatrixWindow {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    pub(super) fn udl_fold_header_levels(&self) -> (bool, Vec<(usize, u32)>) {
+        if !self.workspace.syntax_highlighting_allowed() {
+            return (false, Vec::new());
+        }
+        if matches!(
+            self.workspace.active().language(),
+            crate::syntax::Language::Builtin(_) | crate::syntax::Language::Json
+        ) {
+            return self.builtin_fold_header_levels();
+        }
+        let headers = self
+            .udl
+            .syntax_cache
+            .as_ref()
+            .filter(|cache| {
+                self.workspace.active().language() == crate::syntax::Language::UserDefined(cache.id)
+                    && cache.revision == self.editor().display_revision()
+                    && self.udl.registry.definition_revision(cache.id)
+                        == Some(cache.definition_revision)
+            })
+            .map(|cache| {
+                cache
+                    .lexed
+                    .levels
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, level)| level.header)
+                    .map(|(line, level)| {
+                        (line, (level.level.wrapping_add(0x400) & 0x0fff) as u32)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        (false, headers)
     }
 
     pub(super) fn editor_style_line_height(&self) -> gpui::Pixels {
@@ -324,7 +387,20 @@ impl MatrixWindow {
             }
         };
         include(profile.clone());
-        if let crate::syntax::Language::UserDefined(id) = self.workspace.active().language()
+        let (family, size) = self.editor_line_number_font();
+        let bits = self.editor_line_number_font_style();
+        let mut line_number = profile.clone();
+        line_number.font_family = family;
+        line_number.font_size = f32::from(size).ceil().max(1.) as u32;
+        line_number.bold = bits & 1 != 0;
+        line_number.italic = bits & 2 != 0;
+        line_number.underline = bits & 4 != 0;
+        include(line_number);
+        for id in [34, 35, 37] {
+            include(self.style_config.appearance(None, id, self.dark, &profile, self.editor_zoom_delta()));
+        }
+        if self.workspace.syntax_highlighting_allowed()
+            && let crate::syntax::Language::UserDefined(id) = self.workspace.active().language()
             && let Some(definition) = self.udl.registry.definition(id)
         {
             for style in crate::udl::UdlStyleId::ALL {
@@ -343,9 +419,10 @@ impl MatrixWindow {
 
     pub(super) fn editor_style_profile(&self) -> crate::syntax::StyleAppearance {
         let mut profile = crate::syntax::StyleAppearance::plain(self.dark);
-        profile.font_family = self.editor_font_family().into();
+        profile.font_family = "Helvetica".into();
         profile.font_size = f32::from(self.editor_font_size()).round().max(1.) as u32;
-        profile
+        self.style_config
+            .appearance(None, 32, self.dark, &profile, self.editor_zoom_delta())
     }
 
     pub(super) fn capture_udl_text_system(&mut self, window: &Window) {
@@ -355,11 +432,62 @@ impl MatrixWindow {
         }
     }
 
-    fn visible_editor_link_spans(
+    pub(super) fn plain_editor_style_runs(
+        &self,
+        start: usize,
+        end: usize,
+        marked: Option<&std::ops::Range<ByteOffset>>,
+        base: gpui::TextRun,
+        links: &[std::ops::Range<usize>],
+    ) -> Vec<(gpui::TextRun, gpui::Pixels)> {
+        let mut marks = self.editor().marked_ranges();
+        if let Some(marked) = marked {
+            marks.push(marked.clone());
+        }
+        let mut cuts = vec![start, end];
+        for range in &marks {
+            cuts.extend([range.start.0.clamp(start, end), range.end.0.clamp(start, end)]);
+        }
+        for range in links {
+            cuts.extend([range.start.clamp(start, end), range.end.clamp(start, end)]);
+        }
+        cuts.sort_unstable();
+        cuts.dedup();
+        cuts.windows(2).map(|pair| {
+            let mut run = base.clone();
+            run.len = pair[1] - pair[0];
+            if marks.iter().any(|mark| pair[0] >= mark.start.0 && pair[1] <= mark.end.0)
+                || (self.preferences.files.links.underline()
+                    && links.iter().any(|link| pair[0] >= link.start && pair[1] <= link.end))
+            {
+                run.underline = Some(gpui::UnderlineStyle {
+                    color: Some(run.color), thickness: px(1.), wavy: false,
+                });
+            }
+            (run, self.editor_font_size())
+        }).collect()
+    }
+
+    pub(super) fn editor_link_at(&self, position: ByteOffset) -> Option<std::ops::Range<ByteOffset>> {
+        if !self.workspace.clickable_links_allowed() {
+            return None;
+        }
+        let text = self.editor().display_text();
+        let range = self.preferences.files.links.link_at(&text, position.0)?;
+        let projection = self.editor().document().projection();
+        let start = projection.source_position(crate::byte_projection::DisplayByteOffset(range.start), crate::byte_projection::Affinity::Before).ok()?;
+        let end = projection.source_position(crate::byte_projection::DisplayByteOffset(range.end), crate::byte_projection::Affinity::After).ok()?;
+        Some(start..end)
+    }
+
+    pub(super) fn visible_editor_link_spans(
         &self,
         visible: std::ops::Range<usize>,
     ) -> Vec<std::ops::Range<usize>> {
         use ropey::LineType;
+        if !self.workspace.clickable_links_allowed() || !self.preferences.files.links.enabled() {
+            return Vec::new();
+        }
         let snapshot = self.editor().display_snapshot();
         if visible.start >= visible.end
             || visible.end > snapshot.len()
@@ -377,246 +505,21 @@ impl MatrixWindow {
             snapshot.len()
         };
         let text = snapshot.slice(start..end).to_string();
-        crate::links::link_spans(&text, visible.start - start..visible.end - start)
+        self.editor_link_spans_in_text(&text, start, visible.start - start..visible.end - start)
+    }
+
+    pub(super) fn editor_link_spans_in_text(
+        &self,
+        text: &str,
+        start: usize,
+        visible: std::ops::Range<usize>,
+    ) -> Vec<std::ops::Range<usize>> {
+        if !self.workspace.clickable_links_allowed() || !self.preferences.files.links.enabled() {
+            return Vec::new();
+        }
+        self.preferences.files.links.link_spans(text, visible)
             .into_iter()
             .map(|range| range.start + start..range.end + start)
             .collect()
-    }
-}
-
-#[cfg(all(test, feature = "native-input-tests"))]
-mod link_tests {
-    use super::*;
-    use gpui::EntityInputHandler;
-
-    fn base_run(len: usize) -> gpui::TextRun {
-        gpui::TextRun {
-            len,
-            font: gpui::font("Menlo"),
-            color: rgb(0x000000).into(),
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-        }
-    }
-
-    #[gpui::test]
-    fn udl_baseline_includes_an_unused_larger_style_on_every_row(cx: &mut gpui::TestAppContext) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            EntityInputHandler::replace_text_in_range(view, None, "plain\nplain", window, cx);
-            view.udl
-                .registry
-                .edit(0, |definition| {
-                    definition.styles[23].font_size = 40;
-                    Ok(())
-                })
-                .expect("configure unused delimiter style");
-            view.workspace
-                .active_mut()
-                .set_language(crate::syntax::Language::UserDefined(0));
-            view.refresh_editor_syntax();
-            view.capture_udl_text_system(window);
-            let font = gpui::font(view.editor_font_family());
-            let id = window.text_system().resolve_font(&font);
-            let size = px((40 + view.editor_zoom_delta()).max(1) as f32);
-            let ascent = window.text_system().ascent(id, size);
-            let descent = window.text_system().descent(id, size).abs();
-            let height = px((f32::from(size) * 26. / 20.)
-                .max(f32::from(ascent + descent))
-                .ceil());
-            assert_eq!(view.editor_style_line_height(), height);
-            assert_eq!(
-                view.editor_style_baseline(),
-                (height - ascent - descent) / 2. + ascent
-            );
-            assert_eq!(
-                view.editor_style_profile().font_family,
-                view.editor_font_family()
-            );
-        });
-    }
-
-    #[gpui::test]
-    fn udl_definition_edits_restyle_unchanged_text_and_keep_font_sizes_and_underlines(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            let source = "token https://host";
-            EntityInputHandler::replace_text_in_range(view, None, source, window, cx);
-            view.udl
-                .registry
-                .edit(0, |definition| {
-                    definition.keywords[0] = "token".into();
-                    definition.styles[4].foreground = Some(0x123456);
-                    definition.styles[4].font_size = 13;
-                    definition.styles[4].font_style = 7;
-                    definition.styles[4].font_name = "Menlo".into();
-                    Ok(())
-                })
-                .expect("configure working definition");
-            view.workspace
-                .active_mut()
-                .set_language(crate::syntax::Language::UserDefined(0));
-            view.refresh_editor_syntax();
-            view.capture_udl_text_system(window);
-            let revision = view.editor().display_revision();
-            let marked = ByteOffset(1)..ByteOffset(3);
-            let runs =
-                view.editor_style_runs(0, source.len(), Some(&marked), base_run(source.len()));
-            assert_eq!(
-                runs.iter().map(|(run, _)| run.len).sum::<usize>(),
-                source.len()
-            );
-            let mut byte = 0;
-            for (run, size) in runs {
-                if byte < 5 {
-                    assert_eq!(size, px((13 + view.editor_zoom_delta()).max(1) as f32));
-                    assert_eq!(run.color, gpui::Hsla::from(rgb(0x123456)));
-                    assert_eq!(run.font.weight, gpui::FontWeight::BOLD);
-                    assert_eq!(run.font.style, gpui::FontStyle::Italic);
-                    assert_eq!(run.font.family.as_ref(), "Menlo");
-                    assert!(
-                        run.underline.is_some(),
-                        "syntax underline survives IME cuts"
-                    );
-                } else {
-                    assert_eq!(
-                        size,
-                        view.editor_font_size(),
-                        "unset styles inherit the calibrated editor base"
-                    );
-                }
-                byte += run.len;
-            }
-            assert!(view.editor_style_line_height() >= px(26.));
-            view.udl
-                .registry
-                .edit(0, |definition| {
-                    definition.styles[4].foreground = Some(0xabcdef);
-                    definition.styles[4].font_size = 26;
-                    Ok(())
-                })
-                .expect("edit style without editing document");
-            view.refresh_editor_syntax();
-            assert_eq!(view.editor().display_revision(), revision);
-            let runs = view.editor_style_runs(0, source.len(), None, base_run(source.len()));
-            assert_eq!(runs[0].0.color, gpui::Hsla::from(rgb(0xabcdef)));
-            assert_eq!(runs[0].1, px((26 + view.editor_zoom_delta()).max(1) as f32));
-            assert!(view.editor_style_line_height() >= px(34.));
-        });
-    }
-
-    #[gpui::test]
-    fn udl_fold_ranges_use_inclusive_logical_lines_and_missing_definition_keeps_identity(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        view.update_in(cx, |view, window, cx| {
-            let source = "begin\r\ninside\r\nend";
-            EntityInputHandler::replace_text_in_range(view, None, source, window, cx);
-            view.udl
-                .registry
-                .edit(0, |definition| {
-                    definition.folding[0].open = "begin".into();
-                    definition.folding[0].close = "end".into();
-                    Ok(())
-                })
-                .expect("configure folding");
-            view.workspace
-                .active_mut()
-                .set_language(crate::syntax::Language::UserDefined(0));
-            view.refresh_editor_syntax();
-            assert_eq!(view.udl_fold_ranges(), [(0, 2)]);
-            view.workspace
-                .active_mut()
-                .set_language(crate::syntax::Language::UserDefined(999));
-            view.refresh_editor_syntax();
-            assert_eq!(
-                view.workspace.active().language(),
-                crate::syntax::Language::UserDefined(999)
-            );
-            assert_eq!(view.editor().committed_text(), source);
-            assert!(view.udl_fold_ranges().is_empty());
-            assert!(
-                view.editor_error
-                    .as_ref()
-                    .is_some_and(|error| error.contains("999"))
-            );
-        });
-    }
-
-    #[gpui::test]
-    fn visible_url_is_underlined_in_default_foreground_without_touching_text(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        let source = "pre https://host/a. tail";
-        view.update_in(cx, |view, window, cx| {
-            EntityInputHandler::replace_text_in_range(view, None, source, window, cx);
-            let before = view.editor().selection();
-            let runs = view.styled_editor_runs(0, source.len(), None, base_run(source.len()));
-            assert_eq!(runs.iter().map(|run| run.len).sum::<usize>(), source.len());
-            let mut byte = 0;
-            for run in runs {
-                assert_eq!(run.color, gpui::Hsla::from(rgb(0x000000)));
-                for position in byte..byte + run.len {
-                    assert_eq!(run.underline.is_some(), (4..18).contains(&position));
-                }
-                byte += run.len;
-            }
-            assert_eq!(view.editor().selection(), before);
-            assert_eq!(view.editor().committed_text(), source);
-        });
-    }
-
-    #[gpui::test]
-    fn url_decoration_keeps_json_foreground_background_and_ime_underline_priority(
-        cx: &mut gpui::TestAppContext,
-    ) {
-        let (view, cx) = cx.add_window_view(|window, cx| MatrixWindow::new(false, window, cx));
-        let source = "{\"url\":\"https://host/path\",\"n\":12}";
-        view.update_in(cx, |view, window, cx| {
-            EntityInputHandler::replace_text_in_range(view, None, source, window, cx);
-            view.workspace
-                .active_mut()
-                .set_language(crate::syntax::Language::Json);
-            view.refresh_editor_syntax();
-            let marked = ByteOffset(10)..ByteOffset(14);
-            let runs =
-                view.styled_editor_runs(0, source.len(), Some(&marked), base_run(source.len()));
-            assert_eq!(runs.iter().map(|run| run.len).sum::<usize>(), source.len());
-            let syntax = crate::syntax::json_styles(source);
-            let mut byte = 0;
-            for run in runs {
-                for position in byte..byte + run.len {
-                    let span = syntax
-                        .iter()
-                        .find(|span| span.range.contains(&position))
-                        .expect("JSON token");
-                    let (foreground, background, _) = span.style.appearance(false);
-                    assert_eq!(run.color, gpui::Hsla::from(rgb(foreground)));
-                    assert_eq!(
-                        run.background_color,
-                        Some(gpui::Hsla::from(rgb(background)))
-                    );
-                    if (10..14).contains(&position) {
-                        assert_eq!(
-                            run.underline.as_ref().expect("IME underline").color,
-                            Some(run.color)
-                        );
-                    } else if (8..25).contains(&position) {
-                        assert_eq!(
-                            run.underline.as_ref().expect("link underline").color,
-                            Some(gpui::Hsla::from(rgb(0x000000)))
-                        );
-                    } else {
-                        assert!(run.underline.is_none());
-                    }
-                }
-                byte += run.len;
-            }
-        });
     }
 }

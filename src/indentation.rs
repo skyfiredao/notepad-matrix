@@ -37,12 +37,12 @@ fn content(line: &str) -> &str {
     line.trim_end_matches(['\r', '\n'])
 }
 
-fn columns(line: &str) -> usize {
+fn columns(line: &str, tab_size: usize) -> usize {
     line.bytes()
         .take_while(|byte| matches!(byte, b' ' | b'\t'))
         .fold(0, |column, byte| {
             if byte == b'\t' {
-                column + 4 - column % 4
+                column + tab_size - column % tab_size
             } else {
                 column + 1
             }
@@ -85,7 +85,10 @@ fn set_indent(editor: &mut EditorSession, line: usize, amount: usize) -> Result<
         .bytes()
         .take_while(|byte| matches!(byte, b' ' | b'\t'))
         .count();
-    let text = format!("{}{}", "\t".repeat(amount / 4), " ".repeat(amount % 4));
+    let tabs = editor.tab_preferences();
+    let text = if tabs.spaces { " ".repeat(amount) } else {
+        format!("{}{}", "\t".repeat(amount / tabs.size), " ".repeat(amount % tabs.size))
+    };
     if value[..prefix] == text {
         return Ok(());
     }
@@ -177,7 +180,8 @@ pub fn after_character(
     let previous_text = previous
         .map(|line| snapshot.line(line, LineType::LF_CR).to_string())
         .unwrap_or_default();
-    let amount = columns(&previous_text);
+    let tab_size = editor.tab_preferences().size;
+    let amount = columns(&previous_text, tab_size);
     let profile = if let Language::Builtin(id) = language {
         Some(
             crate::languages::catalog()
@@ -238,7 +242,7 @@ pub fn after_character(
                 .iter()
                 .any(|span| span.range.contains(&offset) && span.style == 10)
             {
-                target += 4;
+                target += tab_size;
             }
         }
         if target > 0 {
@@ -250,13 +254,13 @@ pub fn after_character(
                 insert_below_caret(editor)?;
                 set_indent(editor, current + 1, amount)?;
             }
-            set_indent(editor, current, amount + 4)?;
+            set_indent(editor, current, amount + tab_size)?;
         } else if (caret < snapshot.len() && snapshot.byte(caret) == b'{')
             || matches!(key, "perl" | "rust" | "powershell" | "json" | "json5")
         {
             set_indent(editor, current, amount)?;
         } else if condition(&previous_text) {
-            set_indent(editor, current, amount + 4)?;
+            set_indent(editor, current, amount + tab_size)?;
         } else if amount > 0 {
             let previous_condition = previous.filter(|line| *line > 0).is_some_and(|line| {
                 condition(&snapshot.line(line - 1, LineType::LF_CR).to_string())
@@ -265,7 +269,7 @@ pub fn after_character(
                 editor,
                 current,
                 if previous_condition {
-                    amount.saturating_sub(4)
+                    amount.saturating_sub(tab_size)
                 } else {
                     amount
                 },
@@ -282,7 +286,7 @@ pub fn after_character(
             set_indent(
                 editor,
                 current,
-                amount + if previous_text.contains('{') { 4 } else { 0 },
+                amount + if previous_text.contains('{') { tab_size } else { 0 },
             )?;
         }
     } else {
@@ -300,7 +304,7 @@ pub fn after_character(
                         set_indent(
                             editor,
                             current,
-                            columns(&snapshot.line(line, LineType::LF_CR).to_string()),
+                            columns(&snapshot.line(line, LineType::LF_CR).to_string(), tab_size),
                         )?;
                     }
                     break;

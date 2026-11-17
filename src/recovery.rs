@@ -2,6 +2,7 @@
 //! Persistence does not acknowledge the document's formal savepoint.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::borrow::Cow;
 use std::fs::{self, File};
 use std::io;
 use std::path::Path;
@@ -28,7 +29,38 @@ fn selection_set_json(selections: &SelectionSet) -> Value {
     serde_json::json!({"ranges":selections.ranges().iter().map(|range| serde_json::json!({"anchor":range.selection.anchor.0,"head":range.selection.head.0,"anchor_virtual":range.anchor_virtual,"head_virtual":range.head_virtual})).collect::<Vec<_>>(),"primary":selections.primary_index(),"rectangular":selections.is_rectangular()})
 }
 
-fn parse_selection_set(value: &Value, text: Option<&str>) -> io::Result<SelectionSet> {
+enum RecoveryBoundary<'a> {
+    Unchecked,
+    Text(Cow<'a, str>),
+    Source(crate::byte_buffer::ByteBuffer),
+}
+
+impl RecoveryBoundary<'_> {
+    fn position(&self, mut offset: usize) -> ByteOffset {
+        match self {
+            Self::Unchecked | Self::Source(_) => {}
+            Self::Text(text) => {
+                offset = offset.min(text.len());
+                while !text.is_char_boundary(offset) { offset -= 1; }
+            }
+        }
+        ByteOffset(offset)
+    }
+
+    fn virtual_space(&self, position: ByteOffset, space: usize) -> usize {
+        let at_end = match self {
+            Self::Unchecked => true,
+            Self::Source(bytes) => bytes.is_line_end(position.0),
+            Self::Text(text) => position.0 == text.len()
+                || text.as_bytes().get(position.0) == Some(&b'\r')
+                || (text.as_bytes().get(position.0) == Some(&b'\n')
+                    && (position.0 == 0 || text.as_bytes().get(position.0 - 1) != Some(&b'\r'))),
+        };
+        if at_end { space } else { 0 }
+    }
+}
+
+fn parse_selection_set(value: &Value, boundary: &RecoveryBoundary<'_>) -> io::Result<SelectionSet> {
     let number = |value: &Value, name: &str| {
         value
             .get(name)
@@ -42,26 +74,11 @@ fn parse_selection_set(value: &Value, text: Option<&str>) -> io::Result<Selectio
         .ok_or_else(|| invalid("invalid session selection ranges"))?;
     let mut ranges = Vec::new();
     for entry in entries {
-        let clamp = |mut offset: usize| {
-            if let Some(text) = text {
-                offset = offset.min(text.len());
-                while !text.is_char_boundary(offset) {
-                    offset -= 1;
-                }
-            }
-            ByteOffset(offset)
-        };
-        let anchor = clamp(number(entry, "anchor")?);
-        let head = clamp(number(entry, "head")?);
+        let anchor = boundary.position(number(entry, "anchor")?);
+        let head = boundary.position(number(entry, "head")?);
         let virtual_space = |position: ByteOffset, name| -> io::Result<usize> {
             let space = number(entry, name)?;
-            let at_end = text.is_none_or(|text| {
-                position.0 == text.len()
-                    || text.as_bytes().get(position.0) == Some(&b'\r')
-                    || (text.as_bytes().get(position.0) == Some(&b'\n')
-                        && (position.0 == 0 || text.as_bytes().get(position.0 - 1) != Some(&b'\r')))
-            });
-            Ok(if at_end { space } else { 0 })
+            Ok(boundary.virtual_space(position, space))
         };
         ranges.push(SelectionRange {
             selection: Selection { anchor, head },
@@ -184,7 +201,7 @@ fn validate_views(manifest: &Value, document_keys: &[String]) -> io::Result<()> 
                     .ok_or_else(|| invalid("missing session view state"))?,
             )?;
             if let Some(selections) = member.get("selection_set") {
-                parse_selection_set(selections, None)?;
+                parse_selection_set(selections, &RecoveryBoundary::Unchecked)?;
             }
             for name in ["anchor", "head"] {
                 member
@@ -261,6 +278,7 @@ pub struct RecoverySnapshot {
     document: Value,
     text: String,
     loaded_bytes: u64,
+    raw: Option<Vec<u8>>,
 }
 
 /// One process-owned recovery session. Holding its lease is required for writes
@@ -270,7 +288,7 @@ pub struct RecoverySession {
     key: String,
     _lease: File,
     buffers: BTreeMap<BufferId, String>,
-    backup_revisions: BTreeMap<BufferId, (std::sync::Arc<()>, UnicodeFormat)>,
+    backup_revisions: BTreeMap<BufferId, (std::sync::Arc<()>, UnicodeFormat, Option<crate::files::ByteFormatCodePage>)>,
     next_snapshot: u64,
     restore_warnings: Vec<String>,
     snapshot_mode: bool,
@@ -279,9 +297,16 @@ pub struct RecoverySession {
 fn parse_language(value: &Value) -> io::Result<Option<crate::syntax::Language>> {
     match value.get("language") {
         None => Ok(None),
-        Some(Value::String(name)) => crate::syntax::Language::from_key(name)
-            .map(Some)
-            .ok_or_else(|| invalid("unknown recovery language")),
+        Some(Value::String(name)) => {
+            let language = crate::syntax::Language::from_key(name).ok_or_else(|| invalid("unknown recovery language"))?;
+            if language == crate::syntax::Language::Builtin(15) {
+                if value.get("udl").and_then(Value::as_str).is_none_or(str::is_empty) {
+                    return Err(invalid("user-defined recovery language name is missing"));
+                }
+                return Ok(Some(crate::syntax::Language::UserDefined(0)));
+            }
+            Ok(Some(language))
+        }
         _ => Err(invalid("unknown recovery language")),
     }
 }
@@ -291,10 +316,15 @@ struct SessionDocument {
     path: Option<PathBuf>,
     selection: Selection,
     language: Option<crate::syntax::Language>,
+    udl: Option<String>,
 }
 
 impl SessionDocument {
     fn parse(value: &Value) -> io::Result<Self> {
+        crate::files::ByteFormatCodePage::from_value(&value["codepage"])?;
+        if value.get("udl").is_some_and(|value| !value.is_null() && !value.is_string()) {
+            return Err(invalid("invalid session user-defined language name"));
+        }
         for name in ["pinned", "user_read_only", "monitoring"] {
             if value.get(name).is_some_and(|value| !value.is_boolean()) {
                 return Err(invalid("invalid session document property"));
@@ -341,6 +371,7 @@ impl SessionDocument {
             key,
             path,
             language: parse_language(value)?,
+            udl: value.get("udl").and_then(Value::as_str).map(str::to_owned),
             selection: Selection {
                 anchor: position("anchor")?,
                 head: position("head")?,
@@ -354,6 +385,7 @@ pub struct RecoveryManager {
     warnings: Vec<String>,
     changed_buffers: Vec<BufferId>,
     snapshot_mode: bool,
+    remember_last_session: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -394,6 +426,18 @@ impl RecoveryOptions {
 }
 
 impl RecoveryManager {
+    pub fn create_for_workspace(home: &Path, options: RecoveryOptions) -> io::Result<Self> {
+        let mut session = RecoverySession::create(home)?;
+        session.snapshot_mode = options.enabled;
+        Ok(Self { sessions: vec![session],warnings: Vec::new(),changed_buffers: Vec::new(),snapshot_mode: options.enabled,remember_last_session: options.remember_last_session })
+    }
+
+    pub fn apply_options(&mut self, options: RecoveryOptions) {
+        self.snapshot_mode = options.enabled;
+        self.remember_last_session = options.remember_last_session;
+        for session in &mut self.sessions { session.snapshot_mode = options.enabled; }
+    }
+
     pub fn snapshot_mode(&self) -> bool {
         self.snapshot_mode
     }
@@ -443,13 +487,16 @@ impl RecoveryManager {
         }
         keys.sort();
         let mut workspace = Workspace::with_large_file_restriction(options.large_file_restriction);
+        workspace.configure_new_document(&store.load_settings()?)?;
+        let udls = crate::udl_registry::UdlRegistry::load(&store)?;
+        workspace.synchronize_udl_names(udls.named().map(|(id,definition)| (id,definition.name.clone())));
         let initial = workspace.active().id();
         let mut sessions = Vec::new();
         let mut active = None;
         for key in keys {
             match RecoverySession::claim(home, &key) {
                 Ok(Some(mut session)) => {
-                    session.snapshot_mode = options.snapshot_mode;
+                    session.snapshot_mode = options.enabled;
                     match session.restore_into_workspace(&mut workspace) {
                         Ok(id) => {
                             if id.is_some() {
@@ -483,7 +530,7 @@ impl RecoveryManager {
             sessions.push(RecoverySession::create(home)?);
         }
         for session in &mut sessions {
-            session.snapshot_mode = options.snapshot_mode;
+            session.snapshot_mode = options.enabled;
         }
         let mut changed_buffers = Vec::new();
         for buffer in workspace.buffers_mut() {
@@ -501,7 +548,8 @@ impl RecoveryManager {
                 sessions,
                 warnings,
                 changed_buffers,
-                snapshot_mode: options.snapshot_mode,
+                snapshot_mode: options.enabled,
+                remember_last_session: options.remember_last_session,
             },
             workspace,
         ))
@@ -516,6 +564,7 @@ impl RecoveryManager {
         workspace: &Workspace,
         discarded: &BTreeSet<BufferId>,
     ) -> io::Result<()> {
+        if !self.remember_last_session { return self.discard_all(); }
         let owned = self
             .sessions
             .iter()
@@ -686,7 +735,6 @@ impl RecoverySession {
                         .filter(|sequence| *sequence > 0 && *sequence < counter);
                     if sequence.is_none()
                         || document_keys.contains(&document.key)
-                        || (document.path.is_none() && !keys.contains(&document.key))
                     {
                         return Err(invalid("invalid session document reference"));
                     }
@@ -711,6 +759,9 @@ impl RecoverySession {
         let settings = self.store.load_settings()?;
         let policy = crate::workspace::LargeFileRestriction::from_settings(&settings)?;
         let mut workspace = Workspace::with_large_file_restriction(policy);
+        workspace.configure_new_document(&settings)?;
+        let udls = crate::udl_registry::UdlRegistry::load(&self.store)?;
+        workspace.synchronize_udl_names(udls.named().map(|(id,definition)| (id,definition.name.clone())));
         let initial = workspace.active().id();
         let active = self.restore_into_workspace(&mut workspace)?;
         if !self.buffers.is_empty() {
@@ -742,8 +793,12 @@ impl RecoverySession {
             &mut self.restore_warnings,
         )?;
         for buffer in workspace.buffers() {
-            if let Some(key) = buffers.get(&buffer.id()).filter(|key| keys.contains(key)) {
-                let snapshot = RecoverySnapshot::load(&self.store, key)?;
+            if let Some(key) = buffers.get(&buffer.id()).filter(|key| self.snapshot_mode && keys.contains(key)) {
+                let snapshot = match RecoverySnapshot::load(&self.store, key) {
+                    Ok(snapshot) => snapshot,
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                    Err(error) => return Err(error),
+                };
                 let path = if snapshot.document.get("backupFilePath").is_some() {
                     raw_backup::path(&self.store, &snapshot.document)?
                 } else {
@@ -758,7 +813,7 @@ impl RecoverySession {
                 }
                 self.backup_revisions.insert(
                     buffer.id(),
-                    (buffer.editor.document().text_revision(), buffer.format()),
+                    (buffer.editor.document().text_revision(), buffer.format(), buffer.byte_code_page()),
                 );
             }
         }
@@ -790,34 +845,44 @@ impl RecoverySession {
                     path: None,
                     selection: Selection::default(),
                     language: None,
+                    udl: None,
                 })
                 .collect(),
         };
         let mut parts = Vec::new();
+        let mut codepages = BTreeMap::new();
+        let mut source_offsets = BTreeSet::new();
+        let mut udl_names = BTreeMap::new();
         for document in documents {
+            if let Some(name) = &document.udl { udl_names.insert(document.key.clone(),name.clone()); }
             if snapshot_mode && keys.contains(&document.key) {
-                let snapshot = load_snapshot(&document.key)?;
-                parts.push((
-                    document.key.clone(),
-                    snapshot.restoration_parts()?,
-                    document.language.or(parse_language(&snapshot.document)?),
-                    snapshot.loaded_bytes,
-                ));
-            } else if let Some(path) = &document.path {
-                match DiskFile::load_unicode(path) {
+                match load_snapshot(&document.key) {
+                    Ok(snapshot) => {
+                        if snapshot.uses_source_offsets()? { source_offsets.insert(document.key.clone()); }
+                        if snapshot.document.get("codepage").is_some() { codepages.insert(document.key.clone(),crate::files::ByteFormatCodePage::from_value(&snapshot.document["codepage"])?); }
+                        if let Some(name) = snapshot.document["udl"].as_str() { udl_names.insert(document.key.clone(),name.to_owned()); }
+                        parts.push((
+                            document.key.clone(),
+                            snapshot.restoration_parts()?,
+                            document.language.or(parse_language(&snapshot.document)?),
+                            snapshot.loaded_bytes,
+                        ));
+                        continue;
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => warnings.push(format!("{}: session backup is missing: {error}",document.key)),
+                    Err(error) => return Err(error),
+                }
+            }
+            if let Some(path) = &document.path {
+                let codepage = manifest["documents"].as_array().and_then(|entries| entries.iter().find(|entry| entry["key"].as_str() == Some(document.key.as_str()))).map(|entry| crate::files::ByteFormatCodePage::from_value(&entry["codepage"])).transpose()?.flatten();
+                match DiskFile::load_with_code_page(path,codepage) {
                     Ok((file, text)) => {
-                        let clamp = |position: ByteOffset| {
-                            let mut byte = position.0.min(text.len());
-                            while !text.is_char_boundary(byte) {
-                                byte -= 1;
-                            }
-                            ByteOffset(byte)
-                        };
+                        let boundary = RecoveryBoundary::Text(text.as_str().into());
                         let mut editor = EditorSession::from_file_text(&text);
                         editor
                             .select(Selection {
-                                anchor: clamp(document.selection.anchor),
-                                head: clamp(document.selection.head),
+                                anchor: boundary.position(document.selection.anchor.0),
+                                head: boundary.position(document.selection.head.0),
                             })
                             .map_err(|error| invalid(&error.to_string()))?;
                         editor.set_read_only(file.is_read_only());
@@ -830,10 +895,16 @@ impl RecoverySession {
                             loaded_bytes,
                         ));
                     }
-                    Err(error) => warnings.push(format!(
-                        "{}: session file could not be opened: {error}",
-                        path.display()
-                    )),
+                    Err(error) => {
+                        warnings.push(format!("{}: session file could not be opened: {error}",path.display()));
+                        if workspace.keep_absent_session_files() {
+                            codepages.insert(document.key.clone(),codepage);
+                            let file = DiskFile::placeholder(path)?;
+                            let mut editor = EditorSession::from_file_text("");
+                            editor.set_read_only(true);
+                            parts.push((document.key,(editor,Some(file),String::new(),UnicodeFormat::Utf8(Utf8Format::Plain)),document.language,0));
+                        }
+                    }
                 }
             }
         }
@@ -873,8 +944,15 @@ impl RecoverySession {
                     .map_err(|error| io::Error::other(error.to_string()))?,
             };
             if let Some(language) = language {
+                let language = if matches!(language,crate::syntax::Language::UserDefined(_)) {
+                    match udl_names.get(&key) {
+                        Some(name) => workspace.udl_language_named(name),
+                        None => workspace.udl_language_name(language).map(|_| language),
+                    }.unwrap_or_else(|| { warnings.push(format!("{key}: user language is no longer available; restored as normal text")); crate::syntax::Language::NormalText })
+                } else { language };
                 workspace.active_mut().set_language(language);
             }
+            if let Some(codepage) = codepages.get(&key) { workspace.active_mut().restore_byte_code_page(*codepage); }
             if manifest.get("active").and_then(Value::as_str) == Some(key.as_str()) {
                 active = Some(id);
             }
@@ -933,7 +1011,7 @@ impl RecoverySession {
                     };
                     if let Some(entries) = view.get("documents").and_then(Value::as_array) {
                         for entry in entries {
-                            let Some((id, _)) = buffers.iter().find(|(_, key)| {
+                            let Some((id, key)) = buffers.iter().find(|(_, key)| {
                                 entry.get("key").and_then(Value::as_str) == Some(key.as_str())
                             }) else {
                                 continue;
@@ -950,23 +1028,21 @@ impl RecoverySession {
                                 )
                                 .map_err(|error| invalid(&error.to_string()))?;
                             if let Some(editor) = workspace.editor_in_view_mut(target, *id) {
-                                let text = editor.committed_text();
+                                let boundary = if source_offsets.contains(key) {
+                                    RecoveryBoundary::Source(editor.document().byte_snapshot())
+                                } else { RecoveryBoundary::Text(editor.committed_text().into()) };
                                 if let Some(value) = entry.get("selection_set") {
                                     editor
-                                        .set_selections(parse_selection_set(value, Some(&text))?)
+                                        .set_selections(parse_selection_set(value, &boundary)?)
                                         .map_err(|error| invalid(&error.to_string()))?;
                                     continue;
                                 }
                                 let clamp = |value: &Value| {
-                                    let mut offset = value
+                                    let offset = value
                                         .as_u64()
                                         .and_then(|value| usize::try_from(value).ok())
-                                        .unwrap_or(0)
-                                        .min(text.len());
-                                    while !text.is_char_boundary(offset) {
-                                        offset -= 1;
-                                    }
-                                    ByteOffset(offset)
+                                        .unwrap_or(0);
+                                    boundary.position(offset)
                                 };
                                 editor
                                     .select(Selection {
@@ -1048,6 +1124,7 @@ impl RecoverySession {
                 .configure_recent_files(manifest)
                 .map_err(|error| invalid(&error.to_string()))?;
         }
+        workspace.refresh_udl_metadata();
         Ok((buffers, active))
     }
 
@@ -1088,12 +1165,9 @@ impl RecoverySession {
         let mut keys = Vec::new();
         let mut documents = Vec::new();
         let mut active = None;
-        let snapshot_mode = self.snapshot_mode;
         for buffer in workspace.buffers().iter().filter(|buffer| {
             (buffer.disk_file.is_some()
-                || (snapshot_mode
-                    && buffer.is_modified()
-                    && buffer.editor.document().len_bytes() > 0))
+                || buffer.editor.document().len_bytes() > 0)
                 && ids.is_none_or(|ids| ids.contains(&buffer.id()))
                 && !(discarded.contains(&buffer.id()) && buffer.disk_file.is_none())
         }) {
@@ -1109,9 +1183,10 @@ impl RecoverySession {
                 let modified =
                     self.backup_revisions
                         .get(&buffer.id())
-                        .is_none_or(|(previous, format)| {
+                        .is_none_or(|(previous, format, codepage)| {
                             !std::sync::Arc::ptr_eq(previous, &revision)
                                 || *format != buffer.format()
+                                || *codepage != buffer.byte_code_page()
                         });
                 RecoverySnapshot::capture(buffer)?.save_with_modification(
                     &self.store,
@@ -1119,20 +1194,21 @@ impl RecoverySession {
                     modified,
                 )?;
                 self.backup_revisions
-                    .insert(buffer.id(), (revision, buffer.format()));
+                    .insert(buffer.id(), (revision, buffer.format(), buffer.byte_code_page()));
                 let metadata = self.store.load_json(&snapshot_metadata_path(&key)?)?;
                 buffer.set_backup_modified(Some(
                     fs::metadata(raw_backup::path(&self.store, &metadata)?)?.modified()?,
                 ));
                 keys.push(key.clone());
             }
+            if !keys.contains(&key) { buffer.set_backup_modified(None); }
             let selection = buffer.editor.document().selection();
             let path = buffer
                 .disk_file
                 .as_ref()
                 .map(|file| serde_json::to_value(file.path()))
                 .transpose()?;
-            let fields = serde_json::json!({"key": key, "path": path, "anchor": selection.anchor.0, "head": selection.head.0, "language": buffer.language().key(), "pinned":buffer.is_pinned(),"monitoring":buffer.is_monitoring(),"user_read_only":buffer.is_user_read_only(),"marks":buffer.editor.document().bookmarked_lines().collect::<Vec<_>>()});
+            let fields = serde_json::json!({"key": key, "path": path, "anchor": selection.anchor.0, "head": selection.head.0, "language": buffer.language().key(), "udl":buffer.udl_name(),"codepage":buffer.byte_code_page().map(crate::files::ByteFormatCodePage::value),"pinned":buffer.is_pinned(),"monitoring":buffer.is_monitoring(),"user_read_only":buffer.is_user_read_only(),"marks":buffer.editor.document().bookmarked_lines().collect::<Vec<_>>()});
             let mut entry = previous_document
                 .as_ref()
                 .and_then(|manifest| manifest.get("documents"))
@@ -1323,6 +1399,12 @@ fn snapshot_metadata_path(key: &str) -> io::Result<PathBuf> {
 }
 
 impl RecoverySnapshot {
+    fn uses_source_offsets(&self) -> io::Result<bool> {
+        Ok(self.raw.is_some()
+            && parse_format(&self.document)? == UnicodeFormat::Utf8(Utf8Format::Plain)
+            && crate::files::ByteFormatCodePage::from_value(&self.document["codepage"])?.is_none())
+    }
+
     pub fn capture(buffer: &Buffer) -> io::Result<Self> {
         if buffer.is_large_file() {
             return Err(invalid("large files do not use periodic backups"));
@@ -1341,12 +1423,18 @@ impl RecoverySnapshot {
         if let Some(state) = disk.as_mut().and_then(Value::as_object_mut) {
             state.remove("bytes");
         }
+        let raw_utf8 = buffer.byte_code_page().is_none()
+            && buffer.format() == UnicodeFormat::Utf8(Utf8Format::Plain);
+        let raw = if raw_utf8 || buffer.byte_code_page() == Some(crate::files::ByteFormatCodePage::Unspecified) {
+            Some(buffer.editor.document().byte_snapshot().to_vec())
+        } else { None };
         Ok(Self {
             loaded_bytes: buffer
                 .disk_file
                 .as_ref()
                 .map_or(0, |file| file.loaded_len() as u64),
-            text: buffer.editor.save_snapshot().text(),
+            text: if raw_utf8 { String::new() } else { buffer.editor.document().text_snapshot().to_string() },
+            raw,
             document: serde_json::json!({
                 "schema_version": 1,
                 "name": buffer.name(),
@@ -1355,7 +1443,9 @@ impl RecoverySnapshot {
                 "selection_set": selection_set_json(&buffer.editor.document().selections()),
                 "line_ending": buffer.editor.line_ending().as_str(),
                 "format": format_name(buffer.format()),
+                "codepage":buffer.byte_code_page().map(crate::files::ByteFormatCodePage::value),
                 "language": buffer.language().key(),
+                "udl":buffer.udl_name(),
                 "disk": disk,
             }),
         })
@@ -1372,40 +1462,59 @@ impl RecoverySnapshot {
         modified: bool,
     ) -> io::Result<()> {
         let metadata_path = snapshot_metadata_path(key)?;
-        let existing = match store.load_json(&metadata_path) {
-            Ok(document) if modified => Some(Self {
-                document,
-                text: self.text.clone(),
-                loaded_bytes: self.loaded_bytes,
-            }),
-            Ok(document) => Some(Self::from_document(store, document)?),
+        let mut backup_missing = false;
+        let mut metadata_has_body = false;
+        let previous = match store.load_json(&metadata_path) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => store.load_json(&snapshot_path(key)?),
+            result => result,
+        };
+        let existing = match previous {
+            Ok(document) => {
+                metadata_has_body = document.get("text").is_some() || document["disk"].get("bytes").is_some();
+                backup_missing = if document.get("backupFilePath").is_some() {
+                    !raw_backup::path(store, &document)?.try_exists()?
+                } else { true };
+                if modified || backup_missing {
+                    Some(Self { document,text:self.text.clone(),loaded_bytes:self.loaded_bytes,raw:self.raw.clone() })
+                } else { Some(Self::from_document(store, document)?) }
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
             Err(error) => return Err(error),
         };
         let backup = match &existing {
-            Some(snapshot) => raw_backup::path(store, &snapshot.document)?,
+            Some(snapshot) if snapshot.document.get("backupFilePath").is_some() => raw_backup::path(store, &snapshot.document)?,
+            Some(_) => raw_backup::new_path(store, &self.document)?,
             None => raw_backup::new_path(store, &self.document)?,
         };
-        if modified
+        if modified || backup_missing
             || existing.as_ref().is_none_or(|snapshot| {
-                snapshot.text != self.text || snapshot.document["format"] != self.document["format"]
+                snapshot.text != self.text || snapshot.raw != self.raw || snapshot.document["format"] != self.document["format"] || snapshot.document["codepage"] != self.document["codepage"]
             })
         {
-            raw_backup::write(
-                &backup,
-                &self.text,
-                parse_format(&self.document)?,
-                self.document["disk"].is_null(),
-            )?;
+            if let Some(codepage) = crate::files::ByteFormatCodePage::from_value(&self.document["codepage"])? {
+                use std::io::Write;
+                let bytes = match &self.raw { Some(bytes) => bytes.clone(),None => codepage.encode(&self.text)? };
+                let parent = backup.parent().ok_or_else(|| invalid("backup directory is missing"))?;
+                let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+                temporary.write_all(&bytes)?;
+                temporary.as_file().sync_all()?;
+                temporary.persist(&backup).map_err(|error| error.error)?;
+            } else {
+                let bytes = self.raw.as_deref().unwrap_or(self.text.as_bytes());
+                raw_backup::write(&backup,bytes,parse_format(&self.document)?,self.document["disk"].is_null())?;
+            }
         }
         let mut current = self.document.clone();
         current["backupFilePath"] = serde_json::to_value(&backup)?;
-        if !existing
+        if metadata_has_body || !existing
             .as_ref()
             .is_some_and(|snapshot| contains_fields(&snapshot.document, &current))
         {
-            store.update_json(&metadata_path, &current, |document| {
+            let defaults = existing.as_ref().map(|snapshot| &snapshot.document).unwrap_or(&current);
+            store.update_json(&metadata_path, defaults, |document| {
                 merge_fields(document, &current);
+                if let Some(fields) = document.as_object_mut() { fields.remove("text"); }
+                if let Some(fields) = document["disk"].as_object_mut() { fields.remove("bytes"); }
                 Ok(())
             })?;
         }
@@ -1424,6 +1533,7 @@ impl RecoverySnapshot {
     }
 
     fn from_document(store: &ConfigStore, mut document: Value) -> io::Result<Self> {
+        let mut raw = None;
         let (text, backup_bytes) = if let Some(text) = document.get("text").and_then(Value::as_str)
         {
             let bytes = match parse_format(&document)? {
@@ -1436,10 +1546,18 @@ impl RecoverySnapshot {
             (text.to_owned(), bytes)
         } else {
             let path = raw_backup::path(store, &document)?;
-            (
-                raw_backup::read(&path, parse_format(&document)?)?,
-                fs::metadata(path)?.len(),
-            )
+            if let Some(codepage) = crate::files::ByteFormatCodePage::from_value(&document["codepage"])? {
+                let bytes = fs::read(&path)?;
+                let text = if codepage == crate::files::ByteFormatCodePage::Unspecified {
+                    let text = String::from_utf8_lossy(&bytes).into_owned(); raw = Some(bytes.clone()); text
+                } else { codepage.decode(&bytes)? };
+                (text,bytes.len() as u64)
+            } else if parse_format(&document)? == UnicodeFormat::Utf8(Utf8Format::Plain) {
+                let bytes = raw_backup::read_bytes(&path)?;
+                let length = bytes.len() as u64;
+                raw = Some(bytes);
+                (String::new(), length)
+            } else { (raw_backup::read(&path,parse_format(&document)?)?,fs::metadata(path)?.len()) }
         };
         let loaded_bytes = if let Some(path) = document["disk"].get("path") {
             let path: PathBuf = serde_json::from_value(path.clone())?;
@@ -1458,6 +1576,7 @@ impl RecoverySnapshot {
             document,
             text,
             loaded_bytes,
+            raw,
         };
         snapshot.decode()?;
         Ok(snapshot)
@@ -1488,6 +1607,7 @@ impl RecoverySnapshot {
             _ => return Err(invalid("unknown recovery line ending")),
         };
         let format = parse_format(document)?;
+        let raw_utf8 = self.uses_source_offsets()?;
         let disk = match document.get("disk") {
             Some(Value::Null) => None,
             Some(state) => {
@@ -1511,25 +1631,31 @@ impl RecoverySnapshot {
                         Err(error) => return Err(error),
                     }
                 }
-                Some(DiskFile::from_recovery_state(&state)?)
+                Some(DiskFile::from_recovery_state(&state, raw_utf8)?)
             }
             None => return Err(invalid("recovery disk association is missing")),
         };
-        let mut editor = EditorSession::from_recovery(
-            text,
-            Selection {
-                anchor: offset("anchor")?,
-                head: offset("head")?,
-            },
-            line_ending,
-        )
-        .map_err(|error| invalid(&error.to_string()))?;
+        let mut editor = if let Some(bytes) = &self.raw {
+            let mut editor = EditorSession::from_file_bytes(crate::byte_buffer::ByteBuffer::from_bytes(bytes));
+            if raw_utf8 { editor.set_line_ending(line_ending); }
+            else { editor.convert_line_endings(line_ending).map_err(|error| invalid(&error.to_string()))?; }
+            let mut selection = Selection { anchor:offset("anchor")?,head:offset("head")? };
+            if raw_utf8 {
+                let boundary = RecoveryBoundary::Source(editor.document().byte_snapshot());
+                selection = Selection { anchor:boundary.position(selection.anchor.0),head:boundary.position(selection.head.0) };
+            }
+            editor.select(selection).map_err(|error| invalid(&error.to_string()))?;
+            editor.document().set_buffer_dirty(true);
+            editor
+        } else { EditorSession::from_recovery(text,Selection { anchor:offset("anchor")?,head:offset("head")? },line_ending).map_err(|error| invalid(&error.to_string()))? };
         if let Some(file) = &disk {
             editor.set_read_only(file.is_read_only());
         }
         if let Some(value) = document.get("selection_set") {
+            let boundary = if raw_utf8 { RecoveryBoundary::Source(editor.document().byte_snapshot()) }
+                else { RecoveryBoundary::Text(text.into()) };
             editor
-                .set_selections(parse_selection_set(value, Some(text))?)
+                .set_selections(parse_selection_set(value, &boundary)?)
                 .map_err(|error| invalid(&error.to_string()))?;
         }
         Ok((editor, disk, name.into(), format))
@@ -1542,8 +1668,13 @@ impl RecoverySnapshot {
             .append_recovered_buffer_with_size(editor, disk, name, format, self.loaded_bytes)
             .map_err(|error| io::Error::other(error.to_string()))?;
         if let Some(language) = language {
+            let language = if matches!(language,crate::syntax::Language::UserDefined(_)) {
+                match self.document["udl"].as_str() { Some(name) => workspace.udl_language_named(name),None => workspace.udl_language_name(language).map(|_| language) }.unwrap_or(crate::syntax::Language::NormalText)
+            } else { language };
             workspace.active_mut().set_language(language);
         }
+        if self.document.get("codepage").is_some() { workspace.active_mut().restore_byte_code_page(crate::files::ByteFormatCodePage::from_value(&self.document["codepage"])?); }
+        workspace.refresh_udl_metadata();
         Ok(id)
     }
 

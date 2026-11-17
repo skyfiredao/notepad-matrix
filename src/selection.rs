@@ -1,8 +1,5 @@
 use super::{ByteOffset, EditError, Selection};
 
-#[path = "unicode_word.rs"]
-mod unicode_word;
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SelectionRange {
     pub selection: Selection,
@@ -21,6 +18,42 @@ impl From<Selection> for SelectionRange {
 }
 
 impl SelectionRange {
+    pub(crate) fn set_start(&mut self, position: ByteOffset) {
+        if (self.selection.anchor, self.anchor_virtual) <= (self.selection.head, self.head_virtual) {
+            self.selection.anchor = position;
+            self.anchor_virtual = 0;
+            if (self.selection.head, self.head_virtual) < (self.selection.anchor, self.anchor_virtual) {
+                self.selection.head = position;
+                self.head_virtual = 0;
+            }
+        } else {
+            self.selection.head = position;
+            self.head_virtual = 0;
+            if (self.selection.anchor, self.anchor_virtual) < (self.selection.head, self.head_virtual) {
+                self.selection.anchor = position;
+                self.anchor_virtual = 0;
+            }
+        }
+    }
+
+    pub(crate) fn set_end(&mut self, position: ByteOffset) {
+        if (self.selection.head, self.head_virtual) >= (self.selection.anchor, self.anchor_virtual) {
+            self.selection.head = position;
+            self.head_virtual = 0;
+            if (self.selection.anchor, self.anchor_virtual) > (self.selection.head, self.head_virtual) {
+                self.selection.anchor = position;
+                self.anchor_virtual = 0;
+            }
+        } else {
+            self.selection.anchor = position;
+            self.anchor_virtual = 0;
+            if (self.selection.head, self.head_virtual) > (self.selection.anchor, self.anchor_virtual) {
+                self.selection.head = position;
+                self.head_virtual = 0;
+            }
+        }
+    }
+
     pub(crate) fn trim_against(&mut self, added: SelectionRange) -> bool {
         let anchor = (self.selection.anchor, self.anchor_virtual);
         let head = (self.selection.head, self.head_virtual);
@@ -132,6 +165,14 @@ impl SelectionSet {
         self.rectangular
     }
 
+    pub(crate) fn rectangular_endpoints(&self) -> Option<((ByteOffset, usize), (ByteOffset, usize))> {
+        if !self.rectangular { return None; }
+        let anchor_index = if self.primary == 0 { self.ranges.len() - 1 } else { 0 };
+        let anchor = self.ranges[anchor_index];
+        let caret = self.primary();
+        Some(((anchor.selection.anchor, anchor.anchor_virtual), (caret.selection.head, caret.head_virtual)))
+    }
+
     pub fn moved(
         &self,
         extend: bool,
@@ -222,16 +263,14 @@ impl SelectionSet {
         self.ranges[index] = range;
     }
 
-    pub(super) fn normalize_boundaries(&mut self, text: &ropey::Rope, skip_primary: bool) {
-        for (index, range) in self.ranges.iter_mut().enumerate() {
-            if skip_primary && index == self.primary {
-                continue;
-            }
-            for position in [&mut range.selection.anchor, &mut range.selection.head] {
-                position.0 = position.0.min(text.len());
-                while !text.is_char_boundary(position.0) {
-                    position.0 += 1;
-                }
+    pub(crate) fn normalize_byte_bounds(&mut self, bytes: &crate::byte_buffer::ByteBuffer) {
+        for range in &mut self.ranges {
+            for (position, virtual_space) in [
+                (&mut range.selection.anchor, &mut range.anchor_virtual),
+                (&mut range.selection.head, &mut range.head_virtual),
+            ] {
+                position.0 = position.0.min(bytes.len());
+                if !bytes.is_line_end(position.0) { *virtual_space = 0; }
             }
         }
     }
@@ -262,27 +301,7 @@ pub struct OccurrenceOptions {
 }
 
 pub(super) fn word(ch: char) -> bool {
-    unicode_word::is_word(ch)
-}
-
-fn folded(text: &str) -> (String, Vec<(usize, usize)>) {
-    let mut result = String::new();
-    let mut positions = Vec::new();
-    for (offset, ch) in text.char_indices() {
-        positions.push((result.len(), offset));
-        match ch {
-            'ß' | 'ẞ' => result.push_str("ss"),
-            'ı' => result.push(ch),
-            '\u{13a0}'..='\u{13ff}' | '\u{ab70}'..='\u{abbf}' => result.extend(ch.to_uppercase()),
-            _ => {
-                for upper in ch.to_uppercase() {
-                    result.extend(upper.to_lowercase());
-                }
-            }
-        }
-    }
-    positions.push((result.len(), text.len()));
-    (result, positions)
+    crate::unicode_class::classify(ch) == crate::unicode_class::CharacterClass::Word
 }
 
 impl super::Document {
@@ -330,7 +349,7 @@ impl super::Document {
             return Ok(false);
         }
         let mut core = super::lock(&self.core);
-        let mut candidate = core.current.content.clone();
+        let mut candidate = core.current.bytes.clone();
         let mut edits = super::LineEdits::default();
         let mut value = String::new();
         let mut ranges: Vec<_> = selections
@@ -362,7 +381,7 @@ impl super::Document {
         let mut target = position.0;
         if !copy {
             for range in ranges.iter().rev() {
-                edits.remove(&mut candidate, range.start.0..range.end.0)?;
+                edits.change_bytes(&mut candidate, range.start.0..range.end.0, &[])?;
                 if position >= range.end {
                     target -= range.end.0 - range.start.0;
                 }
@@ -383,14 +402,14 @@ impl super::Document {
                 head: ByteOffset(target),
             }
         } else {
-            edits.insert(&mut candidate, target, &value)?;
+            edits.change_bytes(&mut candidate, target..target, value.as_bytes())?;
             Selection {
                 anchor: ByteOffset(target),
                 head: ByteOffset(target + value.len()),
             }
         };
         core.editing_view = std::sync::Arc::downgrade(&self.selection);
-        core.replace_rope(candidate, selected, edits)?;
+        core.commit_bytes(candidate, selected, edits)?;
         *super::lock(&self.selection) = SelectionSet::single(selected);
         core.remember_redo_selections();
         Ok(true)
@@ -439,7 +458,7 @@ impl super::Document {
         each: bool,
     ) -> Result<bool, EditError> {
         self.occurrence_options = options;
-        let text = self.text();
+        let bytes = self.byte_snapshot();
         let selected = self.selection().range();
         if self
             .selections()
@@ -447,84 +466,36 @@ impl super::Document {
             .iter()
             .all(|range| range.is_empty())
         {
-            let mut start = selected.start.0;
-            let mut end = start;
-            while let Some(ch) = text[..start].chars().next_back() {
-                if !word(ch) {
-                    break;
-                }
-                start -= ch.len_utf8();
-            }
-            while let Some(ch) = text[end..].chars().next() {
-                if !word(ch) {
-                    break;
-                }
-                end += ch.len_utf8();
-            }
-            self.select(Selection {
+            let start = bytes.extend_word(self.selection().head.0, false)
+                .map_err(|error| EditError::Storage(error.to_string()))?;
+            let end = bytes.extend_word(start, true).map_err(|error| EditError::Storage(error.to_string()))?;
+            let mut selections = self.selections();
+            selections.set_range(selections.primary_index(), Selection {
                 anchor: ByteOffset(start),
                 head: ByteOffset(end),
-            })?;
+            }.into());
+            selections.rectangular = false;
+            selections.trim_primary();
+            self.set_selections(selections)?;
             return Ok(start != end);
         }
         if selected.is_empty() {
             return Ok(false);
         }
-        let query = &text[selected.start.0..selected.end.0];
-        let (haystack, positions) = if options.match_case {
-            (
-                text.clone(),
-                text.char_indices()
-                    .map(|(index, _)| (index, index))
-                    .chain(std::iter::once((text.len(), text.len())))
-                    .collect::<Vec<_>>(),
-            )
-        } else {
-            folded(&text)
-        };
-        let needle = if options.match_case {
-            query.to_string()
-        } else {
-            folded(query).0
-        };
-        let mut matches = Vec::new();
-        for (start, found) in haystack.match_indices(&needle) {
-            let end = start + found.len();
-            let start = positions
-                .binary_search_by_key(&start, |&(folded, _)| folded)
-                .ok()
-                .map(|index| positions[index].1);
-            let end = positions
-                .binary_search_by_key(&end, |&(folded, _)| folded)
-                .ok()
-                .map(|index| positions[index].1);
-            let (Some(start), Some(end)) = (start, end) else {
-                continue;
-            };
-            if start == selected.start.0 && end == selected.end.0 {
-                continue;
-            }
-            if options.whole_word
-                && (text[..start].chars().next_back().is_some_and(word)
-                    || text[end..].chars().next().is_some_and(word))
-            {
-                continue;
-            }
-            matches.push(start..end);
-        }
-        matches.sort_by_key(|range| (range.start < selected.end.0, range.start));
+        let query = bytes.slice(selected.start.0..selected.end.0)
+            .map_err(|error| EditError::Storage(error.to_string()))?.to_vec();
         let mut changed = false;
-        for range in matches {
-            self.add_selection(
-                Selection {
-                    anchor: ByteOffset(range.start),
-                    head: ByteOffset(range.end),
-                }
-                .into(),
-            )?;
-            changed = true;
-            if !each {
-                break;
+        for scope in [selected.end.0..bytes.len(), 0..selected.start.0] {
+            let mut start = scope.start;
+            while let Some(range) = bytes.find_literal_bytes(
+                &query, start, scope.end, options.match_case, options.whole_word, false,
+            ).map_err(|error| EditError::Storage(error.to_string()))? {
+                self.add_selection(Selection {
+                    anchor: ByteOffset(range.start), head: ByteOffset(range.end),
+                }.into())?;
+                changed = true;
+                if !each { return Ok(true); }
+                start = range.end;
             }
         }
         Ok(changed)

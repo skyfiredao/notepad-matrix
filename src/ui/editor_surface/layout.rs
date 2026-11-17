@@ -49,6 +49,11 @@ impl VisualRows {
                 .any(|(header, end)| row.logical_line > *header && row.logical_line <= *end)
         });
     }
+    pub fn hide_lines(&mut self, hidden: &[(usize, usize)]) {
+        self.0.retain(|row| !hidden.iter().any(|&(start, end)| {
+            row.logical_line >= start && row.logical_line <= end
+        }));
+    }
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -143,4 +148,50 @@ pub fn wrap_ranges(
         rows.push(0..0);
     }
     rows
+}
+
+pub(super) fn split_breaks(
+    bytes: &crate::byte_buffer::ByteBuffer,
+    range: Range<usize>,
+    width: f32,
+    indent: f32,
+    x_for_byte: impl Fn(usize) -> f32,
+    style_boundary: impl Fn(usize, usize) -> bool,
+) -> Result<Vec<usize>, String> {
+    let mut breaks = Vec::new();
+    if width > x_for_byte(range.end) { return Ok(breaks); }
+    let mut last_start = range.start;
+    let mut offset = width;
+    let mut position = range.start;
+    while position < range.end {
+        while position < range.end && x_for_byte(position + 1) < offset { position += 1; }
+        if position == range.end { break; }
+        let mut good = if position > range.start {
+            bytes.move_position_outside_char(position, false, false).map_err(|error| error.to_string())?
+        } else { position };
+        let mut candidate = good;
+        while candidate > last_start {
+            if style_boundary(candidate - 1, candidate)
+                || bytes.byte(candidate - 1).is_some_and(|byte| byte <= b' ')
+                    && !bytes.byte(candidate).is_some_and(|byte| byte <= b' ') {
+                break;
+            }
+            candidate = bytes.next_position(candidate, false).map_err(|error| error.to_string())?;
+        }
+        if candidate > last_start {
+            good = candidate;
+        } else {
+            let after = bytes.next_position(good, true).map_err(|error| error.to_string())?;
+            if let Some(base) = bytes.discard_last_combined_character(last_start..after).map_err(|error| error.to_string())?
+                && base != last_start {
+                good = base;
+            }
+            if good == last_start { good = bytes.next_position(good, true).map_err(|error| error.to_string())?; }
+        }
+        breaks.push(good);
+        last_start = good;
+        offset = x_for_byte(last_start) + width - indent;
+        position = last_start + 1;
+    }
+    Ok(breaks)
 }

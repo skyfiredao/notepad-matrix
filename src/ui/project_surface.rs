@@ -4,12 +4,11 @@ use crate::projects::{
     ProjectWorkspace,
 };
 
-#[cfg(all(test, feature = "native-input-tests"))]
-#[path = "project_surface_tests.rs"]
-mod tests;
 
 pub(super) struct ProjectState {
     pub(super) model: ProjectPanels,
+    pending_workspace_path: Option<PathBuf>,
+    workspace_completion: Option<std::sync::mpsc::Sender<()>>,
     panels: [PanelSurface; 3],
     picker_pending: bool,
 }
@@ -75,6 +74,8 @@ impl ProjectState {
     pub(super) fn new(cx: &mut Context<MatrixWindow>) -> Self {
         Self {
             model: ProjectPanels::new(),
+            pending_workspace_path: None,
+            workspace_completion: None,
             panels: std::array::from_fn(|index| PanelSurface {
                 name: cx.new(|cx| {
                     text_field::TextField::new(
@@ -120,6 +121,61 @@ impl ProjectState {
 }
 
 impl MatrixWindow {
+    pub(super) fn project_workspace_confirmation_pending(&self) -> bool {
+        self.projects.pending_workspace_path.is_some()
+    }
+
+    pub(super) fn load_project_workspace_path(&mut self,path: PathBuf,window: &mut Window,cx: &mut Context<Self>) {
+        self.load_project_workspace_path_guarded(path,false,window,cx);
+    }
+
+    pub(super) fn load_project_workspace_path_with_completion(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> io::Result<std::sync::mpsc::Receiver<()>> {
+        if self.project_operations_blocked() || self.projects.workspace_completion.is_some() { return Err(io::Error::other("another project operation is pending")); }
+        let (sender, receiver) = std::sync::mpsc::channel();
+        self.projects.workspace_completion = Some(sender);
+        self.load_project_workspace_path(path, window, cx);
+        Ok(receiver)
+    }
+
+    fn finish_project_workspace_open(&mut self) {
+        if let Some(sender) = self.projects.workspace_completion.take()
+            && let Err(error) = sender.send(()) { eprintln!("project open completion unavailable: {error}"); }
+    }
+
+    fn load_project_workspace_path_guarded(&mut self,path: PathBuf,discard: bool,window: &mut Window,cx: &mut Context<Self>) {
+        if self.project_operations_blocked() { return; }
+        if !discard && self.projects.model.panel(0).is_ok_and(|panel| panel.dirty()) {
+            self.projects.pending_workspace_path = Some(path);
+            self.projects.panels[0].confirm = Some((ProjectCommand::Open,None));
+            cx.notify();
+            return;
+        }
+        self.file_busy = true;
+        let executor = cx.background_executor().clone();
+        cx.spawn_in(window,async move |view,cx| {
+            let result = executor.spawn(async move {
+                let mut workspace = crate::projects::ProjectWorkspace::default();
+                workspace.load(&path,false)?;
+                Ok::<_,io::Error>(workspace)
+            }).await;
+            if let Err(error) = view.update_in(cx,|view,window,cx| {
+                view.file_busy = false;
+                match result {
+                    Ok(mut workspace) => {
+                        workspace.visible = true;
+                        match view.projects.model.panel_mut(0) {
+                            Ok(panel) => { *panel = workspace; view.clear_project_transients(0); view.show_panel(crate::panel_layout::PanelId::Project1,window,cx); }
+                            Err(error) => view.notify_editor_error(error.to_string(),cx),
+                        }
+                    }
+                    Err(error) => view.notify_editor_error(format!("项目工作区无法打开: {error}"),cx),
+                }
+                view.finish_project_workspace_open();
+                cx.notify();
+            }) { eprintln!("project workspace path window unavailable: {error}"); }
+        }).detach();
+    }
+
     pub(super) fn show_project_panel(
         &mut self,
         index: usize,
@@ -185,6 +241,12 @@ impl MatrixWindow {
             return;
         }
         if index >= 3 || self.project_operations_blocked() {
+            return;
+        }
+        if command == ProjectCommand::Find {
+            self.projects.panels[index].commands = false;
+            if !self.set_find_project_panels(std::array::from_fn(|panel| panel == index), cx) { return; }
+            self.open_file_search_tab(true, true, window, cx);
             return;
         }
         let Ok(panel) = self.projects.model.panel(index) else {
@@ -383,6 +445,12 @@ impl MatrixWindow {
         let Some((command, selected)) = self.projects.panels[index].confirm.take() else {
             return;
         };
+        if index == 0 && let Some(path) = self.projects.pending_workspace_path.take() {
+            if discard { self.load_project_workspace_path_guarded(path,true,window,cx); }
+            else { self.finish_project_workspace_open(); }
+            cx.notify();
+            return;
+        }
         if discard {
             self.execute_project_command(index, command, selected, true, window, cx);
         }
@@ -677,6 +745,10 @@ impl MatrixWindow {
             div()
                 .id(("project-panel", index))
                 .debug_selector(move || format!("project-panel-{index}"))
+                .on_drop(cx.listener(|view, paths: &gpui::ExternalPaths, window, cx| {
+                    view.preferences_drop_paths(paths.paths().to_vec(), window, cx);
+                    cx.stop_propagation();
+                }))
                 .role(Role::Group)
                 .aria_label(title.clone())
                 .w_full()

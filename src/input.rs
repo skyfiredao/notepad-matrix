@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
-use ropey::{LineType, Rope, RopeBuilder};
+use ropey::{LineType, Rope};
 
 use crate::editor::{
     ByteOffset, Document, EditError, SaveSnapshot, Selection, SelectionRange, SelectionSet,
@@ -28,27 +28,6 @@ impl LineEnding {
     }
 }
 
-fn selection_insert(selection: &mut Selection, at: usize, length: usize) {
-    let anchor_start = selection.anchor < selection.head;
-    let head_start = selection.head < selection.anchor;
-    for (position, move_equal) in [
-        (&mut selection.anchor, anchor_start),
-        (&mut selection.head, head_start),
-    ] {
-        if position.0 > at || (position.0 == at && move_equal) {
-            position.0 += length;
-        }
-    }
-}
-
-fn eol_delete(selection: &mut Selection, at: usize) {
-    for position in [&mut selection.anchor, &mut selection.head] {
-        if position.0 > at {
-            position.0 = (position.0 - 1).max(at);
-        }
-    }
-}
-
 /// Identity of displayed text; selection-only changes retain this identity.
 #[derive(Clone, Debug)]
 pub struct DisplayRevision(Arc<()>, Arc<()>, bool);
@@ -67,6 +46,7 @@ struct Composition {
     marked_range: Range<ByteOffset>,
     text: String,
     display: Rope,
+    bytes: crate::byte_buffer::ByteBuffer,
     selection: Selection,
     inline: Option<ime::InlineComposition>,
 }
@@ -77,6 +57,37 @@ pub struct EditorSession {
     display_revision: DisplayRevision,
     line_ending: Arc<Mutex<LineEnding>>,
     overwrite: bool,
+    tabs: TabPreferences,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TabPreferences {
+    pub size: usize,
+    pub spaces: bool,
+    pub backspace_unindent: bool,
+}
+
+impl Default for TabPreferences {
+    fn default() -> Self { Self { size: 4, spaces: false, backspace_unindent: false } }
+}
+
+static CUSTOM_ASCII_WORD_CHARACTERS: [std::sync::atomic::AtomicU64; 2] = [const { std::sync::atomic::AtomicU64::new(0) }; 2];
+
+pub fn configure_word_characters(characters: &str) {
+    let mut ascii = [0u64; 2];
+    for byte in characters.bytes().take_while(|byte| *byte != 0).filter(u8::is_ascii) {
+        let value = usize::from(byte);
+        ascii[value / 64] |= 1u64 << (value % 64);
+    }
+    for (target, value) in CUSTOM_ASCII_WORD_CHARACTERS.iter().zip(ascii) { target.store(value, std::sync::atomic::Ordering::Release); }
+}
+
+pub fn custom_word_character(character: char) -> bool {
+    if character.is_ascii() {
+        let value = u32::from(character) as usize;
+        return CUSTOM_ASCII_WORD_CHARACTERS[value / 64].load(std::sync::atomic::Ordering::Acquire) & (1u64 << (value % 64)) != 0;
+    }
+    false
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,14 +97,24 @@ pub struct SelectionClipboard {
     pub line_copy: bool,
 }
 
+pub struct ReplaceAllOutcome {
+    pub result: Result<usize, crate::search::ReplaceError>,
+    pub last_target: Option<Range<i128>>,
+}
+
 impl EditorSession {
     pub fn new(text: &str) -> Self {
+        Self::with_document(Document::new(text))
+    }
+
+    fn with_document(document: Document) -> Self {
         Self {
-            document: Document::new(text),
+            document,
             composition: None,
             display_revision: DisplayRevision(Arc::new(()), Arc::new(()), false),
             line_ending: Arc::new(Mutex::new(LineEnding::CrLf)),
             overwrite: false,
+            tabs: TabPreferences::default(),
         }
     }
 
@@ -104,22 +125,25 @@ impl EditorSession {
             display_revision: DisplayRevision(Arc::new(()), Arc::new(()), false),
             line_ending: self.line_ending.clone(),
             overwrite: self.overwrite,
+            tabs: self.tabs,
         }
     }
 
     pub fn from_file_text(text: &str) -> Self {
-        let mut editor = Self::new(text);
-        let snapshot = editor.document.text_snapshot();
-        if snapshot.len_lines(LineType::LF_CR) > 1 {
-            let next_line = snapshot.line_to_byte_idx(1, LineType::LF_CR);
-            if let Some(last) = next_line.checked_sub(1) {
-                editor.set_line_ending(match snapshot.byte(last) {
-                    b'\n' if last > 0 && snapshot.byte(last - 1) == b'\r' => LineEnding::CrLf,
-                    b'\n' => LineEnding::Lf,
-                    b'\r' => LineEnding::Cr,
-                    _ => LineEnding::CrLf,
-                });
-            }
+        Self::from_file_bytes(crate::byte_buffer::ByteBuffer::from_bytes(text.as_bytes()))
+    }
+
+    pub(crate) fn from_file_bytes(bytes: crate::byte_buffer::ByteBuffer) -> Self {
+        let mut editor = Self::with_document(Document::from_bytes(bytes));
+        let snapshot = editor.document.byte_snapshot();
+        let first_eol = snapshot.chunks().flat_map(|chunk| chunk.iter().copied()).enumerate()
+            .find(|(_, byte)| matches!(byte, b'\r' | b'\n'));
+        if let Some((position, byte)) = first_eol {
+            editor.set_line_ending(match byte {
+                b'\r' if snapshot.byte(position + 1) == Some(b'\n') => LineEnding::CrLf,
+                b'\r' => LineEnding::Cr,
+                _ => LineEnding::Lf,
+            });
         }
         editor
     }
@@ -131,7 +155,7 @@ impl EditorSession {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn set_line_ending(&mut self, value: LineEnding) {
+    pub fn set_line_ending(&mut self, value: LineEnding) {
         *self
             .line_ending
             .lock()
@@ -142,6 +166,42 @@ impl EditorSession {
         self.overwrite
     }
 
+    pub fn tab_preferences(&self) -> TabPreferences { self.tabs }
+
+    pub fn set_tab_preferences(&mut self, preferences: TabPreferences) {
+        self.tabs = TabPreferences { size: preferences.size.max(1), ..preferences };
+    }
+
+    pub fn insert_tab(&mut self) -> Result<(), EditError> {
+        if !self.tabs.spaces { return self.type_characters("\t"); }
+        self.commit_composition()?;
+        let original = self.selections();
+        let bytes = self.document.byte_snapshot();
+        let mut edits = Vec::new();
+        for range in original.ranges() {
+            let selected = range.selection.range();
+            let column = bytes.column(selected.start.0, self.tabs.size).map_err(|error| EditError::Storage(error.to_string()))?;
+            let count = self.tabs.size - column % self.tabs.size;
+            edits.push(TextTransform { range: selected, text: " ".repeat(count) });
+        }
+        edits.sort_by_key(|edit| edit.range.start);
+        let ranges = original.ranges().iter().map(|range| {
+            let selected = range.selection.range();
+            let mut position = selected.start.0;
+            for edit in &edits {
+                if edit.range.start < selected.start {
+                    position = position.saturating_sub(edit.range.end.0 - edit.range.start.0) + edit.text.len();
+                } else if edit.range.start == selected.start {
+                    position += edit.text.len();
+                    break;
+                }
+            }
+            Selection { anchor: ByteOffset(position), head: ByteOffset(position) }.into()
+        }).collect();
+        let selections = SelectionSet::from_parts(ranges, original.primary_index(), original.is_rectangular())?;
+        self.apply_multi(&edits, crate::editor::EditSelectionPolicy::Explicit(selections))
+    }
+
     pub fn set_overwrite(&mut self, value: bool) {
         self.overwrite = value;
     }
@@ -150,7 +210,7 @@ impl EditorSession {
         self.overwrite = !self.overwrite;
     }
 
-    pub fn clipboard_text(&self) -> crate::clipboard::ClipboardText {
+    pub fn clipboard_text(&self) -> Result<crate::clipboard::ClipboardText, EditError> {
         let text = self.display_snapshot();
         if !self.has_composition()
             || self
@@ -164,37 +224,56 @@ impl EditorSession {
                     ranges.sort_by_key(|range| range.selection.range().start);
                 }
                 let mut copied = String::new();
+                let bytes = self.display_byte_snapshot();
+                let projection = crate::byte_projection::ByteProjection::from_bytes(&bytes);
                 for range in &ranges {
-                    let range = range.selection.range();
-                    copied.push_str(&text.slice(range.start.0..range.end.0).to_string());
+                    let range = if self.has_composition() { projection.source_selection(range.selection)?.range() }
+                        else { range.selection.range() };
+                    let selected = bytes.slice(range.start.0..range.end.0)
+                        .map_err(|error| EditError::Storage(error.to_string()))?;
+                    copied.push_str(&String::from_utf8_lossy(&selected.to_vec()));
                     if ranges.len() > 1 {
                         copied.push_str(self.line_ending().as_str());
                     }
                 }
-                return crate::clipboard::ClipboardText {
+                return Ok(crate::clipboard::ClipboardText {
                     text: copied,
                     line_copy: false,
-                };
+                });
             }
         }
         let selection = self.selection();
+        if !self.has_composition() {
+            let bytes = self.document.byte_snapshot();
+            let row = bytes.line_index(selection.head.0).map_err(|error| EditError::Storage(error.to_string()))?;
+            let start = bytes.line_start(row).map_err(|error| EditError::Storage(error.to_string()))?;
+            let end = if row + 1 < bytes.line_count() {
+                bytes.line_start(row + 1).map_err(|error| EditError::Storage(error.to_string()))?
+            } else { bytes.len() };
+            let line = bytes.slice(start..end).map_err(|error| EditError::Storage(error.to_string()))?.to_vec();
+            let line = String::from_utf8_lossy(&line);
+            return Ok(crate::clipboard::ClipboardText {
+                text: format!("{}{}", line.trim_end_matches(['\r', '\n']), self.line_ending().as_str()),
+                line_copy: true,
+            });
+        }
         if !selection.range().is_empty() {
             let range = selection.range();
-            return crate::clipboard::ClipboardText {
+            return Ok(crate::clipboard::ClipboardText {
                 text: text.slice(range.start.0..range.end.0).to_string(),
                 line_copy: false,
-            };
+            });
         }
         let row = text.byte_to_line_idx(selection.head.0, LineType::LF_CR);
         let line = text.line(row, LineType::LF_CR).to_string();
-        crate::clipboard::ClipboardText {
+        Ok(crate::clipboard::ClipboardText {
             text: format!(
                 "{}{}",
                 line.trim_end_matches(['\r', '\n']),
                 self.line_ending().as_str()
             ),
             line_copy: true,
-        }
+        })
     }
 
     pub fn cut_selection(&mut self) -> Result<crate::clipboard::ClipboardText, EditError> {
@@ -202,7 +281,7 @@ impl EditorSession {
             return Err(EditError::ReadOnly);
         }
         self.commit_composition()?;
-        let payload = self.clipboard_text();
+        let payload = self.clipboard_text()?;
         if self
             .selections()
             .ranges()
@@ -217,13 +296,13 @@ impl EditorSession {
         Ok(payload)
     }
 
-    pub fn clipboard_payload(&self) -> SelectionClipboard {
-        let payload = self.clipboard_text();
-        SelectionClipboard {
+    pub fn clipboard_payload(&self) -> Result<SelectionClipboard, EditError> {
+        let payload = self.clipboard_text()?;
+        Ok(SelectionClipboard {
             text: payload.text,
             rectangular: self.selections().ranges().len() > 1 && !payload.line_copy,
             line_copy: payload.line_copy,
-        }
+        })
     }
 
     pub fn paste_payload(
@@ -241,6 +320,12 @@ impl EditorSession {
             return Err(EditError::ReadOnly);
         }
         self.commit_composition()?;
+        let selections = self.document.selections();
+        if !selections.is_rectangular() && selections.ranges().len() > 1 {
+            self.document.paste_to_multi_selection(&payload.text, self.line_ending().as_str())?;
+            self.invalidate_display();
+            return Ok(());
+        }
         self.document
             .paste_rectangle(&payload.text, tab_width, self.line_ending().as_str())?;
         self.invalidate_display();
@@ -258,16 +343,15 @@ impl EditorSession {
         if range.is_empty() && text.is_empty() {
             return Ok(());
         }
-        let mut candidate = self.document.text_snapshot();
+        let mut candidate = self.document.byte_snapshot();
         let mut line_edits = crate::editor::LineEdits::default();
-        line_edits.remove(&mut candidate, range.start.0..range.end.0)?;
-        line_edits.insert(&mut candidate, range.start.0, text)?;
-        self.document.replace_rope(
+        line_edits.change_bytes(&mut candidate, range.start.0..range.end.0, text.as_bytes())?;
+        self.document.commit_prepared_bytes(
             candidate,
-            Selection {
+            SelectionSet::single(Selection {
                 anchor: range.start,
                 head: range.start,
-            },
+            }),
             line_edits,
         )?;
         self.invalidate_display();
@@ -301,73 +385,154 @@ impl EditorSession {
         backwards: bool,
         in_selection: bool,
     ) -> Result<usize, crate::search::ReplaceError> {
+        self.replace_all_literal_scoped_with_target(query, replacement, options, backwards, in_selection).result
+    }
+
+    pub fn replace_all_literal_scoped_with_target(
+        &mut self,
+        query: &str,
+        replacement: &str,
+        options: crate::search::LiteralOptions,
+        backwards: bool,
+        in_selection: bool,
+    ) -> ReplaceAllOutcome {
+        let mut last_target = None;
+        let result = self.replace_all_literal_scoped_pipeline(query, replacement, options, backwards, in_selection, &mut last_target);
+        ReplaceAllOutcome { result, last_target }
+    }
+
+    fn replace_all_literal_scoped_pipeline(
+        &mut self,
+        query: &str,
+        replacement: &str,
+        options: crate::search::LiteralOptions,
+        backwards: bool,
+        in_selection: bool,
+        last_target: &mut Option<Range<i128>>,
+    ) -> Result<usize, crate::search::ReplaceError> {
         if self.has_composition() {
             return Err(EditError::UnsupportedComposition.into());
         }
         if self.document.is_read_only() {
             return Err(EditError::ReadOnly.into());
         }
-        let mut selection = self.document.selection();
-        let text = self.committed_text();
-        let scope = crate::search::literal_scope(
-            &text,
-            self.selection_limits(),
+        if !matches!(options.mode, crate::search::SearchMode::Regex { .. }) {
+            return self.replace_all_plain(query, replacement, options, backwards, in_selection, last_target);
+        }
+        if query.split('\0').next().unwrap_or_default().is_empty() { return Ok(0); }
+        let mut selections = self.document.selections();
+        let mut candidate = self.document.byte_snapshot();
+        let scope = crate::search::literal_scope_bytes(
+            &candidate,
+            self.source_selection_limits()?,
             options.wrap,
             backwards,
             in_selection,
         )?;
+        if scope.is_empty() { return Ok(0); }
         let selected_start = scope.start;
-        let selected_length = scope.len();
-        let original_length = self.document.len_bytes();
-        let matches = crate::search::literal_ranges_in(&text, query, scope, options)?;
-        let replacement = options.mode.decode(replacement);
-        let replacement = replacement.as_ref();
-        if matches.is_empty() {
-            return Ok(0);
-        }
-        let mut candidate = self.document.text_snapshot();
+        let mut start = scope.start;
+        let mut end = scope.end;
+        let mut regex_state = self.document.regex_state();
+        regex_state.direction(scope.start as i128, scope.end as i128);
+        *last_target = Some(scope.start as i128..scope.end as i128);
+        let matcher = match crate::search::regex_matcher(query, options) {
+            Ok(matcher) => matcher,
+            Err(error) => {
+                self.document.set_regex_state(regex_state);
+                return Err(error.into());
+            }
+        };
         let mut line_edits = crate::editor::LineEdits::default();
-        let mut original_end = 0;
-        let mut current_end = 0;
-        for range in &matches {
-            let start = current_end + (range.start.0 - original_end);
+        let mut count = 0;
+        let mut search_error = None;
+        while start <= end {
+            let found = match crate::search::regex_replacement_in_bytes_with_target(&matcher,
+                &candidate, replacement, start..end, &mut regex_state, last_target) {
+                Ok(found) => found,
+                Err(error) => { search_error = Some(error); break; }
+            };
+            let Some((range, replacement)) = found else { break; };
+            let reached_end = range.end.0 == end;
             let length = range.end.0 - range.start.0;
-            let end = start + length;
-            line_edits.remove(&mut candidate, start..end)?;
-            line_edits.insert(&mut candidate, start, replacement)?;
-            for position in [&mut selection.anchor, &mut selection.head] {
-                if position.0 > start {
-                    position.0 = if position.0 >= end {
-                        position.0 - length
-                    } else {
-                        start
-                    };
-                }
-            }
-            let head_start = selection.head < selection.anchor;
-            let anchor_start = selection.anchor < selection.head;
-            for (position, move_equal) in [
-                (&mut selection.head, head_start),
-                (&mut selection.anchor, anchor_start),
-            ] {
-                if position.0 > start || (position.0 == start && move_equal) {
-                    position.0 += replacement.len();
-                }
-            }
-            original_end = range.end.0;
-            current_end = start + replacement.len();
+            line_edits.change_bytes(&mut candidate, range.start.0..range.end.0, replacement.as_bytes())?;
+            *last_target = Some(range.start.0 as i128..(range.start.0 + replacement.len()) as i128);
+            regex_state.edit(range.start.0, length, replacement.len());
+            selections.map_edit(range.start.0, length, 0);
+            selections.map_edit(range.start.0, 0, replacement.len());
+            start = range.start.0 + replacement.len();
+            end = end - length + replacement.len();
+            count += 1;
+            if reached_end { break; }
+        }
+        if count == 0 {
+            self.document.set_regex_state(regex_state);
+            return search_error.map_or(Ok(0), |error| Err(error.into()));
         }
         if in_selection {
-            let end = selected_start + (selected_length + candidate.len() - original_length);
-            selection = Selection {
+            selections = SelectionSet::single(Selection {
                 anchor: ByteOffset(selected_start),
                 head: ByteOffset(end),
-            };
+            });
         }
+        line_edits.suppress_current_modification_notifications();
         self.document
-            .replace_rope(candidate, selection, line_edits)?;
+            .commit_prepared_bytes(candidate, selections, line_edits)?;
+        self.document.set_regex_state(regex_state);
         self.invalidate_display();
-        Ok(matches.len())
+        search_error.map_or(Ok(count), |error| Err(error.into()))
+    }
+
+    fn replace_all_plain(
+        &mut self,
+        query: &str,
+        replacement: &str,
+        options: crate::search::LiteralOptions,
+        backwards: bool,
+        in_selection: bool,
+        last_target: &mut Option<Range<i128>>,
+    ) -> Result<usize, crate::search::ReplaceError> {
+        let query = options.mode.decode(query);
+        if query.is_empty() { return Ok(0); }
+        let replacement = options.mode.decode(replacement);
+        let mut bytes = self.document.byte_snapshot();
+        let mut selections = self.document.selections();
+        let selected = self.source_selection_limits()?.range();
+        let scope = if in_selection { selected.start.0..selected.end.0 }
+            else if options.wrap { 0..bytes.len() }
+            else if backwards { 0..selected.end.0 }
+            else { selected.start.0..bytes.len() };
+        let original_start = scope.start;
+        let mut start = scope.start;
+        let mut end = scope.end;
+        let mut edits = crate::editor::LineEdits::default();
+        let mut count = 0;
+        while let Some(range) = {
+            if scope.start != scope.end { *last_target = Some(start as i128..end as i128); }
+            bytes.find_literal_bytes(
+            query.as_bytes(), start, end, options.match_case, options.whole_word, false,
+        ).map_err(|error| EditError::Storage(error.to_string()))?
+        } {
+            *last_target = Some(range.start as i128..range.end as i128);
+            let reached_end = range.end == end;
+            end = end - range.len() + replacement.len();
+            start = range.start + replacement.len();
+            selections.map_edit(range.start, range.len(), 0);
+            selections.map_edit(range.start, 0, replacement.len());
+            let target_start = range.start;
+            edits.change_bytes(&mut bytes, range, replacement.as_bytes())?;
+            *last_target = Some(target_start as i128..(target_start + replacement.len()) as i128);
+            count += 1;
+            if reached_end { break; }
+        }
+        if count == 0 { return Ok(0); }
+        edits.suppress_current_modification_notifications();
+        if in_selection {
+            selections = SelectionSet::single(Selection { anchor: ByteOffset(original_start), head: ByteOffset(end) });
+        }
+        self.document.commit_prepared_bytes(bytes, selections, edits)?;
+        self.invalidate_display();
+        Ok(count)
     }
 
     pub fn paste_clipboard(
@@ -390,24 +555,39 @@ impl EditorSession {
                 converted.push_str(self.line_ending().as_str());
             }
             let before = self.document.selection();
-            let mut candidate = self.document.text_snapshot();
-            let row = candidate.byte_to_line_idx(before.head.0, LineType::LF_CR);
-            let start = candidate.line_to_byte_idx(row, LineType::LF_CR);
+            let mut candidate = self.document.byte_snapshot();
+            let row = candidate.line_index(before.head.0).map_err(|error| EditError::Storage(error.to_string()))?;
+            let start = candidate.line_start(row).map_err(|error| EditError::Storage(error.to_string()))?;
             let mut line_edits = crate::editor::LineEdits::default();
-            line_edits.insert(&mut candidate, start, &converted)?;
+            line_edits.change_bytes(&mut candidate, start..start, converted.as_bytes())?;
             let caret = ByteOffset(before.head.0 + converted.len());
-            self.document.replace_rope(
+            self.document.commit_prepared_bytes(
                 candidate,
-                Selection {
+                SelectionSet::single(Selection {
                     anchor: caret,
                     head: caret,
-                },
+                }),
                 line_edits,
             )?;
             self.invalidate_display();
             return Ok(());
         }
         self.insert_text(&converted)
+    }
+
+    pub fn replace_selection_bytes(&mut self, bytes: &[u8]) -> Result<(), EditError> {
+        self.commit_composition()?;
+        self.document.replace_selection_bytes(bytes)?;
+        self.invalidate_display();
+        Ok(())
+    }
+
+    pub fn add_bytes(&mut self, bytes: &[u8]) -> Result<(), EditError> {
+        self.commit_composition()?;
+        let caret = self.document.selection().head;
+        self.document.replace_bytes(caret..caret, bytes)?;
+        self.invalidate_display();
+        Ok(())
     }
 
     fn delete_selection_then_add(&mut self, text: &str) -> Result<(), EditError> {
@@ -459,12 +639,12 @@ impl EditorSession {
         if self.has_composition() {
             return Err(EditError::UnsupportedComposition);
         }
-        let text = self.document.text_snapshot();
+        let text = self.document.byte_snapshot();
         let selection = self.document.selection();
-        let row = text.byte_to_line_idx(selection.head.0, LineType::LF_CR);
-        let start = text.line_to_byte_idx(row, LineType::LF_CR);
-        let end = if row + 1 < text.len_lines(LineType::LF_CR) {
-            text.line_to_byte_idx(row + 1, LineType::LF_CR)
+        let row = text.line_index(selection.head.0).map_err(|error| EditError::Storage(error.to_string()))?;
+        let start = text.line_start(row).map_err(|error| EditError::Storage(error.to_string()))?;
+        let end = if row + 1 < text.line_count() {
+            text.line_start(row + 1).map_err(|error| EditError::Storage(error.to_string()))?
         } else {
             text.len()
         };
@@ -489,14 +669,12 @@ impl EditorSession {
         };
         let mut candidate = text;
         let mut line_edits = crate::editor::LineEdits::default();
-        line_edits.remove(&mut candidate, start..end)?;
-        self.document.replace_rope(candidate, mapped, line_edits)?;
+        line_edits.change_bytes(&mut candidate, start..end, &[])?;
+        self.document.commit_prepared_bytes(candidate, SelectionSet::single(mapped), line_edits)?;
         self.invalidate_display();
         Ok(())
     }
 
-    /// SCI_LINEDUPLICATE uses the main caret line regardless of selection;
-    /// SCI_SELECTIONDUPLICATE uses the selection unless it is empty.
     pub fn duplicate(&mut self, for_line: bool) -> Result<(), EditError> {
         if self.has_composition() {
             return Err(EditError::UnsupportedComposition);
@@ -504,36 +682,8 @@ impl EditorSession {
         if self.document.is_read_only() {
             return Err(EditError::ReadOnly);
         }
-        let mut selection = self.document.selection();
-        let for_line = for_line || selection.range().is_empty();
-        let mut candidate = self.document.text_snapshot();
-        let range = if for_line {
-            let row = candidate.byte_to_line_idx(selection.head.0, LineType::LF_CR);
-            let start = candidate.line_to_byte_idx(row, LineType::LF_CR);
-            let length = candidate
-                .line(row, LineType::LF_CR)
-                .to_string()
-                .trim_end_matches(['\r', '\n'])
-                .len();
-            start..start + length
-        } else {
-            selection.range().start.0..selection.range().end.0
-        };
-        let text = candidate.slice(range.clone()).to_string();
-        let mut line_edits = crate::editor::LineEdits::default();
-        let eol = if for_line {
-            self.line_ending().as_str()
-        } else {
-            ""
-        };
-        line_edits.insert(&mut candidate, range.end, eol)?;
-        selection_insert(&mut selection, range.end, eol.len());
-        line_edits.insert(&mut candidate, range.end + eol.len(), &text)?;
-        selection_insert(&mut selection, range.end + eol.len(), text.len());
-        self.document
-            .replace_rope(candidate, selection, line_edits)?;
-        self.invalidate_display();
-        Ok(())
+        let tab_size = self.tabs.size;
+        crate::text_transforms::session::apply_duplicate(self, for_line, tab_size).map_err(EditError::Storage)
     }
 
     /// Normalize committed CR/LF terminators in one undoable transaction. The
@@ -542,72 +692,31 @@ impl EditorSession {
         if self.document.is_read_only() {
             return Err(EditError::ReadOnly);
         }
-        let text = self.document.text_snapshot();
+        let mut bytes = self.document.byte_snapshot();
+        let mut selections = self.document.selections();
+        let mut edits = crate::editor::LineEdits::default();
         let mut changed = false;
-        if self.document.line_count() > 1 {
-            let mut builder = RopeBuilder::new();
-            let mut chars = text.chars().peekable();
-            let mut selection = self.document.selection();
-            let mut line_edits = crate::editor::LineEdits::default();
-            let mut position = 0;
-            while let Some(ch) = chars.next() {
-                if ch == '\r' || ch == '\n' {
-                    let pair = ch == '\r' && chars.peek() == Some(&'\n');
-                    if pair {
-                        chars.next();
-                    }
-                    // Rebase in the same evolving component-edit order as the
-                    // reference, including insert affinity for nonempty ranges.
-                    match (ch, pair, target) {
-                        ('\r', true, LineEnding::Cr) => {
-                            line_edits.record_text_edit(position + 1, 1, "");
-                            eol_delete(&mut selection, position + 1);
-                            changed = true;
-                        }
-                        ('\r', true, LineEnding::Lf) => {
-                            line_edits.record_text_edit(position, 1, "");
-                            eol_delete(&mut selection, position);
-                            changed = true;
-                        }
-                        ('\r', false, LineEnding::CrLf) => {
-                            line_edits.record_text_edit(position + 1, 0, "\n");
-                            selection_insert(&mut selection, position + 1, 1);
-                            changed = true;
-                        }
-                        ('\r', false, LineEnding::Lf) => {
-                            line_edits.record_text_edit(position, 0, "\n");
-                            line_edits.record_text_edit(position + 1, 1, "");
-                            selection_insert(&mut selection, position, 1);
-                            eol_delete(&mut selection, position + 1);
-                            changed = true;
-                        }
-                        ('\n', _, LineEnding::CrLf) => {
-                            line_edits.record_text_edit(position, 0, "\r");
-                            selection_insert(&mut selection, position, 1);
-                            changed = true;
-                        }
-                        ('\n', _, LineEnding::Cr) => {
-                            line_edits.record_text_edit(position, 0, "\r");
-                            line_edits.record_text_edit(position + 1, 1, "");
-                            selection_insert(&mut selection, position, 1);
-                            eol_delete(&mut selection, position + 1);
-                            changed = true;
-                        }
-                        _ => {}
-                    }
-                    builder.append(target.as_str());
-                    position += target.as_str().len();
-                } else {
-                    let mut encoded = [0; 4];
-                    builder.append(ch.encode_utf8(&mut encoded));
-                    position += ch.len_utf8();
-                }
+        let mut position = 0;
+        while position < bytes.len() {
+            let byte = bytes.byte(position);
+            let pair = byte == Some(b'\r') && bytes.byte(position + 1) == Some(b'\n');
+            let operations: &[(usize, usize, &[u8])] = match (byte, pair, target) {
+                (Some(b'\r'), true, LineEnding::Cr) => &[(position + 1, 1, b"")],
+                (Some(b'\r'), true, LineEnding::Lf) => &[(position, 1, b"")],
+                (Some(b'\r'), false, LineEnding::CrLf) => &[(position + 1, 0, b"\n")],
+                (Some(b'\r'), false, LineEnding::Lf) => &[(position, 0, b"\n"), (position + 1, 1, b"")],
+                (Some(b'\n'), _, LineEnding::CrLf) => &[(position, 0, b"\r")],
+                (Some(b'\n'), _, LineEnding::Cr) => &[(position, 0, b"\r"), (position + 1, 1, b"")],
+                _ => &[],
+            };
+            for &(start, removed, inserted) in operations {
+                edits.change_bytes(&mut bytes, start..start + removed, inserted)?;
+                selections.map_edit(start, removed, inserted.len());
+                changed = true;
             }
-            if changed {
-                self.document
-                    .replace_rope(builder.finish(), selection, line_edits)?;
-            }
+            position += if matches!(byte, Some(b'\r' | b'\n')) { target.as_str().len() } else { 1 };
         }
+        if changed { self.document.commit_prepared_bytes(bytes, selections, edits)?; }
         self.set_line_ending(target);
         let preview = self.composition.take().is_some();
         if changed || preview {
@@ -620,16 +729,52 @@ impl EditorSession {
         &self.document
     }
 
+    pub(crate) fn document_mut(&mut self) -> &mut Document {
+        &mut self.document
+    }
+
     pub fn word_selection_at(&self, position: ByteOffset) -> Result<Selection, EditError> {
         crate::editor::word_selection_in_snapshot(&self.display_snapshot(), position)
     }
 
-    pub(crate) fn word_range_at(&self, position: ByteOffset) -> Result<Selection, EditError> {
-        crate::editor::word_range_in_snapshot(&self.display_snapshot(), position)
+    pub fn delimiter_selection_at(&self, position: ByteOffset, left: u8, right: u8, multiline: bool) -> Result<Option<Selection>, EditError> {
+        let bytes = self.document.byte_snapshot();
+        if position.0 > bytes.len() { return Err(EditError::InvalidRange); }
+        let (start, end) = if multiline { (0, bytes.len()) } else {
+            let line = bytes.line_index(position.0).map_err(|error| EditError::Storage(error.to_string()))?;
+            let start = bytes.line_start(line).map_err(|error| EditError::Storage(error.to_string()))?;
+            let mut end = start;
+            while end < bytes.len() && !matches!(bytes.byte(end), Some(b'\r' | b'\n')) { end += 1; }
+            (start, end)
+        };
+        let selected = if left == right {
+            let escaped = |at: usize| left == b'"' && at > start && bytes.byte(at - 1) == Some(b'\\');
+            let open = (start..=position.0.min(end)).rev().find(|at| bytes.byte(*at) == Some(left) && !escaped(*at));
+            let close = (position.0..end).find(|at| bytes.byte(*at) == Some(right) && !escaped(*at));
+            open.zip(close)
+        } else {
+            let mut stack = Vec::new();
+            let mut selected = None;
+            for at in start..end {
+                if bytes.byte(at) == Some(left) { stack.push(at); }
+                else if bytes.byte(at) == Some(right) {
+                    if let Some(open) = stack.pop() {
+                        if open <= position.0 && position.0 <= at && selected.is_none_or(|(previous, _)| open > previous) {
+                            selected = Some((open, at));
+                        }
+                    }
+                }
+            }
+            selected
+        };
+        Ok(selected.map(|(open, close)| Selection { anchor: ByteOffset(open + 1), head: ByteOffset(close) }))
     }
 
-    pub(crate) fn selection_limits(&self) -> Selection {
-        let selections = self.display_selections();
+    pub(crate) fn source_selection_limits(&self) -> Result<Selection, EditError> {
+        Ok(Self::limits_for_selections(&self.source_selections()?))
+    }
+
+    fn limits_for_selections(selections: &SelectionSet) -> Selection {
         let mut range = selections.primary().selection.range();
         if selections.is_rectangular() {
             for selected in selections.ranges() {
@@ -645,18 +790,25 @@ impl EditorSession {
     }
 
     pub(crate) fn expand_word_selection(&mut self) -> Result<bool, EditError> {
-        let word = self.word_range_at(self.selection().head)?;
+        if self.has_composition() { return Err(EditError::UnsupportedComposition); }
+        let bytes = self.document.byte_snapshot();
+        let position = self.document.selection().head.0;
+        let word = Selection {
+            anchor: ByteOffset(bytes.extend_word(position, false).map_err(|error| EditError::Storage(error.to_string()))?),
+            head: ByteOffset(bytes.extend_word(position, true).map_err(|error| EditError::Storage(error.to_string()))?),
+        };
         if word.range().is_empty() {
             return Ok(false);
         }
-        let selections = self.display_selections();
+        let selections = self.document.selections();
         let mut ranges = selections.ranges().to_vec();
         ranges[selections.primary_index()] = word.into();
-        self.set_selections(SelectionSet::from_parts(
+        self.document.set_selections(SelectionSet::from_parts(
             ranges,
             selections.primary_index(),
             selections.is_rectangular(),
         )?)?;
+        self.invalidate_display();
         Ok(true)
     }
 
@@ -689,7 +841,22 @@ impl EditorSession {
     }
 
     pub fn display_selections(&self) -> SelectionSet {
-        self.selections()
+        if self.has_composition() { self.selections() } else { self.document.display_selections() }
+    }
+
+    pub fn display_selection(&self) -> Selection {
+        self.display_selections().primary().selection
+    }
+
+    pub(crate) fn source_selections(&self) -> Result<SelectionSet, EditError> {
+        let Some(composition) = self.active_composition() else { return Ok(self.document.selections()); };
+        if let Some(inline) = &composition.inline { return Ok(inline.source_selections.clone()); }
+        let projection = crate::byte_projection::ByteProjection::from_bytes(&composition.bytes);
+        Ok(SelectionSet::single(projection.source_selection(composition.selection)?))
+    }
+
+    pub(crate) fn display_byte_snapshot(&self) -> crate::byte_buffer::ByteBuffer {
+        self.active_composition().map_or_else(|| self.document.byte_snapshot(), |composition| composition.bytes.clone())
     }
 
     pub fn adjacent_position(
@@ -697,7 +864,9 @@ impl EditorSession {
         position: ByteOffset,
         forward: bool,
     ) -> Result<ByteOffset, EditError> {
-        crate::editor::adjacent_in_snapshot(&self.display_snapshot(), position, forward)
+        if self.has_composition() {
+            crate::editor::adjacent_in_snapshot(&self.display_snapshot(), position, forward)
+        } else { self.document.adjacent_position(position, forward) }
     }
 
     pub fn word_boundary(
@@ -793,6 +962,17 @@ impl EditorSession {
         Ok(())
     }
 
+    pub fn set_display_selections(&mut self, selections: SelectionSet) -> Result<(), EditError> {
+        if self.has_composition() {
+            return self.select_display(selections.primary().selection);
+        }
+        let mut ranges = selections.ranges().to_vec();
+        for range in &mut ranges {
+            range.selection = self.source_display_selection(range.selection)?;
+        }
+        self.set_selections(SelectionSet::from_parts(ranges, selections.primary_index(), selections.is_rectangular())?)
+    }
+
     pub fn add_selection(&mut self, range: SelectionRange) -> Result<(), EditError> {
         self.document.add_selection(range)?;
         self.cancel_composition();
@@ -803,6 +983,12 @@ impl EditorSession {
         self.document.tentative_selection(range)?;
         self.cancel_composition();
         Ok(())
+    }
+
+    pub(crate) fn tentative_display_selection(&mut self, mut range: SelectionRange) -> Result<(), EditError> {
+        if self.has_composition() { return self.select_display(range.selection); }
+        range.selection = self.source_display_selection(range.selection)?;
+        self.tentative_selection(range)
     }
 
     pub fn commit_tentative_selection(&mut self) {
@@ -875,6 +1061,15 @@ impl EditorSession {
         Ok(())
     }
 
+    pub(crate) fn apply_completion(&mut self, edit: crate::intelligence::CompletionEdit) -> Result<(), EditError> {
+        self.commit_composition()?;
+        let mut bytes = self.document.byte_snapshot();
+        let mut edits = crate::editor::LineEdits::default();
+        edits.change_bytes(&mut bytes, edit.replace_range, &edit.bytes)?;
+        let caret = ByteOffset(edit.caret_byte);
+        self.commit_prepared_bytes(bytes, SelectionSet::single(Selection { anchor: caret, head: caret }), edits)
+    }
+
     pub fn apply_multi(
         &mut self,
         transforms: &[TextTransform],
@@ -884,6 +1079,23 @@ impl EditorSession {
         self.document.apply_multi(transforms, policy)?;
         self.invalidate_display();
         Ok(())
+    }
+
+    pub(crate) fn commit_prepared_bytes(
+        &mut self,
+        bytes: crate::byte_buffer::ByteBuffer,
+        selections: SelectionSet,
+        edits: crate::editor::LineEdits,
+    ) -> Result<(), EditError> {
+        self.commit_composition()?;
+        self.document.commit_prepared_bytes(bytes, selections, edits)?;
+        self.invalidate_display();
+        Ok(())
+    }
+
+    pub(crate) fn set_multi_selection_ranges(&mut self, ranges: &[crate::editor::SelectionRange]) {
+        self.document.set_multi_selection_ranges(ranges);
+        self.invalidate_display();
     }
 
     pub fn select_rectangle(
@@ -920,6 +1132,25 @@ impl EditorSession {
     }
 
     pub fn backspace(&mut self) -> Result<(), EditError> {
+        if self.tabs.backspace_unindent && !self.has_composition() && !self.is_read_only() {
+            let original = self.selections();
+            let bytes = self.document.byte_snapshot();
+            let mut ranges = original.ranges().to_vec();
+            let mut changed = false;
+            for range in &mut ranges {
+                if !range.is_empty() { continue; }
+                let position = range.selection.head.0;
+                let line = bytes.line_index(position).map_err(|error| EditError::Storage(error.to_string()))?;
+                let start = bytes.line_start(line).map_err(|error| EditError::Storage(error.to_string()))?;
+                if position == start || !(start..position).all(|at| matches!(bytes.byte(at), Some(b' ' | b'\t'))) { continue; }
+                let column = bytes.column(position, self.tabs.size).map_err(|error| EditError::Storage(error.to_string()))?;
+                let target = column.saturating_sub(1) / self.tabs.size * self.tabs.size;
+                let anchor = bytes.find_column(line, target, self.tabs.size).map_err(|error| EditError::Storage(error.to_string()))?;
+                range.selection.anchor = ByteOffset(anchor);
+                changed |= anchor != position;
+            }
+            if changed { self.set_selections(SelectionSet::from_parts(ranges, original.primary_index(), original.is_rectangular())?)?; }
+        }
         self.delete_character(true)
     }
 
@@ -982,7 +1213,7 @@ impl EditorSession {
                 return Err(EditError::InvalidRange);
             }
         } else {
-            self.document.toggle_bookmark();
+            self.document.toggle_bookmark()?;
         }
         Ok(())
     }
@@ -1121,8 +1352,7 @@ impl EditorSession {
         Ok(())
     }
 
-    pub fn select_display(&mut self, selection: Selection) -> Result<(), EditError> {
-        self.discard_stale_composition();
+    fn source_display_selection(&self, selection: Selection) -> Result<Selection, EditError> {
         let display = self.display_snapshot();
         let range = selection.range();
         if range.end.0 > display.len() {
@@ -1131,16 +1361,25 @@ impl EditorSession {
         if !display.is_char_boundary(range.start.0) || !display.is_char_boundary(range.end.0) {
             return Err(EditError::InvalidBoundary);
         }
+        if let Some(composition) = self.active_composition() {
+            crate::byte_projection::ByteProjection::from_bytes(&composition.bytes).source_selection(selection)
+        } else { self.document.projection().source_selection(selection) }
+    }
+
+    pub fn select_display(&mut self, selection: Selection) -> Result<(), EditError> {
+        self.discard_stale_composition();
+        let source = self.source_display_selection(selection)?;
         if let Some(composition) = &mut self.composition {
             composition.selection = selection;
             if let Some(inline) = &mut composition.inline {
                 inline
                     .selections
                     .set_range(inline.selections.primary_index(), selection.into());
+                inline.source_selections.set_range(inline.source_selections.primary_index(), source.into());
             }
             Ok(())
         } else {
-            self.document.select(selection)
+        self.document.select(source)
         }
     }
 
@@ -1152,7 +1391,7 @@ impl EditorSession {
         });
         self.select_display(Selection {
             anchor: if extend {
-                self.selection().anchor
+                self.display_selection().anchor
             } else {
                 head
             },
@@ -1163,7 +1402,7 @@ impl EditorSession {
     /// Default Home/End behavior without wrapping: smart indentation Home and EOL-excluding End.
     pub fn move_to_line_edge(&mut self, end: bool, extend: bool) -> Result<(), EditError> {
         let text = self.display_snapshot();
-        let selected = self.selection();
+        let selected = self.display_selection();
         let row = text.byte_to_line_idx(selected.head.0, LineType::LF_CR);
         let start = text.line_to_byte_idx(row, LineType::LF_CR);
         let mut line_end = if row + 1 < text.len_lines(LineType::LF_CR) {
@@ -1208,7 +1447,7 @@ impl EditorSession {
         &self,
         range: Range<ByteOffset>,
         text: &str,
-    ) -> Result<(Range<ByteOffset>, String), EditError> {
+    ) -> Result<(Range<ByteOffset>, Vec<u8>), EditError> {
         let display = self.display_snapshot();
         if range.start > range.end || range.end.0 > display.len() {
             return Err(EditError::InvalidRange);
@@ -1217,27 +1456,26 @@ impl EditorSession {
             return Err(EditError::InvalidBoundary);
         }
         if let Some(composition) = self.active_composition() {
+            let projection = crate::byte_projection::ByteProjection::from_bytes(&composition.bytes);
+            let selected = projection.source_selection(Selection { anchor: range.start, head: range.end })?.range();
             let marked_start = composition.base_range.start.0;
-            let marked_end = marked_start + composition.text.len();
-            let start = range.start.0.min(marked_start);
-            let end = range.end.0.max(marked_end);
-            let mut replacement = display
-                .try_slice(start..range.start.0)
-                .map_err(|error| EditError::Storage(error.to_string()))?
-                .to_string();
-            replacement.push_str(text);
-            replacement.push_str(
-                &display
-                    .try_slice(range.end.0..end)
-                    .map_err(|error| EditError::Storage(error.to_string()))?
-                    .to_string(),
-            );
+            let inserted_length = composition.bytes.len() + composition.base_range.end.0
+                - composition.base_range.start.0 - self.document.len_bytes();
+            let marked_end = marked_start + inserted_length;
+            let start = selected.start.0.min(marked_start);
+            let end = selected.end.0.max(marked_end);
+            let mut replacement = composition.bytes.slice(start..selected.start.0)
+                .map_err(|error| EditError::Storage(error.to_string()))?.to_vec();
+            replacement.extend_from_slice(text.as_bytes());
+            replacement.extend_from_slice(&composition.bytes.slice(selected.end.0..end)
+                .map_err(|error| EditError::Storage(error.to_string()))?.to_vec());
             Ok((
                 ByteOffset(start)..ByteOffset(composition.base_range.end.0 + end - marked_end),
                 replacement,
             ))
         } else {
-            Ok((range, text.to_string()))
+            let source = self.document.projection().source_selection(Selection { anchor: range.start, head: range.end })?;
+            Ok((source.range(), text.as_bytes().to_vec()))
         }
     }
 
@@ -1256,43 +1494,41 @@ impl EditorSession {
         if self.document.is_read_only() {
             return Err(EditError::ReadOnly);
         }
+        let original_selection = range.is_none() && !self.has_composition();
         let range = range
             .or_else(|| self.marked_range())
-            .unwrap_or_else(|| self.selection().range());
+            .unwrap_or_else(|| self.display_selection().range());
         let inserted = Document::new(text);
         let relative = selected_utf16.unwrap_or(inserted.len_utf16()..inserted.len_utf16());
         if relative.start > relative.end {
             return Err(EditError::InvalidRange);
         }
-        let anchor = ByteOffset(
-            range.start.0
-                + inserted
-                    .from_utf16(crate::editor::Utf16Offset(relative.start))?
-                    .0,
-        );
-        let head = ByteOffset(
-            range.start.0
-                + inserted
-                    .from_utf16(crate::editor::Utf16Offset(relative.end))?
-                    .0,
-        );
-        let marked_range = range.start..ByteOffset(range.start.0 + text.len());
-        let (base_range, replacement) = self.display_edit(range, text)?;
-        let mut display = self.document.text_snapshot();
-        display
-            .try_remove(base_range.start.0..base_range.end.0)
+        let candidate_projection = crate::byte_projection::ByteProjection::from_bytes(&self.display_byte_snapshot());
+        let requested = if original_selection { self.document.selection().range() }
+            else { candidate_projection.source_selection(Selection { anchor: range.start, head: range.end })?.range() };
+        let (base_range, replacement) = if original_selection { (requested.clone(), text.as_bytes().to_vec()) }
+            else { self.display_edit(range, text)? };
+        let mut bytes = self.document.byte_snapshot();
+        bytes.replace(base_range.start.0..base_range.end.0, &replacement)
             .map_err(|error| EditError::Storage(error.to_string()))?;
-        display
-            .try_insert(base_range.start.0, &replacement)
-            .map_err(|error| EditError::Storage(error.to_string()))?;
+        let projection = crate::byte_projection::ByteProjection::from_bytes(&bytes);
+        let selection = projection.display_selection(Selection {
+            anchor: ByteOffset(requested.start.0 + inserted.from_utf16(crate::editor::Utf16Offset(relative.start))?.0),
+            head: ByteOffset(requested.start.0 + inserted.from_utf16(crate::editor::Utf16Offset(relative.end))?.0),
+        })?;
+        let marked_range = projection.display_selection(Selection {
+            anchor: requested.start, head: ByteOffset(requested.start.0 + text.len()),
+        })?.range();
+        let display = projection.text();
         self.composition = Some(Composition {
             base_revision: self.document.text_revision(),
             composition_revision: self.document.composition_revision(),
             base_range,
             marked_range,
-            text: replacement,
+            text: text.to_string(),
             display,
-            selection: Selection { anchor, head },
+            bytes,
+            selection,
             inline: None,
         });
         self.invalidate_display();
@@ -1315,10 +1551,14 @@ impl EditorSession {
         }
         if let Some(composition) = &self.composition {
             let previous_revision = self.document.text_revision();
+            let inserted_length = composition.bytes.len() + composition.base_range.end.0
+                - composition.base_range.start.0 - self.document.len_bytes();
+            let replacement = composition.bytes.slice(composition.base_range.start.0..composition.base_range.start.0 + inserted_length)
+                .map_err(|error| EditError::Storage(error.to_string()))?.to_vec();
+            self.document.replace_bytes(composition.base_range.clone(), &replacement)?;
+            let selection = self.document.projection().source_selection(composition.selection)?;
             self.document
-                .replace(composition.base_range.clone(), &composition.text)?;
-            self.document
-                .select_after_edit(composition.selection, &previous_revision)?;
+                .select_after_edit(selection, &previous_revision)?;
             self.composition = None;
             self.invalidate_display();
         }
@@ -1335,11 +1575,13 @@ impl EditorSession {
         if self.document.is_read_only() {
             return Err(EditError::ReadOnly);
         }
+        if text == "\t" { return self.insert_tab(); }
         self.type_characters(text)
     }
 
     fn type_characters(&mut self, text: &str) -> Result<(), EditError> {
         for ch in text.chars() {
+            if ch == '\t' && self.tabs.spaces { self.insert_tab()?; continue; }
             let selections = self.document.selections();
             let grouped = selections.ranges().len() > 1
                 || selections.ranges().iter().any(|range| !range.is_empty())
@@ -1393,7 +1635,10 @@ impl EditorSession {
         let caret = ByteOffset(range.start.0 + text.len());
         let (mapped, replacement) = self.display_edit(range, text)?;
         let previous_revision = self.document.text_revision();
-        self.document.replace(mapped, &replacement)?;
+        self.document.replace_bytes(mapped, &replacement)?;
+        let caret = self.document.projection().source_position(
+            crate::byte_projection::DisplayByteOffset(caret.0), crate::byte_projection::Affinity::After,
+        )?;
         self.document.select_after_edit(
             Selection {
                 anchor: caret,

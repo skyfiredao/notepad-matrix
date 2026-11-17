@@ -67,3 +67,37 @@ const PUNCTUATION_BOUNDARIES: &[u32] = &[
 pub(super) fn is_punctuation(ch: char) -> bool {
     PUNCTUATION_BOUNDARIES.partition_point(|&boundary| boundary <= ch as u32) % 2 == 1
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CharacterClass {
+    Space,
+    NewLine,
+    Word,
+    Punctuation,
+}
+
+pub(crate) fn classify(character: char) -> CharacterClass {
+    if crate::input::custom_word_character(character) { return CharacterClass::Word; }
+    if matches!(character, '\r' | '\n' | '\u{2028}' | '\u{2029}') {
+        CharacterClass::NewLine
+    } else if character.is_ascii() {
+        match character {
+            '\0'..='\u{1f}' | ' ' | '\u{7f}' => CharacterClass::Space,
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => CharacterClass::Word,
+            _ => CharacterClass::Punctuation,
+        }
+    } else if is_punctuation(character) {
+        CharacterClass::Punctuation
+    } else if crate::unicode_mark::contains(character) {
+        CharacterClass::Word
+    } else if matches!(character,
+        '\u{80}'..='\u{9f}' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}'
+        | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{e000}'..='\u{f8ff}'
+        | '\u{f0000}'..='\u{ffffd}' | '\u{100000}'..='\u{10fffd}') {
+        CharacterClass::Space
+    } else if crate::unicode_grapheme::is_base(character) {
+        CharacterClass::Word
+    } else {
+        CharacterClass::Space
+    }
+}

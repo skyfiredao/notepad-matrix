@@ -4,6 +4,7 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use crate::byte_buffer::ByteBuffer;
+use crate::byte_projection::ByteProjection;
 use ropey::{LineType, Rope};
 
 #[path = "selection.rs"]
@@ -19,7 +20,6 @@ pub use column::{ColumnBase, ColumnFill, ColumnNumbers};
 mod word_navigation;
 pub use word_navigation::WordBoundary;
 pub(crate) use word_navigation::whole_word_at;
-pub(crate) use word_navigation::word_range_in_snapshot;
 pub(crate) use word_navigation::{boundary_in_snapshot, move_in_snapshot};
 pub(crate) use word_navigation::{
     extend_selection_in_snapshot as extend_word_selection_in_snapshot,
@@ -98,7 +98,15 @@ impl std::error::Error for EditError {}
 struct Snapshot {
     content: Rope,
     bytes: ByteBuffer,
+    projection: ByteProjection,
     version: u64,
+}
+
+impl Snapshot {
+    fn bytes(bytes: ByteBuffer, version: u64) -> Self {
+        let projection = ByteProjection::from_bytes(&bytes);
+        Self { content: projection.text(), bytes, projection, version }
+    }
 }
 
 struct RememberedSelection {
@@ -141,11 +149,12 @@ impl MarkerOp {
 /// Line-vector changes are replayed on text Undo/Redo; marker toggles themselves
 /// are not part of text snapshots, matching the source per-line marker storage.
 #[derive(Clone, Default)]
-pub(crate) struct LineEdits(
-    Vec<(MarkerOp, MarkerOp)>,
-    Vec<TextEdit>,
-    Vec<Option<Arc<[u8]>>>,
-);
+pub(crate) struct LineEdits {
+    line_operations: Vec<(MarkerOp, MarkerOp)>,
+    changes: Vec<TextEdit>,
+    modified_lines: Vec<(usize, usize)>,
+    silent_changes: usize,
+}
 
 #[derive(Clone, Copy)]
 struct TextEdit {
@@ -200,73 +209,56 @@ impl TextEdit {
 }
 
 impl LineEdits {
-    fn apply_bytes(&mut self, original: &ByteBuffer) -> Result<ByteBuffer, EditError> {
-        if self.1.len() != self.2.len() {
-            return Err(EditError::Storage(
-                "byte edit payload count does not match the transaction".into(),
-            ));
-        }
-        let mut bytes = original.clone();
-        for (edit, inserted) in self.1.iter().zip(std::mem::take(&mut self.2)) {
-            let inserted = inserted.as_deref().unwrap_or(&[]);
-            if edit.inserted != inserted.len() {
-                return Err(EditError::Storage(
-                    "byte edit payload length does not match the transaction".into(),
-                ));
-            }
-            bytes
-                .replace(edit.start..edit.start + edit.removed, inserted)
-                .map_err(|error| EditError::Storage(error.to_string()))?;
-        }
-        Ok(bytes)
-    }
-
     fn record_changes(&self, core: &mut DocumentCore) {
-        for edit in &self.1 {
+        for (index, (edit, &(modified_line, _))) in self.changes.iter().zip(&self.modified_lines).enumerate() {
             if edit.removed != 0 {
-                core.apply_change_event(crate::change_history::Event::Delete(
+                core.apply_change_event_with_notifications(crate::change_history::Event::Delete(
                     edit.start,
                     edit.removed,
-                ));
+                ), index >= self.silent_changes, Some(modified_line));
             }
             if edit.inserted != 0 {
-                core.apply_change_event(crate::change_history::Event::Insert(
+                core.apply_change_event_with_notifications(crate::change_history::Event::Insert(
                     edit.start,
                     edit.inserted,
-                ));
+                ), index >= self.silent_changes, Some(modified_line));
             }
         }
+    }
+
+    pub(crate) fn suppress_current_modification_notifications(&mut self) {
+        self.silent_changes = self.changes.len();
     }
 
     fn replay_changes(&self, core: &mut DocumentCore, undo: bool) {
         if undo {
-            for edit in self.1.iter().rev() {
+            for (edit, &(_, undo_modified_line)) in self.changes.iter().zip(&self.modified_lines).rev() {
                 if edit.inserted != 0 {
-                    core.apply_change_event(crate::change_history::Event::UndoInsert(
+                    core.apply_change_event_with_notifications(crate::change_history::Event::UndoInsert(
                         edit.start,
                         edit.inserted,
-                    ));
+                    ), true, Some(undo_modified_line));
                 }
                 if edit.removed != 0 {
-                    core.apply_change_event(crate::change_history::Event::UndoDelete(
+                    core.apply_change_event_with_notifications(crate::change_history::Event::UndoDelete(
                         edit.start,
                         edit.removed,
-                    ));
+                    ), true, Some(undo_modified_line));
                 }
             }
         } else {
-            for edit in &self.1 {
+            for (edit, &(modified_line, _)) in self.changes.iter().zip(&self.modified_lines) {
                 if edit.removed != 0 {
-                    core.apply_change_event(crate::change_history::Event::RedoDelete(
+                    core.apply_change_event_with_notifications(crate::change_history::Event::RedoDelete(
                         edit.start,
                         edit.removed,
-                    ));
+                    ), true, Some(modified_line));
                 }
                 if edit.inserted != 0 {
-                    core.apply_change_event(crate::change_history::Event::RedoInsert(
+                    core.apply_change_event_with_notifications(crate::change_history::Event::RedoInsert(
                         edit.start,
                         edit.inserted,
-                    ));
+                    ), true, Some(modified_line));
                 }
             }
         }
@@ -275,7 +267,7 @@ impl LineEdits {
     fn history_caret(&self, undo: bool) -> Option<ByteOffset> {
         if !undo {
             return self
-                .1
+                .changes
                 .iter()
                 .rev()
                 .find(|edit| edit.removed != 0 || edit.inserted != 0)
@@ -283,7 +275,7 @@ impl LineEdits {
         }
         let mut caret = None;
         let mut coalesced_remove = 0..=0;
-        for edit in self.1.iter().rev() {
+        for edit in self.changes.iter().rev() {
             if edit.inserted != 0 {
                 caret = Some(ByteOffset(edit.start));
                 coalesced_remove = 0..=0;
@@ -306,98 +298,57 @@ impl LineEdits {
         caret
     }
 
-    pub(crate) fn record_text_edit(&mut self, start: usize, removed: usize, inserted: &str) {
-        self.1.push(TextEdit {
+    fn record_byte_edit(&mut self, before: &ByteBuffer, after: &ByteBuffer, start: usize, removed: usize, inserted: &[u8]) -> Result<(), EditError> {
+        let modified_line = after.line_index(start).map_err(|error| EditError::Storage(error.to_string()))?;
+        let undo_modified_line = before.line_index(start).map_err(|error| EditError::Storage(error.to_string()))?;
+        self.changes.push(TextEdit {
             start,
             removed,
             inserted: inserted.len(),
         });
-        self.2
-            .push((!inserted.is_empty()).then(|| Arc::from(inserted.as_bytes())));
-    }
-    pub(crate) fn remove(&mut self, text: &mut Rope, range: Range<usize>) -> Result<(), EditError> {
-        if range.is_empty() {
-            return Ok(());
-        }
-        let before = text.clone();
-        text.try_remove(range.clone())
-            .map_err(|error| EditError::Storage(error.to_string()))?;
-        self.1.push(TextEdit {
-            start: range.start,
-            removed: range.len(),
-            inserted: 0,
-        });
-        self.2.push(None);
-        self.record(&before, text, range.start, false);
+        self.modified_lines.push((modified_line, undo_modified_line));
         Ok(())
     }
 
-    pub(crate) fn insert(
-        &mut self,
-        text: &mut Rope,
-        start: usize,
-        inserted: &str,
-    ) -> Result<(), EditError> {
-        if inserted.is_empty() {
-            return Ok(());
+    pub(crate) fn change_bytes(&mut self, bytes: &mut ByteBuffer, range: Range<usize>, inserted: &[u8]) -> Result<(), EditError> {
+        if !range.is_empty() {
+            let before = bytes.clone();
+            bytes.replace(range.clone(), &[]).map_err(|error| EditError::Storage(error.to_string()))?;
+            self.record_byte_edit(&before, bytes, range.start, range.len(), &[])?;
+            self.record_bytes(&before, bytes, range.start, false)?;
         }
-        let before = text.clone();
-        text.try_insert(start, inserted)
-            .map_err(|error| EditError::Storage(error.to_string()))?;
-        self.1.push(TextEdit {
-            start,
-            removed: 0,
-            inserted: inserted.len(),
-        });
-        self.2.push(Some(Arc::from(inserted.as_bytes())));
-        self.record(&before, text, start, true);
+        if !inserted.is_empty() {
+            let before = bytes.clone();
+            bytes.replace(range.start..range.start, inserted).map_err(|error| EditError::Storage(error.to_string()))?;
+            self.record_byte_edit(&before, bytes, range.start, 0, inserted)?;
+            self.record_bytes(&before, bytes, range.start, true)?;
+        }
         Ok(())
     }
 
-    fn record(&mut self, before: &Rope, after: &Rope, start: usize, inserting: bool) {
-        let old_count = before.len_lines(LineType::LF_CR);
-        let new_count = after.len_lines(LineType::LF_CR);
-        if old_count == new_count {
-            return;
-        }
-        let old_row = before.byte_to_line_idx(start, LineType::LF_CR);
-        let new_row = after.byte_to_line_idx(start.min(after.len()), LineType::LF_CR);
-        let old_start = before.line_to_byte_idx(old_row, LineType::LF_CR) == start;
-        let new_start = after.line_to_byte_idx(new_row, LineType::LF_CR) == start;
+    fn record_bytes(&mut self, before: &ByteBuffer, after: &ByteBuffer, start: usize, inserting: bool) -> Result<(), EditError> {
+        let old_count = before.line_count();
+        let new_count = after.line_count();
+        if old_count == new_count { return Ok(()); }
+        let old_row = before.line_index(start).map_err(|error| EditError::Storage(error.to_string()))?;
+        let new_row = after.line_index(start.min(after.len())).map_err(|error| EditError::Storage(error.to_string()))?;
+        let old_start = before.line_start(old_row).map_err(|error| EditError::Storage(error.to_string()))? == start;
+        let new_start = after.line_start(new_row).map_err(|error| EditError::Storage(error.to_string()))? == start;
         let count = old_count.abs_diff(new_count);
-        let pair = if inserting {
-            (
-                MarkerOp::Insert {
-                    line: old_row + usize::from(!old_start),
-                    count,
-                },
-                MarkerOp::Delete {
-                    line: new_row + 1,
-                    count,
-                },
-            )
+        self.line_operations.push(if inserting {
+            (MarkerOp::Insert { line: old_row + usize::from(!old_start), count }, MarkerOp::Delete { line: new_row + 1, count })
         } else {
-            (
-                MarkerOp::Delete {
-                    line: old_row + 1,
-                    count,
-                },
-                MarkerOp::Insert {
-                    line: new_row + usize::from(!new_start),
-                    count,
-                },
-            )
-        };
-        self.0.push(pair);
+            (MarkerOp::Delete { line: old_row + 1, count }, MarkerOp::Insert { line: new_row + usize::from(!new_start), count })
+        });
+        Ok(())
     }
-
     fn apply(&self, markers: &mut BTreeSet<usize>, undo: bool) {
         if undo {
-            for (_, inverse) in self.0.iter().rev() {
+            for (_, inverse) in self.line_operations.iter().rev() {
                 inverse.apply(markers);
             }
         } else {
-            for (forward, _) in &self.0 {
+            for (forward, _) in &self.line_operations {
                 forward.apply(markers);
             }
         }
@@ -410,8 +361,15 @@ pub struct SaveSnapshot {
     version: u64,
     content: Rope,
     bytes: ByteBuffer,
-    change_history: Arc<crate::change_history::History>,
+    change_history: Option<Arc<crate::change_history::History>>,
+    change_history_epoch: Arc<()>,
     history_events: Arc<Mutex<Vec<crate::change_history::Event>>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ChangeHistorySpan {
+    Insertion { range: Range<ByteOffset>, edition: u8 },
+    Deletion { position: ByteOffset, editions: u8 },
 }
 
 impl SaveSnapshot {
@@ -432,10 +390,34 @@ impl SaveSnapshot {
     }
 }
 
+fn merge_indicator_ranges(ranges: &mut Vec<Range<ByteOffset>>) {
+    let mut written = 0;
+    for read in 0..ranges.len() {
+        let range = ranges[read].clone();
+        if range.start >= range.end { continue; }
+        if written > 0 && range.start <= ranges[written - 1].end {
+            ranges[written - 1].end = ranges[written - 1].end.max(range.end);
+        } else {
+            ranges[written] = range;
+            written += 1;
+        }
+    }
+    ranges.truncate(written);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ActualFirstLineEdit {
+    pub modified_line: usize,
+}
+
 struct DocumentCore {
-    change_history: crate::change_history::History,
+    regex_state: crate::search::RegexState,
+    change_history: Option<crate::change_history::History>,
+    change_history_epoch: Arc<()>,
     pending_save_history: Vec<Weak<Mutex<Vec<crate::change_history::Event>>>>,
+    actual_first_line_edits: Vec<Weak<Mutex<Option<ActualFirstLineEdit>>>>,
     bookmarks: BTreeSet<usize>,
+    indicators: [Vec<Range<ByteOffset>>; 7],
     identity: Arc<()>,
     current: Snapshot,
     working_selection: Selection,
@@ -450,6 +432,7 @@ struct DocumentCore {
     undo_depth: usize,
     undo_group_edited: bool,
     views: Vec<Weak<Mutex<SelectionSet>>>,
+    begin_selection_positions: Vec<Weak<Mutex<isize>>>,
     editing_view: Weak<Mutex<SelectionSet>>,
     revision: Arc<()>,
     composition_revision: Arc<()>,
@@ -469,24 +452,29 @@ impl DocumentCore {
     }
 
     pub fn new(text: &str) -> Self {
+        Self::from_bytes(ByteBuffer::from_bytes(text.as_bytes()))
+    }
+
+    fn from_bytes(bytes: ByteBuffer) -> Self {
         Self {
-            change_history: crate::change_history::History::new(text.len()),
+            regex_state: crate::search::RegexState::default(),
+            change_history: None,
+            change_history_epoch: Arc::new(()),
             pending_save_history: Vec::new(),
+            actual_first_line_edits: Vec::new(),
             views: Vec::new(),
+            begin_selection_positions: Vec::new(),
             editing_view: Weak::new(),
             revision: Arc::new(()),
             composition_revision: Arc::new(()),
             direct_edit: false,
             may_coalesce: false,
             bookmarks: BTreeSet::new(),
+            indicators: Default::default(),
             undo_depth: 0,
             undo_group_edited: false,
             identity: Arc::new(()),
-            current: Snapshot {
-                content: Rope::from_str(text),
-                bytes: ByteBuffer::from_bytes(text.as_bytes()),
-                version: 0,
-            },
+            current: Snapshot::bytes(bytes, 0),
             working_selection: Selection::default(),
             working_selection_changed: false,
             saved_version: 0,
@@ -507,12 +495,10 @@ impl DocumentCore {
         self.bookmarks.iter().copied()
     }
 
-    pub fn toggle_bookmark(&mut self) {
-        let line = self
-            .current
-            .content
-            .byte_to_line_idx(self.working_selection.head.0, LineType::LF_CR);
+    pub fn toggle_bookmark(&mut self) -> Result<(), EditError> {
+        let line = self.current.bytes.line_index(self.working_selection.head.0).map_err(|_| EditError::InvalidRange)?;
         self.toggle_bookmark_at(line);
+        Ok(())
     }
 
     pub fn toggle_bookmark_at(&mut self, line: usize) -> bool {
@@ -530,10 +516,7 @@ impl DocumentCore {
     }
 
     pub fn goto_bookmark(&mut self, forward: bool) -> Result<bool, EditError> {
-        let line = self
-            .current
-            .content
-            .byte_to_line_idx(self.working_selection.head.0, LineType::LF_CR);
+        let line = self.current.bytes.line_index(self.working_selection.head.0).map_err(|_| EditError::InvalidRange)?;
         let target = if forward {
             self.bookmarks
                 .range((std::ops::Bound::Excluded(line), std::ops::Bound::Unbounded))
@@ -573,7 +556,8 @@ impl DocumentCore {
             version: self.current.version,
             content: self.current.content.clone(),
             bytes: self.current.bytes.clone(),
-            change_history: Arc::new(self.change_history.clone()),
+            change_history: self.change_history.clone().map(Arc::new),
+            change_history_epoch: self.change_history_epoch.clone(),
             history_events,
         }
     }
@@ -582,16 +566,18 @@ impl DocumentCore {
         self.validate_save_snapshot(snapshot)?;
         let was_modified = self.is_modified();
         self.saved_version = snapshot.version;
-        if snapshot.version == self.current.version {
-            self.apply_change_event(crate::change_history::Event::Saved);
-        } else {
-            let mut history = snapshot.change_history.as_ref().clone();
-            history.saved();
-            for event in lock(&snapshot.history_events).iter().copied() {
-                event.replay_after_captured_save(&mut history);
+        if Arc::ptr_eq(&self.change_history_epoch, &snapshot.change_history_epoch) {
+            if snapshot.version == self.current.version {
+                self.apply_change_event(crate::change_history::Event::Saved);
+            } else if let Some(captured_history) = &snapshot.change_history {
+                let mut history = captured_history.as_ref().clone();
+                history.saved();
+                for event in lock(&snapshot.history_events).iter().copied() {
+                    event.replay_after_captured_save(&mut history);
+                }
+                self.change_history = Some(history);
+                self.broadcast_change_event(crate::change_history::Event::Saved);
             }
-            self.change_history = history;
-            self.broadcast_change_event(crate::change_history::Event::Saved);
         }
         self.notify_savepoint_transition(was_modified);
         self.may_coalesce = false;
@@ -618,21 +604,11 @@ impl DocumentCore {
     }
 
     pub fn to_utf16(&self, position: ByteOffset) -> Result<Utf16Offset, EditError> {
-        self.valid_range(position..position)?;
-        Ok(Utf16Offset(
-            self.current.content.byte_to_utf16_idx(position.0),
-        ))
+        self.current.projection.utf16_position(position)
     }
 
     fn byte_from_utf16(&self, position: Utf16Offset) -> Result<ByteOffset, EditError> {
-        if position.0 > self.len_utf16() {
-            return Err(EditError::InvalidRange);
-        }
-        let byte = self.current.content.utf16_to_byte_idx(position.0);
-        if self.current.content.byte_to_utf16_idx(byte) != position.0 {
-            return Err(EditError::InvalidBoundary);
-        }
-        Ok(ByteOffset(byte))
+        self.current.projection.source_from_utf16(position)
     }
 
     pub fn line_count(&self) -> usize {
@@ -663,26 +639,87 @@ impl DocumentCore {
     }
 
     fn change_marker_bits(&self, line: usize) -> u8 {
+        let Some(history) = &self.change_history else { return 0; };
         if line >= self.line_count() {
             return 0;
         }
-        let text = &self.current.content;
-        let start = text.line_to_byte_idx(line, LineType::LF_CR);
+        let bytes = &self.current.bytes;
+        let Ok(start) = bytes.line_start(line) else { return 0; };
         let next = if line + 1 < self.line_count() {
-            text.line_to_byte_idx(line + 1, LineType::LF_CR)
-        } else {
-            text.len()
-        };
+            let Ok(next) = bytes.line_start(line + 1) else { return 0; };
+            next
+        } else { bytes.len() };
         let mut end = next;
-        while end > start && matches!(text.byte(end - 1), b'\r' | b'\n') {
+        while end > start && matches!(bytes.byte(end - 1), Some(b'\r' | b'\n')) {
             end -= 1;
         }
-        self.change_history.line_bits(start, next, end)
+        history.line_bits(start, next, end)
     }
 
     fn apply_change_event(&mut self, event: crate::change_history::Event) {
-        event.apply(&mut self.change_history);
-        self.broadcast_change_event(event);
+        self.apply_change_event_with_notifications(event, true, None);
+    }
+
+    fn apply_change_event_with_notifications(&mut self, event: crate::change_history::Event, notify: bool, modified_line: Option<usize>) {
+        use crate::change_history::Event;
+        let change = match event {
+            Event::Insert(at, length)
+            | Event::UndoDelete(at, length)
+            | Event::RedoInsert(at, length) => Some((at, length, true)),
+            Event::Delete(at, length)
+            | Event::UndoInsert(at, length)
+            | Event::RedoDelete(at, length) => Some((at, length, false)),
+            _ => None,
+        };
+        if let Some((at, length, insert)) = change {
+            if notify {
+                if modified_line == Some(0) {
+                    self.actual_first_line_edits.retain(|pending| {
+                        if let Some(pending) = pending.upgrade() {
+                            *lock(&pending) = Some(ActualFirstLineEdit { modified_line: 0 });
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                }
+                self.begin_selection_positions.retain(|position| position.strong_count() > 0);
+                for position in &self.begin_selection_positions {
+                    if let Some(position) = position.upgrade() {
+                        let mut position = lock(&position);
+                        if *position != -1 && (at as isize) < position.wrapping_sub(1) {
+                            if insert { *position = position.wrapping_add(length as isize); }
+                            else { *position = position.wrapping_sub(length as isize); }
+                        }
+                    }
+                }
+            }
+            for ranges in &mut self.indicators {
+                for range in ranges.iter_mut() {
+                    if insert {
+                        if at <= range.start.0 {
+                            range.start.0 += length;
+                            range.end.0 += length;
+                        } else if at < range.end.0 {
+                            range.end.0 += length;
+                        }
+                    } else {
+                        for position in [&mut range.start, &mut range.end] {
+                            position.0 = if position.0 >= at.saturating_add(length) {
+                                position.0 - length
+                            } else {
+                                position.0.min(at)
+                            };
+                        }
+                    }
+                }
+                merge_indicator_ranges(ranges);
+            }
+        }
+        if let Some(history) = &mut self.change_history {
+            event.apply(history);
+            self.broadcast_change_event(event);
+        }
     }
 
     fn broadcast_change_event(&mut self, event: crate::change_history::Event) {
@@ -743,9 +780,9 @@ impl DocumentCore {
             && self.current.version != self.saved_version
             && self.undo.last().is_some_and(|action| {
                 match (
-                    action.line_edits.1.last(),
+                    action.line_edits.changes.last(),
                     edits
-                        .1
+                        .changes
                         .iter()
                         .find(|edit| edit.removed != 0 || edit.inserted != 0),
                 ) {
@@ -765,8 +802,9 @@ impl DocumentCore {
         if ((self.undo_depth != 0 && self.undo_group_edited) || coalesce)
             && let Some(grouped) = self.undo.last_mut()
         {
-            grouped.line_edits.0.append(&mut edits.0);
-            grouped.line_edits.1.append(&mut edits.1);
+            grouped.line_edits.line_operations.append(&mut edits.line_operations);
+            grouped.line_edits.changes.append(&mut edits.changes);
+            grouped.line_edits.modified_lines.append(&mut edits.modified_lines);
         } else {
             self.undo.push(UndoAction {
                 snapshot: previous,
@@ -850,123 +888,62 @@ impl DocumentCore {
         self.read_only = value;
     }
 
-    fn valid_range(&self, range: Range<ByteOffset>) -> Result<Range<usize>, EditError> {
-        if range.start > range.end || range.end.0 > self.len_bytes() {
+    fn valid_byte_range(&self, range: Range<ByteOffset>) -> Result<Range<usize>, EditError> {
+        if range.start > range.end || range.end.0 > self.current.bytes.len() {
             return Err(EditError::InvalidRange);
-        }
-        if !self.current.content.is_char_boundary(range.start.0)
-            || !self.current.content.is_char_boundary(range.end.0)
-        {
-            return Err(EditError::InvalidBoundary);
         }
         Ok(range.start.0..range.end.0)
     }
 
     pub fn select(&mut self, selection: Selection) -> Result<(), EditError> {
-        self.valid_range(selection.range())?;
+        self.valid_byte_range(selection.range())?;
         self.working_selection = selection;
         self.working_selection_changed = true;
         Ok(())
     }
 
     pub fn text_in(&self, range: Range<ByteOffset>) -> Result<String, EditError> {
-        let range = self.valid_range(range)?;
-        self.current
-            .content
-            .try_slice(range)
-            .map(|text| text.to_string())
-            .map_err(|error| EditError::Storage(error.to_string()))
+        let range = self.valid_byte_range(range)?;
+        let bytes = self.current.bytes.slice(range).map_err(|error| EditError::Storage(error.to_string()))?;
+        Ok(String::from_utf8_lossy(&bytes.to_vec()).into_owned())
     }
 
     pub fn replace_selection(&mut self, text: &str) -> Result<(), EditError> {
         self.replace(self.working_selection.range(), text)
     }
 
-    pub(crate) fn replace_rope(
-        &mut self,
-        content: Rope,
-        selection: Selection,
-        mut line_edits: LineEdits,
-    ) -> Result<(), EditError> {
-        if self.read_only {
-            return Err(EditError::ReadOnly);
-        }
-        let range = selection.range();
-        if range.end.0 > content.len() {
-            return Err(EditError::InvalidRange);
-        }
-        if !content.is_char_boundary(range.start.0) || !content.is_char_boundary(range.end.0) {
-            return Err(EditError::InvalidBoundary);
-        }
-        let next_version = self
-            .next_version
-            .checked_add(1)
-            .ok_or(EditError::VersionExhausted)?;
-        let bytes = line_edits.apply_bytes(&self.current.bytes)?;
-        if bytes.len() != content.len() {
-            return Err(EditError::Storage(
-                "byte transaction length does not match its Unicode cache".into(),
-            ));
-        }
-        let before_selections = self.capture_selections();
-        self.transform_views(&line_edits, false, true);
-        line_edits.apply(&mut self.bookmarks, false);
-        line_edits.record_changes(self);
-        let previous = std::mem::replace(
-            &mut self.current,
-            Snapshot {
-                content,
-                bytes,
-                version: self.next_version,
-            },
-        );
-        self.notify_savepoint_transition(previous.version != self.saved_version);
-        self.normalize_views();
-        self.record_edit_history(previous, line_edits, before_selections);
-        self.working_selection = selection;
-        self.working_selection_changed = true;
-        self.next_version = next_version;
-        self.revision = Arc::new(());
-        Ok(())
+    pub fn replace(&mut self, range: Range<ByteOffset>, text: &str) -> Result<(), EditError> {
+        self.replace_bytes(range, text.as_bytes())
     }
 
-    pub fn replace(&mut self, range: Range<ByteOffset>, text: &str) -> Result<(), EditError> {
-        if self.read_only {
-            return Err(EditError::ReadOnly);
-        }
-        let range = self.valid_range(range)?;
-        if range.is_empty() && text.is_empty() {
-            return Ok(());
-        }
-        let next_version = self
-            .next_version
-            .checked_add(1)
-            .ok_or(EditError::VersionExhausted)?;
-        let mut changed = self.current.content.clone();
-        let mut line_edits = LineEdits::default();
-        line_edits.remove(&mut changed, range.clone())?;
-        line_edits.insert(&mut changed, range.start, text)?;
-        let bytes = line_edits.apply_bytes(&self.current.bytes)?;
-        let caret = ByteOffset(range.start + text.len());
+    fn replace_bytes(&mut self, range: Range<ByteOffset>, inserted: &[u8]) -> Result<(), EditError> {
+        if self.read_only { return Err(EditError::ReadOnly); }
+        let range = self.valid_byte_range(range)?;
+        if range.is_empty() && inserted.is_empty() { return Ok(()); }
+        let mut bytes = self.current.bytes.clone();
+        let mut edits = LineEdits::default();
+        edits.change_bytes(&mut bytes, range.clone(), inserted)?;
+        let caret = ByteOffset(range.start + inserted.len());
+        self.commit_bytes(bytes, Selection { anchor: caret, head: caret }, edits)
+    }
+
+    fn commit_bytes(&mut self, bytes: ByteBuffer, selection: Selection, edits: LineEdits) -> Result<(), EditError> {
+        if self.read_only { return Err(EditError::ReadOnly); }
+        if selection.range().end.0 > bytes.len() { return Err(EditError::InvalidRange); }
+        let next_version = self.next_version.checked_add(1).ok_or(EditError::VersionExhausted)?;
+        let snapshot = Snapshot::bytes(bytes, self.next_version);
         let before_selections = self.capture_selections();
-        self.transform_views(&line_edits, false, true);
-        line_edits.apply(&mut self.bookmarks, false);
-        line_edits.record_changes(self);
-        let previous = std::mem::replace(
-            &mut self.current,
-            Snapshot {
-                content: changed,
-                bytes,
-                version: self.next_version,
-            },
-        );
+        for edit in &edits.changes {
+            self.regex_state.edit(edit.start, edit.removed, edit.inserted);
+        }
+        self.transform_views(&edits, false, true);
+        edits.apply(&mut self.bookmarks, false);
+        edits.record_changes(self);
+        let previous = std::mem::replace(&mut self.current, snapshot);
         self.notify_savepoint_transition(previous.version != self.saved_version);
         self.normalize_views();
-        self.record_edit_history(previous, line_edits, before_selections);
-        self.working_selection = Selection {
-            anchor: caret,
-            head: caret,
-        };
+        self.record_edit_history(previous, edits, before_selections);
+        self.working_selection = selection;
         self.working_selection_changed = true;
         self.next_version = next_version;
         self.revision = Arc::new(());
@@ -979,6 +956,7 @@ impl DocumentCore {
             return false;
         }
         if let Some(mut action) = self.undo.pop() {
+            self.regex_state.invalidate();
             let was_modified = self.is_modified();
             self.transform_views(&action.line_edits, true, false);
             action.line_edits.apply(&mut self.bookmarks, true);
@@ -1003,6 +981,7 @@ impl DocumentCore {
             return false;
         }
         if let Some(mut action) = self.redo.pop() {
+            self.regex_state.invalidate();
             let was_modified = self.is_modified();
             self.transform_views(&action.line_edits, false, false);
             action.line_edits.apply(&mut self.bookmarks, false);
@@ -1024,10 +1003,7 @@ impl DocumentCore {
     fn normalize_views(&self) {
         for view in &self.views {
             if let Some(live) = view.upgrade() {
-                lock(&live).normalize_boundaries(
-                    &self.current.content,
-                    Weak::ptr_eq(view, &self.editing_view),
-                );
+                lock(&live).normalize_byte_bounds(&self.current.bytes);
             }
         }
     }
@@ -1046,11 +1022,11 @@ impl DocumentCore {
                         continue;
                     }
                     if undo {
-                        for edit in edits.1.iter().rev() {
+                        for edit in edits.changes.iter().rev() {
                             edit.apply_range(range, true);
                         }
                     } else {
-                        for edit in &edits.1 {
+                        for edit in &edits.changes {
                             edit.apply_range(range, false);
                         }
                     }
@@ -1098,14 +1074,28 @@ pub(crate) fn adjacent_in_snapshot(
 
 pub struct Document {
     core: Arc<Mutex<DocumentCore>>,
+    actual_first_line_edit: Arc<Mutex<Option<ActualFirstLineEdit>>>,
     selection: Arc<Mutex<SelectionSet>>,
     occurrence_options: OccurrenceOptions,
+    begin_selection: Option<(bool, Arc<Mutex<isize>>)>,
     tentative_selections: Option<SelectionSet>,
 }
 
 impl Document {
+    pub(crate) fn regex_state(&self) -> crate::search::RegexState {
+        lock(&self.core).regex_state.clone()
+    }
+
+    pub(crate) fn set_regex_state(&mut self, state: crate::search::RegexState) {
+        lock(&self.core).regex_state = state;
+    }
+
     pub fn new(text: &str) -> Self {
         Self::from_core(DocumentCore::new(text))
+    }
+
+    pub(crate) fn from_bytes(bytes: ByteBuffer) -> Self {
+        Self::from_core(DocumentCore::from_bytes(bytes))
     }
     pub(crate) fn from_recovery(text: &str) -> Self {
         Self::from_core(DocumentCore::from_recovery(text))
@@ -1113,8 +1103,10 @@ impl Document {
     fn from_core(core: DocumentCore) -> Self {
         let document = Self {
             core: Arc::new(Mutex::new(core)),
+            actual_first_line_edit: Arc::new(Mutex::new(None)),
             selection: Arc::new(Mutex::new(SelectionSet::default())),
             occurrence_options: OccurrenceOptions::default(),
+            begin_selection: None,
             tentative_selections: None,
         };
         lock(&document.core)
@@ -1129,13 +1121,35 @@ impl Document {
         core.views.push(Arc::downgrade(&selection));
         Self {
             core: self.core.clone(),
+            actual_first_line_edit: Arc::new(Mutex::new(None)),
             selection,
             occurrence_options: self.occurrence_options,
+            begin_selection: None,
             tentative_selections: None,
         }
     }
     pub fn shares_document_with(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.core, &other.core)
+    }
+    pub(crate) fn document_identity(&self) -> std::sync::Weak<()> {
+        Arc::downgrade(&lock(&self.core).identity)
+    }
+    pub fn set_actual_first_line_edit_notifications(&self, enabled: bool) {
+        let mut core = lock(&self.core);
+        let owner = Arc::downgrade(&self.actual_first_line_edit);
+        core.actual_first_line_edits.retain(|pending| {
+            pending.strong_count() > 0 && (enabled || !Weak::ptr_eq(pending, &owner))
+        });
+        if enabled {
+            if !core.actual_first_line_edits.iter().any(|pending| Weak::ptr_eq(pending, &owner)) {
+                core.actual_first_line_edits.push(owner);
+            }
+        } else {
+            *lock(&self.actual_first_line_edit) = None;
+        }
+    }
+    pub fn take_actual_first_line_edit(&self) -> Option<ActualFirstLineEdit> {
+        lock(&self.actual_first_line_edit).take()
     }
     pub(crate) fn text_revision(&self) -> Arc<()> {
         lock(&self.core).revision.clone()
@@ -1169,15 +1183,197 @@ impl Document {
     pub fn text(&self) -> String {
         lock(&self.core).text()
     }
+    pub fn set_indicators(
+        &mut self,
+        slot: usize,
+        ranges: Vec<Range<ByteOffset>>,
+        purge: bool,
+    ) -> Result<(), EditError> {
+        let mut core = lock(&self.core);
+        if slot >= core.indicators.len() {
+            return Err(EditError::InvalidRange);
+        }
+        if ranges.iter().any(|range| {
+            range.start > range.end
+                || range.end.0 > core.current.bytes.len()
+        }) {
+            return Err(EditError::InvalidRange);
+        }
+        let values = &mut core.indicators[slot];
+        if purge {
+            values.clear();
+        }
+        values.extend(ranges.into_iter().filter(|range| range.start < range.end));
+        values.sort_by_key(|range| range.start);
+        merge_indicator_ranges(values);
+        Ok(())
+    }
+    pub fn indicator_ranges(&self, slot: usize) -> Vec<Range<ByteOffset>> {
+        lock(&self.core)
+            .indicators
+            .get(slot)
+            .cloned()
+            .unwrap_or_default()
+    }
+    pub fn begin_selection_mode(&self) -> Option<bool> {
+        self.begin_selection.as_ref().filter(|(_, position)| *lock(position) != -1).map(|(column, _)| *column)
+    }
+    pub fn begin_or_end_selection(
+        &mut self,
+        column: bool,
+        tab_width: usize,
+    ) -> Result<(), EditError> {
+        let head = self.selection().head;
+        if let Some((_, anchor)) = self.begin_selection.take().filter(|(_, position)| *lock(position) != -1) {
+            let anchor = *lock(&anchor);
+            let anchor = if anchor < 0 {
+                if column { ByteOffset(0) } else { head }
+            } else {
+                ByteOffset(usize::try_from(anchor).map_err(|_| EditError::InvalidRange)?.min(self.len_bytes()))
+            };
+            if column {
+                let bytes = self.byte_snapshot();
+                let position = |offset: ByteOffset| -> Result<ColumnPosition, EditError> {
+                    Ok(ColumnPosition {
+                        line: bytes.line_index(offset.0).map_err(|_| EditError::InvalidRange)?,
+                        column: bytes.column(offset.0, tab_width).map_err(|_| EditError::InvalidRange)?,
+                    })
+                };
+                self.select_rectangle(position(anchor)?, position(head)?, tab_width)
+            } else {
+                self.select(Selection { anchor, head })
+            }
+        } else {
+            let anchor = Arc::new(Mutex::new(isize::try_from(head.0).map_err(|_| EditError::InvalidRange)?));
+            lock(&self.core).begin_selection_positions.push(Arc::downgrade(&anchor));
+            self.begin_selection = Some((column, anchor));
+            Ok(())
+        }
+    }
+    pub fn clear_indicators_in(
+        &mut self,
+        slot: usize,
+        scope: Range<ByteOffset>,
+    ) -> Result<(), EditError> {
+        let mut core = lock(&self.core);
+        if scope.start > scope.end || scope.end.0 > core.current.bytes.len() {
+            return Err(EditError::InvalidRange);
+        }
+        let values = core
+            .indicators
+            .get_mut(slot)
+            .ok_or(EditError::InvalidRange)?;
+        let mut retained = Vec::new();
+        for range in values.drain(..) {
+            if range.end <= scope.start || range.start >= scope.end {
+                retained.push(range);
+            } else {
+                if range.start < scope.start {
+                    retained.push(range.start..scope.start);
+                }
+                if range.end > scope.end {
+                    retained.push(scope.end..range.end);
+                }
+            }
+        }
+        *values = retained;
+        Ok(())
+    }
+    pub fn indicators_in(&self, scope: Range<usize>) -> Vec<(usize, Range<ByteOffset>)> {
+        let core = lock(&self.core);
+        let mut output = Vec::new();
+        for (slot, ranges) in core.indicators.iter().enumerate() {
+            let first = ranges.partition_point(|range| range.end.0 <= scope.start);
+            output.extend(
+                ranges[first..]
+                    .iter()
+                    .take_while(|range| range.start.0 < scope.end)
+                    .map(|range| (slot, range.clone())),
+            );
+        }
+        output
+    }
+
+    pub(crate) fn display_indicators_in(&self, scope: Range<usize>) -> Result<Vec<(usize, Range<ByteOffset>)>, EditError> {
+        let projection = self.projection();
+        let source = projection.source_selection(Selection { anchor: ByteOffset(scope.start), head: ByteOffset(scope.end) })?.range();
+        self.indicators_in(source.start.0..source.end.0).into_iter().map(|(slot, range)| {
+            projection.display_selection(Selection { anchor: range.start, head: range.end }).map(|selection| (slot, selection.range()))
+        }).collect()
+    }
     pub fn byte_snapshot(&self) -> ByteBuffer {
         lock(&self.core).current.bytes.clone()
+    }
+
+    pub(crate) fn projection(&self) -> ByteProjection {
+        lock(&self.core).current.projection.clone()
+    }
+
+    pub(crate) fn display_selections(&self) -> SelectionSet {
+        let core = lock(&self.core);
+        let mut selections = lock(&self.selection).clone();
+        for range in &mut selections.ranges {
+            range.selection = core.current.projection.project_selection(range.selection);
+        }
+        selections
+    }
+
+    pub fn replace_bytes(&mut self, range: Range<ByteOffset>, inserted: &[u8]) -> Result<(), EditError> {
+        self.edit(|core| core.replace_bytes(range, inserted))
+    }
+
+    pub fn replace_selection_bytes(&mut self, inserted: &[u8]) -> Result<(), EditError> {
+        if self.is_read_only() { return Err(EditError::ReadOnly); }
+        self.begin_undo_action();
+        let selections = self.selections();
+        let transforms: Vec<_> = selections.ranges().iter().map(|range| TextTransform {
+            range: range.selection.range(), text: String::new(),
+        }).collect();
+        let result = self.direct_transforms(&transforms).and_then(|()| {
+            let caret = self.selection().head;
+            self.replace_bytes(caret..caret, inserted)?;
+            let caret = self.selection().head;
+            self.select(Selection { anchor: caret, head: caret })
+        });
+        self.end_undo_action();
+        result
     }
     pub fn change_marker_bits(&self, line: usize) -> u8 {
         lock(&self.core).change_marker_bits(line)
     }
+    pub fn set_change_history_capture(&self, enabled: bool) {
+        let mut core = lock(&self.core);
+        if enabled {
+            if core.change_history.is_none() && !core.can_undo() {
+                core.change_history = Some(crate::change_history::History::new(core.len_bytes()));
+                core.change_history_epoch = Arc::new(());
+                core.pending_save_history.clear();
+            }
+        } else if core.change_history.take().is_some() {
+            core.change_history_epoch = Arc::new(());
+            core.pending_save_history.clear();
+        }
+    }
+    pub fn change_history_capture_enabled(&self) -> bool {
+        lock(&self.core).change_history.is_some()
+    }
+    pub fn change_history_spans(&self, scope: Range<ByteOffset>) -> Result<Vec<ChangeHistorySpan>, EditError> {
+        let core = lock(&self.core);
+        if scope.start > scope.end || scope.end.0 > core.len_bytes() {
+            return Err(EditError::InvalidRange);
+        }
+        let Some(history) = &core.change_history else { return Ok(Vec::new()); };
+        let mut spans: Vec<_> = history.insertions_in(scope.start.0..scope.end.0).into_iter().map(|(range, edition)| {
+            ChangeHistorySpan::Insertion { range: ByteOffset(range.start)..ByteOffset(range.end), edition }
+        }).collect();
+        spans.extend(history.deletions_in(scope.start.0..=scope.end.0).into_iter().map(|(position, editions)| {
+            ChangeHistorySpan::Deletion { position: ByteOffset(position), editions }
+        }));
+        Ok(spans)
+    }
     pub fn goto_change(&mut self, forward: bool) -> Result<bool, EditError> {
-        let text = self.text_snapshot();
-        let current = text.byte_to_line_idx(self.selection().head.0, LineType::LF_CR);
+        let current = self.byte_snapshot().line_index(self.selection().head.0)
+            .map_err(|error| EditError::Storage(error.to_string()))?;
         let count = self.line_count();
         let core = lock(&self.core);
         let target = if forward {
@@ -1248,7 +1444,7 @@ impl Document {
             .collect::<Vec<_>>()
             .into_iter()
     }
-    pub fn toggle_bookmark(&mut self) {
+    pub fn toggle_bookmark(&mut self) -> Result<(), EditError> {
         self.edit(DocumentCore::toggle_bookmark)
     }
     pub fn toggle_bookmark_at(&mut self, line: usize) -> bool {
@@ -1292,7 +1488,8 @@ impl Document {
         position: ByteOffset,
         forward: bool,
     ) -> Result<ByteOffset, EditError> {
-        adjacent_in_snapshot(&self.text_snapshot(), position, forward)
+        self.byte_snapshot().adjacent_position(position.0, forward).map(ByteOffset)
+            .map_err(|error| EditError::Storage(error.to_string()))
     }
     pub fn selections(&self) -> SelectionSet {
         lock(&self.selection).clone()
@@ -1300,21 +1497,13 @@ impl Document {
     pub fn set_selections(&mut self, selections: SelectionSet) -> Result<(), EditError> {
         let mut core = lock(&self.core);
         for range in &selections.ranges {
-            core.valid_range(range.selection.range())?;
+            core.valid_byte_range(range.selection.range())?;
             for (position, virtual_space) in [
                 (range.selection.anchor, range.anchor_virtual),
                 (range.selection.head, range.head_virtual),
             ] {
-                if virtual_space != 0 {
-                    let row = core
-                        .current
-                        .content
-                        .byte_to_line_idx(position.0, LineType::LF_CR);
-                    let line = core.line_text(row)?;
-                    let end = core.line_start(row)?.0 + line.trim_end_matches(['\r', '\n']).len();
-                    if position.0 != end {
-                        return Err(EditError::InvalidRange);
-                    }
+                if virtual_space != 0 && !core.current.bytes.is_line_end(position.0) {
+                    return Err(EditError::InvalidRange);
                 }
             }
         }
@@ -1377,36 +1566,38 @@ impl Document {
         };
         self.apply_transaction(transforms, None, explicit)
     }
-    pub(crate) fn commit_prepared(
-        &mut self,
-        content: Rope,
-        selections: SelectionSet,
-        edits: LineEdits,
-    ) -> Result<(), EditError> {
+    pub(crate) fn commit_prepared_bytes(&mut self, bytes: ByteBuffer, mut selections: SelectionSet, edits: LineEdits) -> Result<(), EditError> {
+        let mut core = lock(&self.core);
         for range in selections.ranges() {
-            let range = range.selection.range();
-            if range.end.0 > content.len() {
-                return Err(EditError::InvalidRange);
-            }
-            if !content.is_char_boundary(range.start.0) || !content.is_char_boundary(range.end.0) {
-                return Err(EditError::InvalidBoundary);
+            if range.selection.range().end.0 > bytes.len() { return Err(EditError::InvalidRange); }
+        }
+        selections.normalize_byte_bounds(&bytes);
+        core.editing_view = Arc::downgrade(&self.selection);
+        if edits.changes.is_empty() {
+            *lock(&self.selection) = selections;
+        } else {
+            if core.read_only { return Err(EditError::ReadOnly); }
+            core.commit_bytes(bytes, selections.primary().selection, edits)?;
+            *lock(&self.selection) = selections;
+            core.remember_redo_selections();
+        }
+        self.tentative_selections = None;
+        Ok(())
+    }
+
+    pub(crate) fn set_multi_selection_ranges(&mut self, ranges: &[SelectionRange]) {
+        {
+            let mut selections = lock(&self.selection);
+            for (index, range) in ranges.iter().enumerate().take(selections.ranges.len()) {
+                let current = &mut selections.ranges[index];
+                current.set_start(range.selection.anchor);
+                current.set_end(range.selection.head);
+                if range.anchor_virtual != 0 { current.anchor_virtual = range.anchor_virtual; }
+                if range.head_virtual != 0 { current.head_virtual = range.head_virtual; }
             }
         }
         let mut core = lock(&self.core);
-        core.editing_view = Arc::downgrade(&self.selection);
-        if edits.1.is_empty() {
-            if core.read_only {
-                return Err(EditError::ReadOnly);
-            }
-            *lock(&self.selection) = selections;
-            self.tentative_selections = None;
-            return Ok(());
-        }
-        core.replace_rope(content, selections.primary().selection, edits)?;
-        *lock(&self.selection) = selections;
-        core.remember_redo_selections();
-        self.tentative_selections = None;
-        Ok(())
+        if !core.read_only { core.remember_redo_selections(); }
     }
     pub(crate) fn direct_transforms(
         &mut self,
@@ -1425,96 +1616,50 @@ impl Document {
         explicit: Option<SelectionSet>,
     ) -> Result<(), EditError> {
         let mut core = lock(&self.core);
-        if core.read_only {
-            return Err(EditError::ReadOnly);
-        }
-        let mut order: Vec<usize> = (0..transforms.len()).collect();
+        if core.read_only { return Err(EditError::ReadOnly); }
+        let mut order: Vec<_> = (0..transforms.len()).collect();
         order.sort_by_key(|&index| (transforms[index].range.start, transforms[index].range.end));
         let mut last_end = None;
         for &index in &order {
-            let range = core.valid_range(transforms[index].range.clone())?;
-            if last_end.is_some_and(|end| range.start < end) {
-                return Err(EditError::InvalidRange);
-            }
+            let range = core.valid_byte_range(transforms[index].range.clone())?;
+            if last_end.is_some_and(|end| range.start < end) { return Err(EditError::InvalidRange); }
             last_end = Some(range.end);
         }
-        let mut candidate = core.current.content.clone();
+        let mut bytes = core.current.bytes.clone();
         let mut edits = LineEdits::default();
         let mut selections = lock(&self.selection).clone();
-        let mut changed = false;
         for &index in order.iter().rev() {
             let transform = &transforms[index];
-            let start = transform.range.start.0;
-            let end = transform.range.end.0;
-            if start == end && transform.text.is_empty() {
-                continue;
-            }
-            changed = true;
-            edits.remove(&mut candidate, start..end)?;
-            edits.insert(&mut candidate, start, &transform.text)?;
-            let mapping = TextEdit {
-                start,
-                removed: end - start,
-                inserted: transform.text.len(),
-            };
-            for range in &mut selections.ranges {
-                mapping.apply_range(range, false);
-            }
+            let range = transform.range.start.0..transform.range.end.0;
+            if range.is_empty() && transform.text.is_empty() { continue; }
+            edits.change_bytes(&mut bytes, range.clone(), transform.text.as_bytes())?;
+            let mapping = TextEdit { start: range.start, removed: range.len(), inserted: transform.text.len() };
+            for selected in &mut selections.ranges { mapping.apply_range(selected, false); }
             if let Some(replacements) = replacements {
-                let caret = ByteOffset(start + transform.text.len());
-                selections.ranges[replacements[index]] = Selection {
-                    anchor: caret,
-                    head: caret,
-                }
-                .into();
+                let target = replacements.get(index).copied().ok_or(EditError::InvalidRange)?;
+                let selected = selections.ranges.get_mut(target).ok_or(EditError::InvalidRange)?;
+                let caret = ByteOffset(range.start + transform.text.len());
+                *selected = Selection { anchor: caret, head: caret }.into();
             }
         }
-        selections.normalize_boundaries(&candidate, false);
-        let preserve_explicit = explicit.is_some();
         if let Some(explicit) = explicit {
-            for selected in explicit.ranges() {
-                let range = selected.selection.range();
-                if range.end.0 > candidate.len() {
-                    return Err(EditError::InvalidRange);
-                }
-                if !candidate.is_char_boundary(range.start.0)
-                    || !candidate.is_char_boundary(range.end.0)
-                {
-                    return Err(EditError::InvalidBoundary);
-                }
-                for (position, space) in [
-                    (selected.selection.anchor, selected.anchor_virtual),
-                    (selected.selection.head, selected.head_virtual),
-                ] {
-                    if space != 0 {
-                        let row = candidate.byte_to_line_idx(position.0, LineType::LF_CR);
-                        let end = candidate.line_to_byte_idx(row, LineType::LF_CR)
-                            + candidate
-                                .line(row, LineType::LF_CR)
-                                .to_string()
-                                .trim_end_matches(['\r', '\n'])
-                                .len();
-                        if position.0 != end {
-                            return Err(EditError::InvalidRange);
-                        }
-                    }
+            if explicit.ranges().iter().any(|range| range.selection.range().end.0 > bytes.len()) { return Err(EditError::InvalidRange); }
+            for range in explicit.ranges() {
+                for (position, space) in [(range.selection.anchor, range.anchor_virtual), (range.selection.head, range.head_virtual)] {
+                    if space != 0 && !bytes.is_line_end(position.0) { return Err(EditError::InvalidRange); }
                 }
             }
             selections = explicit;
-        }
-        if !changed {
-            *lock(&self.selection) = selections;
-            return Ok(());
-        }
-        if !preserve_explicit {
-            selections.deduplicate();
-        }
+        } else { selections.deduplicate(); }
+        selections.normalize_byte_bounds(&bytes);
+        if edits.changes.is_empty() { *lock(&self.selection) = selections; return Ok(()); }
         core.editing_view = Arc::downgrade(&self.selection);
-        core.replace_rope(candidate, selections.primary().selection, edits)?;
+        core.commit_bytes(bytes, selections.primary().selection, edits)?;
         *lock(&self.selection) = selections;
         core.remember_redo_selections();
         Ok(())
     }
+
     pub fn replace_selections(&mut self, text: &str) -> Result<(), EditError> {
         self.replace_evolving_selections(text, false, false)
     }
@@ -1530,80 +1675,59 @@ impl Document {
         overwrite: bool,
         direct: bool,
     ) -> Result<(), EditError> {
-        if self.is_read_only() {
-            return Err(EditError::ReadOnly);
-        }
-        let mut candidate = self.text_snapshot();
-        let mut selections = self.selections();
+        self.replace_evolving_bytes(text.as_bytes(), overwrite, direct)
+    }
+    fn replace_evolving_bytes(&mut self, inserted: &[u8], overwrite: bool, direct: bool) -> Result<(), EditError> {
+        let mut core = lock(&self.core);
+        if core.read_only { return Err(EditError::ReadOnly); }
+        let mut bytes = core.current.bytes.clone();
+        let mut selections = lock(&self.selection).clone();
         let mut edits = LineEdits::default();
         let mut order: Vec<_> = (0..selections.ranges().len()).collect();
         if direct {
             order.sort_by_key(|&index| {
                 let range = selections.ranges()[index];
-                (
-                    range.selection.head,
-                    range.head_virtual,
-                    range.selection.anchor,
-                    range.anchor_virtual,
-                )
+                (range.selection.head, range.head_virtual, range.selection.anchor, range.anchor_virtual)
             });
             order.reverse();
         }
         for index in order {
             let selected = selections.ranges()[index];
-            let range = selected.selection.range();
+            let mut range = selected.selection.range();
+            if range.end.0 > bytes.len() { return Err(EditError::InvalidRange); }
+            let mut virtual_space = selected.start_virtual();
             if !selected.is_empty() {
-                edits.remove(&mut candidate, range.start.0..range.end.0)?;
+                edits.change_bytes(&mut bytes, range.start.0..range.end.0, &[])?;
                 selections.map_edit(range.start.0, range.end.0 - range.start.0, 0);
-                let space = if range.is_empty() {
-                    selected.start_virtual()
-                } else {
-                    0
-                };
-                selections.set_range(
-                    index,
-                    SelectionRange {
-                        selection: Selection {
-                            anchor: range.start,
-                            head: range.start,
-                        },
-                        anchor_virtual: space,
-                        head_virtual: space,
-                    },
-                );
-            } else if overwrite
-                && selected.head_virtual == 0
-                && range.start.0 < candidate.len()
-                && !matches!(candidate.char(range.start.0), '\r' | '\n')
-            {
-                let end = adjacent_in_snapshot(&candidate, range.start, true)?;
-                edits.remove(&mut candidate, range.start.0..end.0)?;
-                selections.map_edit(range.start.0, end.0 - range.start.0, 0);
+                if !range.is_empty() { virtual_space = 0; }
+                range.end = range.start;
+            } else if overwrite && virtual_space == 0 && range.start.0 < bytes.len()
+                && !matches!(bytes.byte(range.start.0), Some(b'\r' | b'\n')) {
+                let end = bytes.deletion_range(range.start.0, false).map_err(|error| EditError::Storage(error.to_string()))?.end;
+                edits.change_bytes(&mut bytes, range.start.0..end, &[])?;
+                selections.map_edit(range.start.0, end - range.start.0, 0);
             }
-            let selected = selections.ranges()[index];
-            let start = selected.selection.range().start.0;
-            let padding = " ".repeat(selected.start_virtual());
-            edits.insert(&mut candidate, start, &padding)?;
-            selections.map_edit(start, 0, padding.len());
-            let insertion = start + padding.len();
-            edits.insert(&mut candidate, insertion, text)?;
-            selections.map_edit(insertion, 0, text.len());
-            let caret = ByteOffset(insertion + text.len());
-            selections.set_range(
-                index,
-                Selection {
-                    anchor: caret,
-                    head: caret,
-                }
-                .into(),
-            );
-            selections.normalize_boundaries(&candidate, false);
+            let padding = vec![b' '; virtual_space];
+            edits.change_bytes(&mut bytes, range.start.0..range.start.0, &padding)?;
+            selections.map_edit(range.start.0, 0, padding.len());
+            let insertion = range.start.0 + padding.len();
+            edits.change_bytes(&mut bytes, insertion..insertion, inserted)?;
+            selections.map_edit(insertion, 0, inserted.len());
+            let caret = ByteOffset(insertion + inserted.len());
+            selections.set_range(index, Selection { anchor: caret, head: caret }.into());
+            selections.normalize_byte_bounds(&bytes);
         }
-        lock(&self.core).direct_edit = direct;
-        let result = self.commit_prepared(candidate, selections, edits);
-        lock(&self.core).direct_edit = false;
-        result
+        if edits.changes.is_empty() { *lock(&self.selection) = selections; return Ok(()); }
+        core.editing_view = Arc::downgrade(&self.selection);
+        core.direct_edit = direct;
+        let result = core.commit_bytes(bytes, selections.primary().selection, edits);
+        core.direct_edit = false;
+        result?;
+        *lock(&self.selection) = selections;
+        core.remember_redo_selections();
+        Ok(())
     }
+
     pub fn delete_selections(&mut self, backward: bool) -> Result<(), EditError> {
         self.delete_characters(backward, true)
     }
@@ -1634,103 +1758,71 @@ impl Document {
             }
             return Err(EditError::ReadOnly);
         }
-        let selections = self.selections();
-        let text = self.text_snapshot();
-        let any_selected = selections.ranges().iter().any(|range| !range.is_empty());
-        if any_selected {
-            let mut candidate = text;
-            let mut selections = selections;
-            let mut edits = LineEdits::default();
-            for index in 0..selections.ranges().len() {
-                let selected = selections.ranges()[index];
-                if selected.is_empty() {
-                    continue;
-                }
-                let range = selected.selection.range();
-                edits.remove(&mut candidate, range.start.0..range.end.0)?;
-                selections.map_edit(range.start.0, range.end.0 - range.start.0, 0);
-                let space = if range.is_empty() {
-                    selected.start_virtual()
-                } else {
-                    0
-                };
-                selections.set_range(
-                    index,
-                    SelectionRange {
-                        selection: Selection {
-                            anchor: range.start,
-                            head: range.start,
-                        },
-                        anchor_virtual: space,
-                        head_virtual: space,
-                    },
-                );
-            }
-            selections.normalize_boundaries(&candidate, false);
-            selections.deduplicate();
-            self.begin_undo_action();
-            let result = self.commit_prepared(candidate, selections, edits);
-            self.end_undo_action();
-            return result;
-        }
-        let grouped = selections.ranges().len() > 1
-            || (!backward && selections.primary().start_virtual() != 0);
-        let mut virtual_backspaces = Vec::new();
-        let transforms: Vec<_> = selections
-            .ranges()
-            .iter()
-            .enumerate()
-            .map(|(index, selected)| {
-                let mut range = selected.selection.range();
-                let mut inserted = String::new();
-                if backward && selected.head_virtual != 0 {
-                    virtual_backspaces.push(index);
-                } else if backward && range.start.0 > 0 {
-                    let position = range.start.0;
-                    let row = text.byte_to_line_idx(position, LineType::LF_CR);
-                    if (allow_line_start && !selections.is_rectangular())
-                        || text.line_to_byte_idx(row, LineType::LF_CR) != position
-                    {
-                        range.start = adjacent_in_snapshot(&text, range.start, false)?;
-                    }
-                } else if !backward {
-                    let position = range.start.0;
-                    if selected.start_virtual() != 0 {
-                        inserted = " ".repeat(selected.start_virtual());
-                    }
-                    if position < text.len() {
-                        let ch = text.char(position);
-                        if selections.ranges().len() == 1 || !matches!(ch, '\r' | '\n') {
-                            range.end = adjacent_in_snapshot(&text, range.end, true)?;
-                        }
-                    }
-                }
-                Ok(TextTransform {
-                    range,
-                    text: inserted,
-                })
-            })
-            .collect::<Result<_, EditError>>()?;
-        if grouped {
-            self.begin_undo_action();
-        }
-        let result = self.direct_transforms(&transforms);
-        if grouped {
-            self.end_undo_action();
-        }
-        result?;
-        let mut final_selections = lock(&self.selection);
-        for index in virtual_backspaces {
-            if let Some(range) = final_selections.ranges.get_mut(index) {
-                range.anchor_virtual = range.anchor_virtual.saturating_sub(1);
-                range.head_virtual = range.head_virtual.saturating_sub(1);
-            }
-        }
-        final_selections.deduplicate();
-        drop(final_selections);
-        lock(&self.core).remember_redo_selections();
-        Ok(())
+        self.delete_byte_characters(backward, allow_line_start)
     }
+
+    fn delete_byte_characters(&mut self, backward: bool, allow_line_start: bool) -> Result<(), EditError> {
+        let mut bytes = self.byte_snapshot();
+        let mut selections = self.selections();
+        let any_selected = selections.ranges().iter().any(|range| !range.is_empty());
+        let grouped = any_selected || selections.ranges().len() > 1
+            || !backward && selections.primary().start_virtual() != 0;
+        let mut edits = LineEdits::default();
+        for index in 0..selections.ranges().len() {
+            let selected = selections.ranges()[index];
+            let mut range = selected.selection.range();
+            if any_selected {
+                if selected.is_empty() { continue; }
+            } else if backward && selected.head_virtual != 0 {
+                let selected = &mut selections.ranges[index];
+                selected.anchor_virtual = selected.anchor_virtual.saturating_sub(1);
+                selected.head_virtual = selected.head_virtual.saturating_sub(1);
+                continue;
+            } else if backward {
+                let row = bytes.line_index(range.start.0).map_err(|error| EditError::Storage(error.to_string()))?;
+                let start = bytes.line_start(row).map_err(|error| EditError::Storage(error.to_string()))?;
+                if (!allow_line_start || selections.is_rectangular()) && start == range.start.0 { continue; }
+                range.start = ByteOffset(bytes.deletion_range(range.start.0, true)
+                    .map_err(|error| EditError::Storage(error.to_string()))?.start);
+            } else {
+                let padding = vec![b' '; selected.start_virtual()];
+                edits.change_bytes(&mut bytes, range.start.0..range.start.0, &padding)?;
+                selections.map_edit(range.start.0, 0, padding.len());
+                range.start.0 += padding.len();
+                range.end = range.start;
+                if selections.ranges().len() == 1 || !matches!(bytes.byte(range.start.0), Some(b'\r' | b'\n')) {
+                    range.end = ByteOffset(bytes.deletion_range(range.start.0, false)
+                        .map_err(|error| EditError::Storage(error.to_string()))?.end);
+                }
+            }
+            edits.change_bytes(&mut bytes, range.start.0..range.end.0, &[])?;
+            selections.map_edit(range.start.0, range.end.0 - range.start.0, 0);
+            let space = if any_selected && range.is_empty() { selected.start_virtual() } else { 0 };
+            selections.set_range(index, SelectionRange {
+                selection: Selection { anchor: range.start, head: range.start },
+                anchor_virtual: space, head_virtual: space,
+            });
+        }
+        selections.normalize_byte_bounds(&bytes);
+        selections.deduplicate();
+        if edits.changes.is_empty() { return self.set_selections(selections); }
+        if grouped { self.begin_undo_action(); }
+        let result = {
+            let mut core = lock(&self.core);
+            core.editing_view = Arc::downgrade(&self.selection);
+            core.direct_edit = true;
+            let result = core.commit_bytes(bytes, selections.primary().selection, edits);
+            core.direct_edit = false;
+            if result.is_ok() {
+                *lock(&self.selection) = selections;
+                core.remember_redo_selections();
+            }
+            result
+        };
+        if grouped { self.end_undo_action(); }
+        result
+    }
+
     pub fn is_modified(&self) -> bool {
         lock(&self.core).is_modified()
     }
@@ -1782,14 +1874,6 @@ impl Document {
     }
     pub fn replace_selection(&mut self, text: &str) -> Result<(), EditError> {
         self.edit(|c| c.replace_selection(text))
-    }
-    pub(crate) fn replace_rope(
-        &mut self,
-        content: Rope,
-        selection: Selection,
-        line_edits: LineEdits,
-    ) -> Result<(), EditError> {
-        self.edit(|c| c.replace_rope(content, selection, line_edits))
     }
     pub fn replace(&mut self, range: Range<ByteOffset>, text: &str) -> Result<(), EditError> {
         self.edit(|c| c.replace(range, text))

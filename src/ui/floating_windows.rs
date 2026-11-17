@@ -1,13 +1,23 @@
 use super::*;
+use super::dialog_font::px;
+use crate::hashes::HashAlgorithm;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum DialogKind {
     Find,
+    FindSwap,
     FindInResults,
     FindInResultsProgress,
     GoTo,
+    CharacterRange,
     Preferences,
+    StyleConfigurator,
+    ShortcutMapper,
     About,
+    Help,
+    HashText(HashAlgorithm),
+    HashFiles(HashAlgorithm),
+    WindowManager,
     MarkdownPreview,
     MacroSave,
     MacroRepeat,
@@ -19,19 +29,35 @@ pub(super) enum DialogKind {
     Calltip,
     BackupFailure,
     Run,
+    RunVariables,
+    RunSave,
     Close,
     SaveAll,
     Reload,
 }
 
 impl DialogKind {
-    const ALL: [Self; 20] = [
+    const ALL: [Self; 36] = [
         Self::Find,
+        Self::FindSwap,
         Self::FindInResults,
         Self::FindInResultsProgress,
         Self::GoTo,
+        Self::CharacterRange,
         Self::Preferences,
+        Self::StyleConfigurator,
+        Self::ShortcutMapper,
         Self::About,
+        Self::Help,
+        Self::HashText(HashAlgorithm::Md5),
+        Self::HashText(HashAlgorithm::Sha1),
+        Self::HashText(HashAlgorithm::Sha256),
+        Self::HashText(HashAlgorithm::Sha512),
+        Self::HashFiles(HashAlgorithm::Md5),
+        Self::HashFiles(HashAlgorithm::Sha1),
+        Self::HashFiles(HashAlgorithm::Sha256),
+        Self::HashFiles(HashAlgorithm::Sha512),
+        Self::WindowManager,
         Self::MarkdownPreview,
         Self::MacroSave,
         Self::MacroRepeat,
@@ -43,6 +69,8 @@ impl DialogKind {
         Self::Calltip,
         Self::BackupFailure,
         Self::Run,
+        Self::RunVariables,
+        Self::RunSave,
         Self::Close,
         Self::SaveAll,
         Self::Reload,
@@ -51,11 +79,19 @@ impl DialogKind {
     fn visible(self, owner: &MatrixWindow) -> bool {
         match self {
             Self::Find => owner.find_visible || owner.files_search.visible,
+            Self::FindSwap => owner.find_swap_popup_visible(),
             Self::FindInResults => owner.find_in_results_visible(),
             Self::FindInResultsProgress => owner.find_in_results_progress_visible(),
             Self::GoTo => owner.goto_visible,
+            Self::CharacterRange => owner.character_range.visible,
             Self::Preferences => owner.preferences_visible,
+            Self::StyleConfigurator => owner.style_config.visible,
+            Self::ShortcutMapper => owner.shortcut_mapper.visible,
             Self::About => owner.about_visible,
+            Self::Help => owner.help_state.topic.is_some(),
+            Self::HashText(algorithm) => owner.hash_text_visible(algorithm),
+            Self::HashFiles(algorithm) => owner.hash_files_visible(algorithm),
+            Self::WindowManager => owner.window_manager_visible(),
             Self::MarkdownPreview => owner.markdown_preview.visible,
             Self::MacroSave => owner.macro_dialogs.save_visible,
             Self::MacroRepeat => owner.macro_dialogs.repeat_visible,
@@ -67,6 +103,8 @@ impl DialogKind {
             Self::Calltip => owner.calltip_visible(),
             Self::BackupFailure => owner.backup_failure_visible(),
             Self::Run => owner.run_visible,
+            Self::RunVariables => owner.run_variables_visible(),
+            Self::RunSave => owner.run_save_visible(),
             Self::Close => owner.close_dialog,
             Self::SaveAll => owner.save_all_dialog,
             Self::Reload => owner.reload_dialog,
@@ -75,50 +113,78 @@ impl DialogKind {
 
     fn title(self, owner: &MatrixWindow) -> &'static str {
         match self {
-            Self::Find if owner.files_search.visible => "Find in Files",
-            Self::Find if owner.find_replace_mode => "Replace",
-            Self::Find => "Find",
+            Self::Find if owner.files_search.visible && owner.find_project_mode => "项目中查找",
+            Self::Find if owner.files_search.visible => "文件中查找",
+            Self::Find if owner.find_mark_mode => "标记",
+            Self::Find if owner.find_replace_mode => "替换",
+            Self::Find => "查找",
+            Self::FindSwap => "",
             Self::FindInResults => "Find in search results",
-            Self::FindInResultsProgress => "Find In Files progress...",
-            Self::GoTo => "Go To...",
-            Self::Preferences => "Preferences",
+            Self::FindInResultsProgress => owner.find_in_results_progress_title(),
+            Self::GoTo => "转至...",
+            Self::CharacterRange => "查找范围内的字符...",
+            Self::Preferences => crate::localization::preference_title(&owner.native_locale(), "").unwrap_or("Preferences"),
+            Self::StyleConfigurator => crate::localization::dialog_title(&owner.native_locale(), "StyleConfig").unwrap_or("Style Configurator"),
+            Self::ShortcutMapper => owner.shortcut_mapper_title(),
             Self::About => "About Notepad Matrix",
+            Self::Help => owner.help_title(),
+            Self::HashText(algorithm) => owner.hash_text_title(algorithm),
+            Self::HashFiles(algorithm) => owner.hash_files_title(algorithm),
+            Self::WindowManager => "文件窗口",
             Self::MarkdownPreview => "Markdown Preview",
             Self::MacroSave => "Save Current Recorded Macro",
             Self::MacroRepeat => "Run a Macro Multiple Times",
             Self::Udl => "User Defined Language",
             Self::UdlStyler => "UDL Styler",
-            Self::ColumnEditor => "Column Editor",
+            Self::ColumnEditor => "列编辑器",
             Self::DocumentSwitcher => "Document switcher",
             Self::Completion => "Completion",
             Self::Calltip => "Function parameters",
             Self::BackupFailure => "Backup error",
-            Self::Run => "Run",
+            Self::Run => "运行...",
+            Self::RunVariables => "",
+            Self::RunSave => "快捷键",
             Self::Close => "Save changes?",
             Self::SaveAll => "Save all?",
             Self::Reload => "Reload?",
         }
     }
 
-    fn dimensions(self) -> gpui::Size<gpui::Pixels> {
+    fn window_title(self, owner: &MatrixWindow) -> String {
+        if self == Self::WindowManager { owner.window_manager_title() } else { self.title(owner).to_owned() }
+    }
+
+    fn dimensions(self, window: &Window) -> gpui::Size<gpui::Pixels> {
         match self {
-            Self::Find => size(px(617.), px(320.)),
+            Self::Find => size(
+                px(find_surface::DIALOG_WIDTH),
+                px(find_surface::DIALOG_HEIGHT),
+            ),
             Self::FindInResults => size(px(548.), px(186.)),
+            Self::FindSwap => size(px(248.), px(74.)),
             Self::FindInResultsProgress => size(px(565.), px(95.)),
-            Self::GoTo => size(px(360.), px(220.)),
-            Self::Preferences => size(px(460.), px(560.)),
+            Self::GoTo => goto_surface::dimensions(),
+            Self::CharacterRange => size(px(468.), px(174.)),
+            Self::Preferences => preferences_surface::dimensions(),
+            Self::StyleConfigurator => style_config_surface::dimensions(),
+            Self::ShortcutMapper => shortcut_surface::dimensions(),
             Self::About => size(px(500.), px(280.)),
-            Self::MarkdownPreview => size(px(700.), px(560.)),
+            Self::Help => size(px(660.), px(440.)),
+            Self::HashText(_) | Self::HashFiles(_) => hash_surface::dimensions(),
+            Self::WindowManager => window_manager_surface::dimensions(),
+            Self::MarkdownPreview => size(gpui::px(700.), gpui::px(560.)),
             Self::MacroSave => size(px(420.), px(200.)),
             Self::MacroRepeat => size(px(480.), px(360.)),
             Self::Udl => size(px(780.), px(600.)),
             Self::UdlStyler => size(px(560.), px(500.)),
-            Self::ColumnEditor => size(px(520.), px(500.)),
-            Self::DocumentSwitcher => size(px(380.), px(320.)),
-            Self::Completion => size(px(360.), px(240.)),
-            Self::Calltip => size(px(520.), px(160.)),
+            Self::ColumnEditor => column_editor_surface::dialog_dimensions(window),
+            Self::DocumentSwitcher => size(gpui::px(380. * dialog_font::switcher_scale()), gpui::px(320. * dialog_font::switcher_scale())),
+            Self::Completion => size(gpui::px(360.), gpui::px(240.)),
+            Self::Calltip => size(gpui::px(520.), gpui::px(160.)),
             Self::BackupFailure => size(px(520.), px(260.)),
-            Self::Run => size(px(480.), px(220.)),
+            Self::Run => run_surface::dimensions(),
+            Self::RunVariables => run_surface::variables_dimensions(),
+            Self::RunSave => run_surface::save_dimensions(),
             Self::Close | Self::SaveAll | Self::Reload => size(px(480.), px(220.)),
         }
     }
@@ -127,8 +193,13 @@ impl DialogKind {
         matches!(self, Self::Close | Self::SaveAll | Self::Reload)
     }
 
+    fn borderless_popup(self) -> bool {
+        matches!(self, Self::FindSwap | Self::Completion | Self::RunVariables)
+    }
+
     fn hide_modeless(self, owner: &mut MatrixWindow, cx: &mut Context<MatrixWindow>) {
         match self {
+            Self::FindSwap => { owner.close_find_swap_menu(cx); }
             Self::FindInResults => owner.dismiss_find_in_results(cx),
             Self::FindInResultsProgress => owner.cancel_find_in_results_progress(cx),
             Self::Find => {
@@ -137,8 +208,15 @@ impl DialogKind {
                 owner.files_search.visible = false;
             }
             Self::GoTo => owner.goto_visible = false,
+            Self::CharacterRange => owner.character_range.visible = false,
             Self::Preferences => owner.preferences_visible = false,
+            Self::StyleConfigurator => owner.style_config.visible = false,
+            Self::ShortcutMapper => owner.shortcut_mapper.visible = false,
             Self::About => owner.about_visible = false,
+            Self::Help => owner.dismiss_help(cx),
+            Self::HashText(algorithm) => owner.hide_hash_text(algorithm, cx),
+            Self::HashFiles(algorithm) => owner.hide_hash_files(algorithm, cx),
+            Self::WindowManager => { owner.dismiss_window_manager(cx); }
             Self::MarkdownPreview => owner.hide_markdown_preview(cx),
             Self::MacroSave => owner.macro_dialogs.save_visible = false,
             Self::MacroRepeat => owner.macro_dialogs.repeat_visible = false,
@@ -147,12 +225,14 @@ impl DialogKind {
                 owner.udl.styler_visible = false;
             }
             Self::UdlStyler => owner.udl.styler_visible = false,
-            Self::ColumnEditor => owner.column_editor.visible = false,
+            Self::ColumnEditor => owner.dismiss_column_editor(cx),
             Self::DocumentSwitcher => owner.dismiss_document_switcher(cx),
             Self::Completion => owner.dismiss_completion(cx),
             Self::Calltip => owner.dismiss_calltip(cx),
             Self::BackupFailure => owner.dismiss_backup_failure(cx),
-            Self::Run => owner.run_visible = false,
+            Self::Run => owner.dismiss_run(cx),
+            Self::RunVariables => owner.dismiss_run_variables(cx),
+            Self::RunSave => owner.dismiss_run_save(cx),
             Self::Close | Self::SaveAll | Self::Reload => {}
         }
     }
@@ -172,11 +252,20 @@ impl FloatingWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        window.set_window_title(kind.title(owner.read(cx)));
+        window.set_window_title(&kind.window_title(owner.read(cx)));
+        if kind.borderless_popup()
+            && let Ok(handle) = HasWindowHandle::window_handle(window)
+            && let RawWindowHandle::AppKit(handle) = handle.as_raw()
+        {
+            let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+            if let Some(host) = view.window() {
+                host.setStyleMask(objc2_app_kit::NSWindowStyleMask::NonactivatingPanel);
+            }
+        }
         let changed = cx.observe_in(&owner, window, move |_, owner, window, cx| {
             let view = owner.read(cx);
             if kind.visible(view) {
-                window.set_window_title(kind.title(view));
+                window.set_window_title(&kind.window_title(view));
                 cx.notify();
             } else {
                 window.remove_window();
@@ -188,12 +277,17 @@ impl FloatingWindow {
         let weak = owner.downgrade();
         let activated_owner = owner.downgrade();
         cx.observe_window_activation(window, move |_: &mut Self, window, cx| {
-            if matches!(kind, DialogKind::Find | DialogKind::FindInResults) {
+            if matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::FindInResults | DialogKind::RunVariables) {
                 let active = window.is_window_active();
+                let active_window: gpui::AnyWindowHandle = Window::window_handle(window);
                 let owner = activated_owner.clone();
                 cx.defer(move |cx| {
                     if let Err(error) = owner.update(cx, |owner, cx| {
-                        if kind == DialogKind::FindInResults {
+                        if kind == DialogKind::RunVariables {
+                            if !active { owner.dismiss_run_variables(cx); }
+                        } else if kind == DialogKind::FindSwap {
+                            if !active { owner.close_find_swap_menu(cx); }
+                        } else if kind == DialogKind::FindInResults {
                             if !active {
                                 owner.retire_find_in_results_popup(cx);
                             }
@@ -201,8 +295,14 @@ impl FloatingWindow {
                             if !std::mem::take(&mut owner.find_activation_prepared) {
                                 owner.activate_find_selection(cx);
                             }
-                        } else if owner.close_search_history() {
-                            cx.notify();
+                        } else {
+                            if owner.close_search_history() { cx.notify(); }
+                        }
+                        if kind == DialogKind::Find {
+                            if !active { owner.finish_find_transparency_drag(cx); }
+                            if let Err(error) = active_window.update(cx, |_, window, _| owner.update_find_window(window)) {
+                                eprintln!("search transparency lost its window: {error}");
+                            }
                         }
                     }) {
                         eprintln!("search activation lost its document: {error}");
@@ -244,14 +344,27 @@ impl FloatingWindow {
 impl Render for FloatingWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let kind = self.kind;
+        if kind == DialogKind::Find
+            && let Some(owner) = self.owner.upgrade()
+        {
+            owner.read(cx).update_find_window(window);
+        }
         let content = self.owner.update(cx, |owner, cx| match kind {
             DialogKind::Find if owner.files_search.visible => owner.render_find_in_files(cx),
             DialogKind::Find => owner.render_find(cx),
+            DialogKind::FindSwap => owner.render_find_swap_menu(cx),
             DialogKind::FindInResults => Some(owner.render_find_in_results(cx)),
             DialogKind::FindInResultsProgress => owner.render_find_in_results_progress(cx),
             DialogKind::GoTo => owner.render_goto(cx),
-            DialogKind::Preferences => owner.render_preferences(cx),
+            DialogKind::CharacterRange => Some(owner.render_character_range(cx)),
+            DialogKind::Preferences => owner.render_preferences(window, cx),
+            DialogKind::StyleConfigurator => owner.render_style_configurator(window, cx),
+            DialogKind::ShortcutMapper => owner.render_shortcut_mapper(window, cx),
             DialogKind::About => owner.render_about(cx),
+            DialogKind::Help => owner.render_help(cx),
+            DialogKind::HashText(algorithm) => owner.render_hash_text(algorithm, window, cx),
+            DialogKind::HashFiles(algorithm) => owner.render_hash_files(algorithm, window, cx),
+            DialogKind::WindowManager => owner.render_window_manager(window, cx),
             DialogKind::MarkdownPreview => owner.render_markdown_preview(cx),
             DialogKind::MacroSave => owner.render_save_macro(cx),
             DialogKind::MacroRepeat => owner.render_repeat_macro(cx),
@@ -263,6 +376,8 @@ impl Render for FloatingWindow {
             DialogKind::Calltip => owner.render_calltip(cx),
             DialogKind::BackupFailure => owner.render_backup_failure(cx),
             DialogKind::Run => owner.render_run(window, cx),
+            DialogKind::RunVariables => owner.render_run_variables(cx),
+            DialogKind::RunSave => owner.render_run_save(window, cx),
             DialogKind::Close => owner.render_close_dialog(cx),
             DialogKind::SaveAll => owner.render_save_all_dialog(cx),
             DialogKind::Reload => owner.render_reload_dialog(cx),
@@ -280,11 +395,19 @@ impl Render for FloatingWindow {
             .key_context("MatrixAuxiliary")
             .tab_group()
             .size_full()
-            .overflow_y_scroll()
+            .when(matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator), |window| window.overflow_hidden())
+            .when(!matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator), |window| window.overflow_y_scroll())
             .bg(rgb(0xf0f0f0))
             .text_color(rgb(0x202020))
             .font_family("Helvetica")
-            .text_size(px(13.))
+            .text_size(gpui::px(13.))
+            .when(!matches!(kind, DialogKind::Completion | DialogKind::Calltip | DialogKind::MarkdownPreview), |element| {
+                element.font_family(dialog_font::font_family()).text_size(px(13.))
+            })
+            .on_action(cx.listener(|view, action: &shortcut_surface::ShortcutAction, window, cx| {
+                view.with_owner(window, cx, |owner, window, cx| owner.apply_shortcut_action(action, window, cx));
+                cx.stop_propagation();
+            }))
             .on_action(cx.listener(|_, _: &DialogFocusNext, window, cx| {
                 window.focus_next(cx);
                 cx.stop_propagation();
@@ -349,12 +472,30 @@ impl Render for FloatingWindow {
                 });
                 cx.stop_propagation();
             }))
+            .on_action(cx.listener(|view, action: &find_surface::FindOptionAction, window, cx| {
+                view.with_owner(window, cx, |owner, window, cx| owner.find_option_command(action.0, window, cx));
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, action: &mark_surface::SourceAction, window, cx| {
+                view.with_owner(window, cx, |owner, window, cx| owner.execute_source_command(action.0, window, cx));
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, action: &find_surface::FindButtonAction, window, cx| {
+                view.with_owner(window, cx, |owner, window, cx| owner.find_button_command(action.0, action.1, window, cx));
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, action: &find_surface::FindFieldWarning, window, cx| {
+                view.with_owner(window, cx, |owner, _, cx| owner.find_field_warning(action.0, cx));
+                cx.stop_propagation();
+            }))
             .on_action(cx.listener(move |view, _: &FindDialogNext, window, cx| {
                 view.with_owner(window, cx, move |owner, window, cx| {
                     if kind == DialogKind::FindInResults {
                         owner.submit_find_in_results(window, cx);
+                    } else if kind == DialogKind::CharacterRange {
+                        owner.find_character_range(window, cx);
                     } else {
-                        owner.find_next(owner.find_backward, window, cx);
+                        owner.activate_find_default(false, window, cx);
                     }
                 });
                 cx.stop_propagation();
@@ -365,7 +506,7 @@ impl Render for FloatingWindow {
             }))
             .on_action(cx.listener(|view, _: &FindDialogReverse, window, cx| {
                 view.with_owner(window, cx, |owner, window, cx| {
-                    owner.find_next(!owner.find_backward, window, cx)
+                    owner.activate_find_default(true, window, cx)
                 });
                 cx.stop_propagation();
             }))
@@ -487,7 +628,7 @@ impl MatrixWindow {
         });
     }
 
-    fn restore_document_focus(&self, cx: &mut Context<Self>) {
+    pub(super) fn restore_document_focus(&self, cx: &mut Context<Self>) {
         let focus = self.editor_focus.clone();
         let root = self.document_window;
         cx.defer(move |cx| {
@@ -520,6 +661,11 @@ impl MatrixWindow {
             return;
         }
         match kind {
+            DialogKind::FindSwap => {
+                self.close_find_swap_menu(cx);
+                self.focus_find_swap_button(cx);
+                return;
+            }
             DialogKind::FindInResults => self.dismiss_find_in_results(cx),
             DialogKind::FindInResultsProgress => self.cancel_find_in_results_progress(cx),
             DialogKind::Close => {
@@ -535,13 +681,35 @@ impl MatrixWindow {
                 return;
             }
             DialogKind::Find => {
+                if self.close_find_swap_menu(cx) { return; }
+                if self.cancel_active_file_search(cx) {
+                    return;
+                }
                 self.close_search_history();
+                self.finish_find_transparency_drag(cx);
+                self.set_find_status(find_surface::FindStatus::NoMessage, "");
                 self.find_visible = false;
                 self.files_search.visible = false;
             }
-            DialogKind::GoTo => self.goto_visible = false,
-            DialogKind::Preferences => self.preferences_visible = false,
+            DialogKind::GoTo => self.clear_goto(window, cx),
+            DialogKind::CharacterRange => self.character_range.visible = false,
+            DialogKind::Preferences => {
+                if !self.finish_preferences(window, cx) {
+                    return;
+                }
+                self.preferences_visible = false;
+            }
+            DialogKind::StyleConfigurator => {
+                if self.style_config.visible { self.close_style_configurator(window, cx); return; }
+            }
+            DialogKind::ShortcutMapper => {
+                if self.shortcut_mapper.visible { self.close_shortcut_mapper(window, cx); return; }
+            }
             DialogKind::About => self.about_visible = false,
+            DialogKind::Help => self.dismiss_help(cx),
+            DialogKind::HashText(algorithm) => self.hide_hash_text(algorithm, cx),
+            DialogKind::HashFiles(algorithm) => self.hide_hash_files(algorithm, cx),
+            DialogKind::WindowManager => { if !self.dismiss_window_manager(cx) { return; } }
             DialogKind::MarkdownPreview => self.hide_markdown_preview(cx),
             DialogKind::MacroSave => self.macro_dialogs.save_visible = false,
             DialogKind::MacroRepeat => {
@@ -558,7 +726,9 @@ impl MatrixWindow {
             DialogKind::Completion => self.dismiss_completion(cx),
             DialogKind::Calltip => self.dismiss_calltip(cx),
             DialogKind::BackupFailure => self.dismiss_backup_failure(cx),
-            DialogKind::Run => self.run_visible = false,
+            DialogKind::Run => self.dismiss_run(cx),
+            DialogKind::RunVariables => { self.close_run_variables(cx); return; }
+            DialogKind::RunSave => { self.dismiss_run_save(cx); return; }
         }
         cx.notify();
         self.restore_document_focus(cx);
@@ -588,6 +758,8 @@ impl MatrixWindow {
         if matches!(
             kind,
             DialogKind::ColumnEditor
+                | DialogKind::HashText(_)
+                | DialogKind::HashFiles(_)
                 | DialogKind::DocumentSwitcher
                 | DialogKind::BackupFailure
                 | DialogKind::FindInResultsProgress
@@ -601,6 +773,8 @@ impl MatrixWindow {
                     window.activate_window();
                     owner.update(cx, |view, cx| match kind {
                         DialogKind::ColumnEditor => view.focus_column_editor(window, cx),
+                        DialogKind::HashText(algorithm) => view.focus_hash_text(algorithm, window, cx),
+                        DialogKind::HashFiles(algorithm) => view.focus_hash_files(algorithm, window, cx),
                         DialogKind::BackupFailure => view.focus_backup_failure(window, cx),
                         DialogKind::FindInResultsProgress => {
                             view.focus_find_in_results_progress(window, cx)
@@ -621,12 +795,18 @@ impl MatrixWindow {
             DialogKind::FindInResults => Some(self.find_in_results_input()),
             DialogKind::GoTo => Some(self.goto_input.clone()),
             DialogKind::Run => Some(self.run_input.clone()),
+            DialogKind::RunSave => Some(self.run_save_input()),
             DialogKind::MacroSave => Some(self.macro_dialogs.name_input.clone()),
             DialogKind::MacroRepeat => Some(self.macro_dialogs.count_input.clone()),
             _ => None,
         };
         let focus = match kind {
+            DialogKind::FindSwap => self.find_swap_popup_focus(),
+            DialogKind::RunVariables => self.run_variables_focus(),
+            DialogKind::WindowManager => self.window_manager_focus(),
             DialogKind::Preferences => self.preferences_focus.clone(),
+            DialogKind::StyleConfigurator => self.style_config.focus.clone(),
+            DialogKind::ShortcutMapper => self.preferences_focus.clone(),
             DialogKind::Udl => self.udl.focus.clone(),
             DialogKind::UdlStyler => self.udl.styler_focus.clone(),
             _ => self.close_focus.clone(),
@@ -679,18 +859,30 @@ impl MatrixWindow {
             }
             let mut bounds = Bounds::centered(
                 window.display(cx).map(|display| display.id()),
-                kind.dimensions(),
+                if kind == DialogKind::Find && self.find_controls.compact {
+                    size(px(find_surface::DIALOG_WIDTH), px(find_surface::COMPACT_DIALOG_HEIGHT))
+                } else {
+                    kind.dimensions(window)
+                },
                 cx,
             );
-            if matches!(kind, DialogKind::Completion | DialogKind::Calltip) {
-                let Some(positioned) =
+            if kind == DialogKind::WindowManager && let Some(previous) = self.window_manager_bounds() {
+                bounds = previous;
+            }
+            if matches!(kind, DialogKind::FindSwap | DialogKind::Completion | DialogKind::Calltip | DialogKind::RunVariables) {
+                let Some(positioned) = (if kind == DialogKind::FindSwap {
+                    self.find_swap_popup_bounds()
+                } else if kind == DialogKind::RunVariables {
+                    self.run_variables_bounds()
+                } else {
                     self.intelligence_popup_bounds(kind == DialogKind::Calltip, window, cx)
+                })
                 else {
                     self.floating_opening.remove(&kind);
                     continue;
                 };
                 bounds = positioned;
-                if let Some(display) = window.display(cx) {
+                if kind != DialogKind::FindSwap && let Some(display) = window.display(cx) {
                     let area = display.visible_bounds();
                     bounds.size.width = bounds.size.width.min(area.size.width);
                     bounds.size.height = bounds.size.height.min(area.size.height);
@@ -709,15 +901,15 @@ impl MatrixWindow {
             let options = gpui::WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 focus: !matches!(kind, DialogKind::Completion | DialogKind::Calltip),
-                kind: gpui::WindowKind::Floating,
-                titlebar: Some(TitlebarOptions {
-                    title: Some(kind.title(self).into()),
+                kind: if kind.borderless_popup() { gpui::WindowKind::PopUp } else { gpui::WindowKind::Floating },
+                titlebar: (!kind.borderless_popup()).then(|| TitlebarOptions {
+                    title: Some(kind.window_title(self).into()),
                     ..Default::default()
                 }),
-                is_movable: true,
+                is_movable: !kind.borderless_popup(),
                 is_minimizable: false,
-                is_resizable: kind == DialogKind::MarkdownPreview,
-                window_min_size: Some(bounds.size),
+                is_resizable: matches!(kind, DialogKind::MarkdownPreview | DialogKind::WindowManager),
+                window_min_size: Some(if kind == DialogKind::WindowManager { window_manager_surface::minimum_dimensions() } else { bounds.size }),
                 ..Default::default()
             };
             let weak = cx.weak_entity();

@@ -87,6 +87,7 @@ impl MatrixWindow {
         cx: &mut Context<Self>,
     ) {
         if self.file_busy
+            || self.file_open_sequence_pending()
             || self.close_dialog
             || self.save_all_dialog
             || self.reload_target.is_some()
@@ -152,50 +153,37 @@ impl MatrixWindow {
         }
     }
 
-    fn open_recent_paths(
+    pub(super) fn open_recent_paths(
         &mut self,
         paths: Vec<PathBuf>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.cancel_view_composition(window, cx) {
-            return;
-        }
-        self.file_busy = true;
-        let worker = cx.background_executor().spawn(async move {
-            paths
-                .into_iter()
-                .map(|path| {
-                    let result = crate::files::DiskFile::load_unicode(&path);
-                    (path, result)
-                })
-                .collect::<Vec<_>>()
-        });
-        cx.spawn_in(window, async move |view, cx| {
-            let loaded = worker.await;
-            if let Err(error) = view.update_in(cx, |view, window, cx| {
-                view.file_busy = false;
-                let mut errors = Vec::new();
-                for (path, result) in loaded {
-                    let result = result.and_then(|(file, text)| {
-                        view.workspace
-                            .open_buffer(file, &text)
-                            .map_err(|error| io::Error::other(error.to_string()))
-                    });
-                    if let Err(error) = result {
-                        errors.push(format!("{}：{error}", path.display()));
-                    }
-                }
-                view.reset_active_view(window, cx);
-                if !errors.is_empty() {
-                    view.notify_editor_error(errors.join("\n"), cx);
-                }
-            }) {
-                eprintln!("recent-file operation lost its document: {error}");
-            }
-        })
-        .detach();
-        cx.notify();
+        self.start_open_paths(paths, window, cx);
+    }
+
+    pub(super) fn apply_file_menu_preferences(&mut self, settings: &serde_json::Value) {
+        self.file_prompt.recent_in_submenu = settings["History"]["inSubMenu"].as_bool().unwrap_or(false);
+        self.file_prompt.recent_custom_length = settings["History"]["customLength"].as_i64().unwrap_or(-1);
+    }
+
+    pub(super) fn recent_file_menu_entries(&self) -> Vec<crate::menu::MenuEntry> {
+        use crate::menu::{DocumentCommand, MenuEntry};
+        let paths = self.workspace.recently_closed();
+        if paths.is_empty() { return Vec::new(); }
+        let mut entries = paths.iter().enumerate().map(|(index, path)| MenuEntry::DynamicAction {
+            command: MenuCommand::File(FileCommand::Recent(index)),
+            label: recent_file_label(path, index, self.file_prompt.recent_custom_length),
+            shortcut: String::new(),
+        }).collect::<Vec<_>>();
+        entries.push(MenuEntry::Separator);
+        entries.push(MenuEntry::Action(MenuCommand::Document(DocumentCommand::RestoreLastClosed)));
+        entries.push(MenuEntry::Action(MenuCommand::File(FileCommand::OpenAllRecent)));
+        entries.push(MenuEntry::Action(MenuCommand::File(FileCommand::ClearRecent)));
+        entries.push(MenuEntry::Separator);
+        if self.file_prompt.recent_in_submenu {
+            vec![MenuEntry::Submenu { selector: "file-recent-files", label: "最近文件", mnemonic: 'r', entries }, MenuEntry::Separator]
+        } else { entries }
     }
 
     fn rename_current_file(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -268,7 +256,11 @@ impl MatrixWindow {
                 view.file_busy = false;
                 let result = result.and_then(|result| {
                     match result {
-                        Some(Renamed::Tab(name)) => view.workspace.rename_untitled(id, &name)?,
+                        Some(Renamed::Tab(name)) => {
+                            let old_name = view.workspace.active().name();
+                            view.workspace.rename_untitled(id, &name)?;
+                            view.synchronize_renamed_tab_backup(id, &old_name, cx);
+                        }
                         Some(Renamed::File { from, to, file }) => {
                             crate::folder_workspace::relocate_open_paths(
                                 &mut view.workspace,
@@ -288,6 +280,7 @@ impl MatrixWindow {
                                     );
                                 }
                             }
+                            view.synchronize_renamed_tab_backup(id, &name, cx);
                         }
                         None => {}
                     }
@@ -348,6 +341,7 @@ impl MatrixWindow {
             .await;
             if let Err(error) = view.update_in(cx, |view, window, cx| {
                 view.file_busy = false;
+                let mut removed_document = false;
                 let result = result.and_then(|removed| {
                     if removed {
                         for pane in [
@@ -364,9 +358,11 @@ impl MatrixWindow {
                                     .map_err(|error| io::Error::other(error.to_string()))?;
                             }
                         }
+                        removed_document = true;
                     }
                     Ok(())
                 });
+                if result.is_ok() && removed_document && view.quit_after_last_document_close(id, window, cx) { return; }
                 view.reset_active_view(window, cx);
                 if let Err(error) = result {
                     view.notify_editor_error(format!("移到废纸篓失败：{error}"), cx);
@@ -378,4 +374,53 @@ impl MatrixWindow {
         .detach();
         cx.notify();
     }
+}
+
+fn prefix_units(value: &str, maximum: usize) -> &str {
+    let mut units = 0;
+    let mut end = 0;
+    for (offset, ch) in value.char_indices() {
+        units += ch.len_utf16();
+        if units > maximum { break; }
+        end = offset + ch.len_utf8();
+    }
+    &value[..end]
+}
+
+fn suffix_units(value: &str, maximum: usize) -> &str {
+    let mut units = 0;
+    let mut start = value.len();
+    for (offset, ch) in value.char_indices().rev() {
+        units += ch.len_utf16();
+        if units > maximum { break; }
+        start = offset;
+    }
+    &value[start..]
+}
+
+fn compact_recent_path(path: &std::path::Path, maximum: usize) -> String {
+    let full = path.to_string_lossy();
+    if full.encode_utf16().count() <= maximum { return full.into_owned(); }
+    if maximum <= 3 { return ".".repeat(maximum); }
+    let filename = path.file_name().map(|name| name.to_string_lossy()).unwrap_or_else(|| full.clone());
+    let filename_length = filename.encode_utf16().count();
+    if filename_length + 4 > maximum {
+        return format!("{}...", prefix_units(&filename, maximum - 3));
+    }
+    let prefix_length = maximum - filename_length - 4;
+    let prefix = prefix_units(&full, prefix_length);
+    format!("{prefix}.../{filename}")
+}
+
+fn recent_file_label(path: &std::path::Path, index: usize, custom_length: i64) -> String {
+    let name = if custom_length > 0 {
+        compact_recent_path(path, custom_length.min(259) as usize)
+    } else {
+        let value = if custom_length == 0 {
+            path.file_name().map(|name| name.to_string_lossy()).unwrap_or_else(|| path.as_os_str().to_string_lossy())
+        } else { path.as_os_str().to_string_lossy() };
+        if value.encode_utf16().count() < 260 { value.into_owned() }
+        else { format!("{}...{}", prefix_units(&value, 127), suffix_units(&value, 130)) }
+    };
+    format!("{}: {name}", index + 1)
 }

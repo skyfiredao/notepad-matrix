@@ -3,6 +3,9 @@ use std::io::{self, Write};
 use std::ops::Range;
 use std::sync::Arc;
 
+use crate::unicode_class::{CharacterClass, classify};
+use crate::unicode_grapheme;
+
 const LEAF_BYTES: usize = 4096;
 const COPIED_MERGE_BYTES: usize = 256;
 
@@ -290,6 +293,15 @@ pub struct ByteBuffer {
     root: Option<Arc<Node>>,
 }
 
+impl fmt::Debug for ByteBuffer {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("ByteBuffer")
+            .field("len", &self.len())
+            .field("line_count", &self.line_count())
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidByteRange;
 
@@ -364,6 +376,245 @@ impl ByteBuffer {
         }
     }
 
+    pub fn adjacent_position(&self, position: usize, forward: bool) -> Result<usize, InvalidByteRange> {
+        if position > self.len() { return Err(InvalidByteRange); }
+        let next = if forward { position.saturating_add(1).min(self.len()) } else { position.saturating_sub(1) };
+        self.move_position_outside_char(next, forward, true)
+    }
+
+    fn good_utf8_range(&self, position: usize) -> Option<Range<usize>> {
+        if !self.byte(position).is_some_and(|byte| byte & 0xc0 == 0x80) { return None; }
+        for start in (position.saturating_sub(3)..position).rev() {
+            let bytes = (start..start.saturating_add(4).min(self.len())).filter_map(|at| self.byte(at));
+            if let Some(unit) = crate::byte_text::units(bytes).next()
+                && matches!(unit.value, crate::byte_text::ByteValue::Scalar(_))
+                && start + unit.range.end > position {
+                return Some(start..start + unit.range.end);
+            }
+        }
+        None
+    }
+
+    pub fn move_position_outside_char(&self, position: usize, forward: bool, check_line_end: bool) -> Result<usize, InvalidByteRange> {
+        if position > self.len() { return Err(InvalidByteRange); }
+        if position == 0 || position == self.len() { return Ok(position); }
+        if check_line_end && self.byte(position - 1) == Some(b'\r') && self.byte(position) == Some(b'\n') {
+            return Ok(if forward { position + 1 } else { position - 1 });
+        }
+        Ok(self.good_utf8_range(position).map_or(position, |range| if forward { range.end } else { range.start }))
+    }
+
+    pub fn next_position(&self, position: usize, forward: bool) -> Result<usize, InvalidByteRange> {
+        if position > self.len() { return Err(InvalidByteRange); }
+        if forward {
+            if position == self.len() { return Ok(position); }
+            let bytes = (position..position.saturating_add(4).min(self.len())).filter_map(|at| self.byte(at));
+            let length = crate::byte_text::units(bytes).next().map_or(1, |unit| unit.range.len());
+            return Ok((position + length).min(self.len()));
+        }
+        Ok(self.previous_position(position))
+    }
+
+    pub(crate) fn previous_position(&self, position: usize) -> usize {
+        let previous = position.saturating_sub(1);
+        self.good_utf8_range(previous).map_or(previous, |range| range.start)
+    }
+
+    pub fn deletion_range(&self, position: usize, backward: bool) -> Result<Range<usize>, InvalidByteRange> {
+        if position > self.len() { return Err(InvalidByteRange); }
+        if backward {
+            let start = if position >= 2 && self.byte(position - 2) == Some(b'\r') && self.byte(position - 1) == Some(b'\n') {
+                position - 2
+            } else { self.next_position(position, false)? };
+            Ok(start..position)
+        } else {
+            let end = if self.byte(position) == Some(b'\r') && self.byte(position + 1) == Some(b'\n') {
+                position + 2
+            } else { self.next_position(position, true)? };
+            Ok(position..end)
+        }
+    }
+
+    pub fn count_characters(&self, range: Range<usize>, limit: usize) -> Result<usize, InvalidByteRange> {
+        self.validate(&range)?;
+        let mut position = self.move_position_outside_char(range.start, true, false)?;
+        let end = self.move_position_outside_char(range.end, false, false)?;
+        let mut count = 0;
+        while position < end && count < limit {
+            count += 1;
+            position = self.next_position(position, true)?;
+        }
+        Ok(count)
+    }
+
+    pub fn is_line_end(&self, position: usize) -> bool {
+        position == self.len() || self.byte(position) == Some(b'\r')
+            || self.byte(position) == Some(b'\n') && (position == 0 || self.byte(position - 1) != Some(b'\r'))
+    }
+
+    pub fn column(&self, position: usize, tab_width: usize) -> Result<usize, InvalidByteRange> {
+        let line = self.line_index(position)?;
+        let mut at = self.line_start(line)?;
+        let width = tab_width.max(1);
+        let mut column = 0;
+        while at < position {
+            match self.byte(at) {
+                Some(b'\t') => { column += width - column % width; at += 1; }
+                Some(b'\r' | b'\n') => break,
+                Some(_) => {
+                    at = self.next_position(at, true)?;
+                    if at > position { break; }
+                    column += 1;
+                }
+                None => return Err(InvalidByteRange),
+            }
+        }
+        Ok(column)
+    }
+
+    pub fn find_column(&self, line: usize, target: usize, tab_width: usize) -> Result<usize, InvalidByteRange> {
+        let mut position = self.line_start(line)?;
+        let mut column = 0;
+        let width = tab_width.max(1);
+        while position < self.len() && !self.is_line_end(position) && column < target {
+            let next = if self.byte(position) == Some(b'\t') {
+                column + width - column % width
+            } else { column + 1 };
+            if next > target { return Ok(position); }
+            column = next;
+            position = self.next_position(position, true)?;
+        }
+        Ok(position)
+    }
+
+    pub(crate) fn character_at(&self, position: usize) -> (char, usize) {
+        let input = (position..position.saturating_add(4).min(self.len())).filter_map(|at| self.byte(at));
+        match crate::byte_text::units(input).next() {
+            Some(crate::byte_text::ByteUnit { range, value: crate::byte_text::ByteValue::Scalar(character) }) => (character, range.len()),
+            Some(_) => ('\u{fffd}', 1),
+            None => ('\u{fffd}', 0),
+        }
+    }
+
+    fn character_before(&self, position: usize) -> char {
+        let Some(previous) = position.checked_sub(1) else { return '\u{fffd}'; };
+        let byte = self.byte(previous).unwrap_or(0);
+        if byte.is_ascii() { return char::from(byte); }
+        if byte & 0xc0 != 0x80 { return '\u{fffd}'; }
+        let mut start = previous;
+        while start > 0 && position - start < 4 && self.byte(start).is_some_and(|byte| byte & 0xc0 == 0x80) { start -= 1; }
+        let (character, width) = self.character_at(start);
+        if start + width == position { character } else { '\u{fffd}' }
+    }
+
+    pub(crate) fn is_word_start(&self, position: usize) -> bool {
+        if position >= self.len() { return false; }
+        let current = classify(self.character_at(position).0);
+        let previous = if position == 0 { CharacterClass::Space } else { classify(self.character_before(position)) };
+        matches!(current, CharacterClass::Word | CharacterClass::Punctuation) && current != previous
+    }
+
+    pub(crate) fn is_word_end(&self, position: usize) -> bool {
+        if position == 0 || position > self.len() { return false; }
+        let previous = classify(self.character_before(position));
+        let current = if position == self.len() { CharacterClass::Space } else { classify(self.character_at(position).0) };
+        matches!(previous, CharacterClass::Word | CharacterClass::Punctuation) && current != previous
+    }
+
+    pub(crate) fn extend_word(&self, position: usize, forward: bool) -> Result<usize, InvalidByteRange> {
+        let mut position = self.move_position_outside_char(position, forward, false)?;
+        if forward {
+            while position < self.len() && classify(self.character_at(position).0) == CharacterClass::Word {
+                position = self.next_position(position, true)?;
+            }
+        } else {
+            while position > 0 && classify(self.character_before(position)) == CharacterClass::Word {
+                position = self.next_position(position, false)?;
+            }
+        }
+        Ok(position)
+    }
+
+    pub(crate) fn discard_last_combined_character(&self, range: Range<usize>) -> Result<Option<usize>, InvalidByteRange> {
+        self.validate(&range)?;
+        let mut end = range.end;
+        while end - range.start > 4 {
+            let character = self.character_before(end);
+            end = self.next_position(end, false)?;
+            if unicode_grapheme::is_base(character) { return Ok(Some(end)); }
+        }
+        Ok(None)
+    }
+
+    pub(crate) fn find_literal_bytes(
+        &self,
+        query: &[u8],
+        from: usize,
+        to: usize,
+        match_case: bool,
+        whole_word: bool,
+        word_start: bool,
+    ) -> Result<Option<Range<usize>>, InvalidByteRange> {
+        if query.is_empty() { return Ok(Some(from..from)); }
+        let forward = from <= to;
+        let start = self.move_position_outside_char(from, forward, false)?;
+        let end = self.move_position_outside_char(to, forward, false)?;
+        let limit = start.max(end);
+        let mut position = if forward { start } else { self.next_position(start, false)? };
+        let fold = |input: &[u8]| {
+            let mut output = Vec::new();
+            for unit in crate::byte_text::units(input.iter().copied()) {
+                match unit.value {
+                    crate::byte_text::ByteValue::Invalid(byte) => output.push(byte),
+                    crate::byte_text::ByteValue::Scalar(character) => {
+                        if let Some(mapped) = crate::unicode_case::mapping(character) { output.extend_from_slice(mapped.as_bytes()); }
+                        else { output.extend(character.to_string().bytes()); }
+                    }
+                }
+            }
+            output
+        };
+        let key = if match_case { query.to_vec() } else { fold(query) };
+        loop {
+            if (forward && position >= end) || (!forward && position < end) { break; }
+            let mut after = position;
+            let mut matched = 0;
+            let mut first_width = 1;
+            if match_case {
+                if query.len() <= limit - position
+                    && query.iter().enumerate().all(|(index, byte)| self.byte(position + index) == Some(*byte)) {
+                    matched = query.len();
+                    after += query.len();
+                }
+            } else {
+                while matched < key.len() && after < limit {
+                    let width = self.character_at(after).1;
+                    if after == position { first_width = width; }
+                    if width == 0 || after + width > limit { break; }
+                    let input: Vec<_> = (after..after + width).filter_map(|at| self.byte(at)).collect();
+                    let folded = fold(&input);
+                    if key.get(matched..matched + folded.len()) != Some(folded.as_slice()) { break; }
+                    matched += folded.len();
+                    after += width;
+                }
+            }
+            if matched == key.len()
+                && (!whole_word || position < after && self.is_word_start(position) && self.is_word_end(after))
+                && (!word_start || self.is_word_start(position)) {
+                return Ok(Some(position..after));
+            }
+            let next = if forward && (!match_case || query[0] & 0xc0 != 0x80) { position + first_width }
+                else { self.next_position(position, forward)? };
+            if next == position { break; }
+            position = next;
+        }
+        Ok(None)
+    }
+
+    pub fn lines(&self) -> ByteLines {
+        ByteLines { bytes: self.to_vec(), position: 0, finished: false }
+    }
+
     pub fn chunks(&self) -> Chunks<'_> {
         Chunks {
             pending: self.root.as_deref().into_iter().collect(),
@@ -424,6 +675,32 @@ impl ByteBuffer {
 
 pub struct Chunks<'a> {
     pending: Vec<&'a Node>,
+}
+
+pub struct ByteLines {
+    bytes: Vec<u8>,
+    position: usize,
+    finished: bool,
+}
+
+impl Iterator for ByteLines {
+    type Item = Vec<u8>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.finished { return None; }
+        let start = self.position;
+        while self.position < self.bytes.len() {
+            let byte = self.bytes[self.position];
+            self.position += 1;
+            if byte == b'\r' {
+                if self.bytes.get(self.position) == Some(&b'\n') { self.position += 1; }
+                return Some(self.bytes[start..self.position].to_vec());
+            }
+            if byte == b'\n' { return Some(self.bytes[start..self.position].to_vec()); }
+        }
+        self.finished = true;
+        Some(self.bytes[start..].to_vec())
+    }
 }
 
 impl<'a> Iterator for Chunks<'a> {

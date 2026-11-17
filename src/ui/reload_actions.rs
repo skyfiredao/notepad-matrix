@@ -19,6 +19,7 @@ impl MatrixWindow {
             return;
         }
         if self.file_busy
+            || self.file_open_sequence_pending()
             || self.close_dialog
             || self.save_all_restore.is_some()
             || self.reload_target.is_some()
@@ -78,12 +79,13 @@ impl MatrixWindow {
             return;
         };
         let path = file.path().to_owned();
+        let byte_code_page = self.workspace.active().byte_code_page();
         self.file_busy = true;
         let executor = cx.background_executor().clone();
         cx.notify();
         cx.spawn_in(window, async move |view, cx| {
             let loaded = executor
-                .spawn(async move { crate::files::DiskFile::load_unicode(&path) })
+                .spawn(async move { crate::files::DiskFile::load_with_code_page(&path, byte_code_page) })
                 .await;
             if let Err(error) = view.update_in(cx, |view, window, cx| {
                 view.file_busy = false;
@@ -110,14 +112,16 @@ impl MatrixWindow {
                 });
                 match result {
                     Ok(()) => {
+                        view.initialize_active_change_history();
                         let top_line = view.editor_top_line;
                         view.reset_active_view(window, cx);
+                        view.preferences_apply_large_file_open_policy(window, cx);
                         view.editor_top_line = top_line;
                         view.editor_follow_caret = false;
                     }
                     Err(error) => {
                         view.notify_editor_error(
-                            format!("Reload failed (supported Unicode): {error}"),
+                            format!("Reload failed: {error}"),
                             cx,
                         );
                         view.editor_focus.focus(window, cx);
@@ -132,6 +136,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_reload_dialog(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        use super::dialog_font::px;
         if !self.reload_dialog {
             return None;
         }
