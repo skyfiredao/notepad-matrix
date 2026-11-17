@@ -567,20 +567,20 @@ impl MatrixWindow {
     fn edit_new_document(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let codepage = self.pref_int("NewDocDefaultSettings.codepage", -1);
         let encoding = self.pref_int("NewDocDefaultSettings.encoding", 4);
-        let mut controls = vec![group("新建文档", 15., 8., 424., 174.), group("格式（换行符）", 58., 29., 129., 79.), group("编码", 232., 28., 175., 122.)];
+        let mut controls = vec![group("新建文档", 8., 4., 444., 194.), group("格式（换行符）", 16., 22., 194., 74.), group("编码", 220., 22., 224., 126.)];
         for (id, name, value, y) in [
-            ("pref-new-crlf", "Windows (CR LF)", 0, 48.),
-            ("pref-new-lf", "Unix (LF)", 2, 64.),
+            ("pref-new-crlf", "Windows (CR LF)", 0, 40.),
+            ("pref-new-lf", "Unix (LF)", 2, 60.),
             ("pref-new-cr", "Macintosh (CR)", 1, 80.),
-        ] { controls.push(self.edit_radio(id, name, "NewDocDefaultSettings.format", 2.into(), value.into(), true, 65., y, 110., cx)); }
+        ] { controls.push(self.edit_radio(id, name, "NewDocDefaultSettings.format", 2.into(), value.into(), true, 28., y, 170., cx)); }
         for (id, name, value, y) in [
-            ("pref-new-utf8", "UTF-8", 4, 53.),
-            ("pref-new-utf8-bom", "UTF-8 BOM", 1, 79.),
-            ("pref-new-utf16-be", "UTF-16 BE BOM", 2, 95.),
-            ("pref-new-utf16-le", "UTF-16 LE BOM", 3, 111.),
-        ] { controls.push(self.edit_value_radio(id, name, codepage < 0 && encoding == value, "NewDocDefaultSettings.encoding", value.into(), 242., y, 150., cx)); }
-        controls.push(self.edit_value_radio("pref-new-codepage", "", codepage >= 0, "NewDocDefaultSettings.codepage", if codepage >= 0 { codepage.into() } else { self.preferences.editing.new_document_codepage.unwrap_or(1250).into() }, 242., 126., 10., cx));
-        controls.push(self.edit_choice("NewDocDefaultSettings.codepage", self.edit_new_document_codepages(codepage), (-1).into(), codepage >= 0, 257., 125., 100., cx));
+            ("pref-new-utf8", "UTF-8", 4, 40.),
+            ("pref-new-utf8-bom", "UTF-8 BOM", 1, 60.),
+            ("pref-new-utf16-be", "UTF-16 BE BOM", 2, 80.),
+            ("pref-new-utf16-le", "UTF-16 LE BOM", 3, 100.),
+        ] { controls.push(self.edit_value_radio(id, name, codepage < 0 && encoding == value, "NewDocDefaultSettings.encoding", value.into(), 232., y, 200., cx)); }
+        controls.push(self.edit_value_radio("pref-new-codepage", "", codepage >= 0, "NewDocDefaultSettings.codepage", if codepage >= 0 { codepage.into() } else { self.preferences.editing.new_document_codepage.unwrap_or(1250).into() }, 232., 126., 10., cx));
+        controls.push(self.edit_choice("NewDocDefaultSettings.codepage", self.edit_new_document_codepages(codepage), (-1).into(), codepage >= 0, 248., 124., 184., cx));
         let mut languages = vec![(0.into(), crate::localization::menu_command(&self.native_locale(), 46016).unwrap_or("None (Normal Text)").to_owned())];
         if let Ok(catalog) = crate::languages::catalog() {
             let mut items: Vec<_> = catalog.profiles().iter().filter(|language| !language.internal && language.id != 0)
@@ -589,19 +589,19 @@ impl MatrixWindow {
             items.sort_by(|left, right| left.1.to_lowercase().cmp(&right.1.to_lowercase()));
             languages.extend(items);
         }
-        controls.push(label_right("默认语言：", 16., 124., 77.));
-        controls.push(self.edit_choice("NewDocDefaultSettings.lang", languages, 0.into(), true, 98., 123., 100., cx));
-        controls.push(self.edit_check("pref-new-at-startup", "启动时始终打开新文档", "NewDocDefaultSettings.addNewDocumentOnStartup", false, false, true, 23., 152., 270., cx));
-        controls.push(self.edit_check("pref-new-tab-name", "使用文档第一行作为未命名标签页的名称", "NewDocDefaultSettings.useContentAsTabName", false, false, true, 23., 165., 270., cx));
+        controls.push(label("默认语言：", 28., 101., 170.));
+        controls.push(self.edit_choice("NewDocDefaultSettings.lang", languages, 0.into(), true, 28., 116., 170., cx));
+        controls.push(self.edit_check("pref-new-at-startup", "启动时始终打开新文档", "NewDocDefaultSettings.addNewDocumentOnStartup", false, false, true, 22., 160., 416., cx));
+        controls.push(self.edit_check("pref-new-tab-name", "使用文档第一行作为未命名标签页的名称", "NewDocDefaultSettings.useContentAsTabName", false, false, true, 22., 181., 416., cx));
         controls
     }
 
     fn edit_language(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let mut controls = vec![
-            group("程序语言菜单", 120., 0., 220., 181.),
+            group("程序语言菜单", 8., 4., 444., 175.),
             self.edit_compact_language(cx),
-            label_center("可用项", 138., 31., 72.), label_center("禁用项", 253., 31., 72.),
-            self.edit_check("pref-language-sql-escape", "将反斜杠视为 SQL 转义字符", "SQL.backSlashIsEscapeCharacterForSql", true, false, true, 123., 184., 217., cx),
+            label_center("可用项", 20., 40., 186.), label_center("禁用项", 254., 40., 186.),
+            self.edit_check("pref-language-sql-escape", "将反斜杠视为 SQL 转义字符", "SQL.backSlashIsEscapeCharacterForSql", true, false, true, 20., 187., 420., cx),
         ];
         if let Ok(catalog) = crate::languages::catalog() {
             let mut languages: Vec<_> = catalog.profiles().iter().filter(|language| !language.internal).collect();
@@ -611,8 +611,8 @@ impl MatrixWindow {
                     .then_with(|| left.label.to_lowercase().cmp(&right.label.to_lowercase()))
             });
             for (disabled, x, selected, list_id) in [
-                (false, 133., self.preferences.editing.language_available, "pref-languages-available"),
-                (true, 250., self.preferences.editing.language_disabled, "pref-languages-disabled"),
+                (false, 20., self.preferences.editing.language_available, "pref-languages-available"),
+                (true, 254., self.preferences.editing.language_disabled, "pref-languages-disabled"),
             ] {
                 let items = languages.iter().filter(|language| {
                     let mask = self.pref_int(&format!("langsExcluded.gr{}", language.id / 8), 0);
@@ -630,11 +630,11 @@ impl MatrixWindow {
                             cx.notify();
                         })).into_any_element()
                 }).collect::<Vec<_>>();
-                controls.push(self.edit_list(list_id, usize::from(disabled), x, 44., 78., 120., items, cx));
+                controls.push(self.edit_list(list_id, usize::from(disabled), x, 54., 186., 112., items, cx));
             }
         }
-        controls.push(self.pref_button("pref-language-remove", "->", self.preferences.editing.language_available.is_some(), 218. * SCALE, 76. * SCALE, 25. * SCALE, Self::edit_disable_language, cx));
-        controls.push(self.pref_button("pref-language-restore", "<-", self.preferences.editing.language_disabled.is_some(), 218. * SCALE, 107. * SCALE, 25. * SCALE, Self::edit_restore_language, cx));
+        controls.push(self.pref_button("pref-language-remove", "->", self.preferences.editing.language_available.is_some(), 214. * SCALE, 86. * SCALE, 32. * SCALE, Self::edit_disable_language, cx));
+        controls.push(self.pref_button("pref-language-restore", "<-", self.preferences.editing.language_disabled.is_some(), 214. * SCALE, 118. * SCALE, 32. * SCALE, Self::edit_restore_language, cx));
         controls
     }
 
@@ -657,7 +657,7 @@ impl MatrixWindow {
     fn edit_restore_language(&mut self, window: &mut Window, cx: &mut Context<Self>) { self.edit_move_language(true, window, cx); }
 
     fn edit_indentation(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let mut controls = vec![group("缩进设置", 62., 0., 212., 194.), group("自动缩进", 284., 0., 112., 59.)];
+        let mut controls = vec![group("缩进设置", 8., 4., 280., 194.), group("自动缩进", 298., 4., 154., 78.)];
         let selected = self.preferences.editing.indentation_language.as_deref();
         let mut items = vec![(None, "[Default]".to_owned())];
         if let Ok(catalog) = crate::languages::catalog() {
@@ -674,13 +674,13 @@ impl MatrixWindow {
                     cx.notify();
                 })).into_any_element()
         }).collect::<Vec<_>>();
-        controls.push(self.edit_list("pref-indent-languages", 2, 127., 15., 84., 70., rows, cx));
+        controls.push(self.edit_list("pref-indent-languages", 2, 20., 20., 256., 70., rows, cx));
         let inherited = selected.is_some_and(|name| self.pref_int(&format!("TabSettings.languages.{name}.size"), 0) <= 0);
         if selected.is_some() {
-            controls.push(group("", 72., 92., 192., 92.));
+            controls.push(group("", 18., 102., 260., 84.));
             let text = crate::localization::current_preference_control(6510).unwrap_or("Use default value");
             let focus = self.preference_control_focus("pref-indent-default", cx).tab_stop(true);
-            controls.push(preferences_surface::source_rect(68. * SCALE, 91. * SCALE, 122. * SCALE, 10. * SCALE).id("pref-indent-default")
+            controls.push(preferences_surface::source_rect(28. * SCALE, 99. * SCALE, 238. * SCALE, 10. * SCALE).id("pref-indent-default")
                 .text_size(px(12.)).line_height(px(14.)).flex().items_center().gap(px(3.))
                 .when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
                 .role(Role::CheckBox).aria_label(text).aria_toggled(inherited.into())
@@ -692,20 +692,20 @@ impl MatrixWindow {
                 })).into_any_element());
         }
         let paths = tab_paths(if inherited { None } else { selected });
-        controls.push(label_right("缩进大小：", 82., 105., 98.));
-        controls.push(self.edit_input(paths[0], 182., 103., 14., !inherited, cx));
-        controls.push(label("缩进方式：", 78., 118., 135.));
-        controls.push(self.edit_radio("pref-indent-tabs", "制表符", paths[1], false.into(), false.into(), !inherited, 84., 131., 165., cx));
-        controls.push(self.edit_radio("pref-indent-spaces", "空格字符", paths[1], false.into(), true.into(), !inherited, 84., 144., 165., cx));
-        controls.push(self.edit_check("pref-indent-backspace", "退格键减少缩进，而不是删除单个空格", paths[2], false, false, !inherited, 78., 159., 180., cx));
-        for (id, text, value, y) in [("pref-indent-none", "无", 0, 13.), ("pref-indent-basic", "基本模式", 2, 28.), ("pref-indent-advanced", "高级模式", 1, 43.)] {
-            let radio = self.edit_radio(id, text, "maintain_indent", 1.into(), value.into(), true, if crate::localization::current_preference_rtl() { 360. } else { 0. }, 0., 100., cx);
+        controls.push(label_right("缩进大小：", 28., 119., 90.));
+        controls.push(self.edit_input(paths[0], 124., 116., 50., !inherited, cx));
+        controls.push(label("缩进方式：", 28., 140., 78.));
+        controls.push(self.edit_radio("pref-indent-tabs", "制表符", paths[1], false.into(), false.into(), !inherited, 110., 140., 70., cx));
+        controls.push(self.edit_radio("pref-indent-spaces", "空格字符", paths[1], false.into(), true.into(), !inherited, 190., 140., 76., cx));
+        controls.push(self.edit_check("pref-indent-backspace", "退格键减少缩进，而不是删除单个空格", paths[2], false, false, !inherited, 28., 163., 238., cx));
+        for (id, text, value, y) in [("pref-indent-none", "无", 0, 22.), ("pref-indent-basic", "基本模式", 2, 42.), ("pref-indent-advanced", "高级模式", 1, 62.)] {
+            let radio = self.edit_radio(id, text, "maintain_indent", 1.into(), value.into(), true, if crate::localization::current_preference_rtl() { 330. } else { 0. }, 0., 130., cx);
             let tip = match value {
                 2 => Some(crate::localization::current_string("autoIndentBasic-tip").unwrap_or("Ensure that the indentation of the current line (i.e. the new line created by pressing the ENTER key) matches the indentation of the previous line.")),
                 1 => Some(crate::localization::current_string("autoIndentAdvanced-tip").unwrap_or("Enable smart indentation for \"C-like\" languages and Python. The \"C-like\" languages include:\nC, C++, Java, C#, Objective-C, PHP, JavaScript, JSP, CSS, Perl, Rust, PowerShell, TypeScript, Go, Swift and JSON.\n\nIf you select advanced mode but do not edit files in the aforementioned languages, the indentation will remain in basic mode.")),
                 _ => None,
             };
-            controls.push(preferences_surface::source_rect(290. * SCALE, y * SCALE, 100. * SCALE, 10. * SCALE)
+            controls.push(preferences_surface::source_rect(310. * SCALE, y * SCALE, 130. * SCALE, 10. * SCALE)
                 .id(format!("{id}-tooltip"))
                 .when_some(tip, |element, tip| element.tooltip(move |_, cx| icon_tooltip::view(tip.to_owned(), false, cx)))
                 .child(radio).into_any_element());
@@ -728,10 +728,10 @@ impl MatrixWindow {
         let action = self.pref_int("auto-completion.autoCAction", 3);
         let enabled = action != 0;
         let words = action == 2 || action == 3;
-        let mut controls = vec![group("自动补全", 81., 3., 289., 105.), group("自动插入成对符号", 81., 114., 289., 83.)];
+        let mut controls = vec![group("自动补全", 8., 4., 444., 108.), group("自动插入成对符号", 8., 118., 328., 80.)];
         let text = crate::localization::current_preference_control(6808).unwrap_or("Enable auto-completion on each input");
         let focus = self.preference_control_focus("pref-completion-enable", cx).tab_stop(true);
-        controls.push(preferences_surface::source_rect(87. * SCALE, 16. * SCALE, 160. * SCALE, 10. * SCALE).id("pref-completion-enable")
+        controls.push(preferences_surface::source_rect(20. * SCALE, 18. * SCALE, 250. * SCALE, 10. * SCALE).id("pref-completion-enable")
             .text_size(px(12.)).line_height(px(14.)).flex().items_center().gap(px(3.))
             .when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
             .role(Role::CheckBox).aria_label(text).aria_toggled(enabled.into())
@@ -749,38 +749,38 @@ impl MatrixWindow {
                     cx.stop_propagation();
                 }
             })).into_any_element());
-        for (id, text, value, y) in [("pref-completion-functions", "函数自动补全", 1, 31.), ("pref-completion-words", "单词自动补全", 2, 46.), ("pref-completion-both", "函数与单词", 3, 61.)] {
-            controls.push(self.edit_radio(id, text, "auto-completion.autoCAction", 3.into(), value.into(), enabled, 99., y, 145., cx));
+        for (id, text, value, y) in [("pref-completion-functions", "函数自动补全", 1, 36.), ("pref-completion-words", "单词自动补全", 2, 52.), ("pref-completion-both", "函数与单词", 3, 68.)] {
+            controls.push(self.edit_radio(id, text, "auto-completion.autoCAction", 3.into(), value.into(), enabled, 32., y, 238., cx));
         }
-        controls.push(self.edit_check("pref-completion-brief", "使用简洁版自动补全列表", "auto-completion.autoCBrief", false, false, enabled, 87., 76., 160., cx));
-        controls.push(self.edit_check("pref-completion-parameters", "输入时提示函数参数", "auto-completion.funcParams", true, false, true, 87., 93., 160., cx));
-        controls.push(label_right(crate::localization::current_preference_control(6811).unwrap_or("From"), 243., 16., 47.));
-        controls.push(label_center(&self.pref_int("auto-completion.triggerFromNbChar", 1).to_string(), 294., 16., 8.));
-        controls.push(label(crate::localization::current_preference_control(6813).unwrap_or("th character"), 308., 16., 57.));
-        controls.push(label_right("1", 271., 30., 8.));
-        controls.push(label("9", 349., 30., 8.));
-        controls.push(self.pref_slider("auto-completion.triggerFromNbChar", 1, 9, 1, 281. * SCALE, 29. * SCALE, 66. * SCALE, enabled, cx));
-        controls.push(group("插入选中项", 266., 44., 96., 43.));
-        controls.push(self.edit_check("pref-completion-tab", "TAB（制表键）", "auto-completion.insertSelectedItemUseTAB", true, false, enabled, 272., 57., 75., cx));
-        controls.push(self.edit_check("pref-completion-enter", "ENTER（回车键）", "auto-completion.insertSelectedItemUseENTER", true, false, enabled, 272., 72., 75., cx));
-        controls.push(self.edit_check("pref-completion-ignore-numbers", "忽略数字", "auto-completion.autoCIgnoreNumbers", true, false, enabled && words, 266., 93., 96., cx));
+        controls.push(self.edit_check("pref-completion-brief", "使用简洁版自动补全列表", "auto-completion.autoCBrief", false, false, enabled, 20., 84., 250., cx));
+        controls.push(self.edit_check("pref-completion-parameters", "输入时提示函数参数", "auto-completion.funcParams", true, false, true, 20., 100., 250., cx));
+        controls.push(label_right(crate::localization::current_preference_control(6811).unwrap_or("From"), 284., 18., 40.));
+        controls.push(label_center(&self.pref_int("auto-completion.triggerFromNbChar", 1).to_string(), 330., 18., 12.));
+        controls.push(label(crate::localization::current_preference_control(6813).unwrap_or("th character"), 348., 18., 92.));
+        controls.push(label_right("1", 294., 36., 10.));
+        controls.push(label("9", 432., 36., 8.));
+        controls.push(self.pref_slider("auto-completion.triggerFromNbChar", 1, 9, 1, 310. * SCALE, 34. * SCALE, 116. * SCALE, enabled, cx));
+        controls.push(group("插入选中项", 284., 54., 156., 34.));
+        controls.push(self.edit_check("pref-completion-tab", "TAB（制表键）", "auto-completion.insertSelectedItemUseTAB", true, false, enabled, 294., 70., 64., cx));
+        controls.push(self.edit_check("pref-completion-enter", "ENTER（回车键）", "auto-completion.insertSelectedItemUseENTER", true, false, enabled, 366., 70., 68., cx));
+        controls.push(self.edit_check("pref-completion-ignore-numbers", "忽略数字", "auto-completion.autoCIgnoreNumbers", true, false, enabled && words, 284., 100., 156., cx));
         for (id, key, open, close, x, y, w) in [
-            ("pref-insert-parentheses", "auto-insert.parentheses", "(", "(  )", 98., 140., 24.),
-            ("pref-insert-brackets", "auto-insert.brackets", "[", "[  ]", 98., 160., 24.),
-            ("pref-insert-curly", "auto-insert.curlyBrackets", "{", "{  }", 98., 180., 24.),
-            ("pref-insert-double-quotes", "auto-insert.doubleQuotes", "\"", "\"  \"", 142., 140., 24.),
-            ("pref-insert-quotes", "auto-insert.quotes", "'", "'  '", 142., 160., 24.),
-            ("pref-insert-tags", "auto-insert.htmlXmlTag", "html/xml 结束标签", "html/xml 结束标签", 142., 180., 96.),
+            ("pref-insert-parentheses", "auto-insert.parentheses", "(", "(  )", 24., 142., 34.),
+            ("pref-insert-brackets", "auto-insert.brackets", "[", "[  ]", 24., 162., 34.),
+            ("pref-insert-curly", "auto-insert.curlyBrackets", "{", "{  }", 24., 182., 34.),
+            ("pref-insert-double-quotes", "auto-insert.doubleQuotes", "\"", "\"  \"", 80., 142., 34.),
+            ("pref-insert-quotes", "auto-insert.quotes", "'", "'  '", 80., 162., 34.),
+            ("pref-insert-tags", "auto-insert.htmlXmlTag", "html/xml 结束标签", "html/xml 结束标签", 80., 182., 88.),
         ] {
             controls.push(self.edit_check(id, if self.pref_bool(key, false) { close } else { open }, key, false, false, true, x, y, w, cx));
         }
-        controls.push(label_right("打开", 302., 126., 25.));
-        controls.push(label("关闭", 340., 126., 25.));
+        controls.push(label_center("打开", 240., 128., 36.));
+        controls.push(label_center("关闭", 294., 128., 36.));
         for index in 0..3 {
-            let y = 138. + index as f32 * 20.;
-            controls.push(label_right(&format!("匹配对{}：", index + 1), 238., y + 2., 70.));
-            controls.push(self.edit_input(PAIR_PARTS[index][0], 312., y, 14., true, cx));
-            controls.push(self.edit_input(PAIR_PARTS[index][1], 340., y, 14., true, cx));
+            let y = 142. + index as f32 * 20.;
+            controls.push(label(&format!("匹配对{}：", index + 1), 180., y + 2., 60.));
+            controls.push(self.edit_input(PAIR_PARTS[index][0], 246., y, 24., true, cx));
+            controls.push(self.edit_input(PAIR_PARTS[index][1], 300., y, 24., true, cx));
         }
         controls
     }
@@ -789,18 +789,18 @@ impl MatrixWindow {
         let custom = !self.pref_bool("wordCharList.useDefault", true);
         let multiline = self.pref_bool("delimiterSelection.delimiterSelectionOnEntireDocument", false);
         let mut controls = vec![
-            group("定义单词字符列表", 89., 2., 268., 93.), group("分隔符选择设置（Ctrl + 双击鼠标左键）", 89., 113., 268., 70.),
-            self.edit_radio("pref-word-default", "使用默认的单词字符列表", "wordCharList.useDefault", true.into(), true.into(), true, 100., 18., 250., cx),
-            self.edit_radio("pref-word-custom", "添加字符列表\n（若不了解请勿选择）", "wordCharList.useDefault", true.into(), false.into(), true, 100., 32., 250., cx),
-            self.edit_input("wordCharList.charsAdded", 111., 54., 180., custom, cx),
-            label_right("打开", 117., 128., 34.), label("关闭", if multiline { 279. } else { 249. }, if multiline { 148. } else { 128. }, 47.),
-            self.edit_input("delimiterSelection.leftmostDelimiter", 156., 126., 14., true, cx),
-            self.edit_input("delimiterSelection.rightmostDelimiter", (if multiline { 260. } else { 230. }) - 2. / SCALE, (if multiline { 146. } else { 126. }) - 2. / SCALE, 14., true, cx),
-            self.edit_check("pref-delimiter-multiline", "允许选取多行", "delimiterSelection.delimiterSelectionOnEntireDocument", false, false, true, 118., 166., 160., cx),
+            group("定义单词字符列表", 8., 4., 444., 96.), group("分隔符选择设置（Ctrl + 双击鼠标左键）", 8., 110., 444., 88.),
+            self.edit_radio("pref-word-default", "使用默认的单词字符列表", "wordCharList.useDefault", true.into(), true.into(), true, 20., 20., 420., cx),
+            self.edit_radio("pref-word-custom", "添加字符列表\n（若不了解请勿选择）", "wordCharList.useDefault", true.into(), false.into(), true, 20., 36., 420., cx),
+            self.edit_input("wordCharList.charsAdded", 32., 60., 372., custom, cx),
+            label_right("打开", 20., 130., 54.), label("关闭", 296., if multiline { 154. } else { 130. }, 144.),
+            self.edit_input("delimiterSelection.leftmostDelimiter", 80., 128., 20., true, cx),
+            self.edit_input("delimiterSelection.rightmostDelimiter", 270., if multiline { 152. } else { 128. }, 20., true, cx),
+            self.edit_check("pref-delimiter-multiline", "允许选取多行", "delimiterSelection.delimiterSelectionOnEntireDocument", false, false, true, 20., 180., 420., cx),
         ];
-        controls.push(self.edit_help("pref-word-help", "添加的字符会影响双击选词和查找中的全词匹配。", true, 303., 55.));
-        controls.push(preferences_surface::source_rect(172. * SCALE, 128. * SCALE, 56. * SCALE, 8. * SCALE).bg(rgb(0xd2d2d2)).text_size(px(12.)).line_height(px(14.)).overflow_hidden().child("bla bla bla bla bla bla").into_any_element());
-        if multiline { controls.push(preferences_surface::source_rect(132. * SCALE, 148. * SCALE, 126. * SCALE, 8. * SCALE).bg(rgb(0xd2d2d2)).text_size(px(12.)).line_height(px(14.)).overflow_hidden().child("bla bla bla bla bla bla bla bla bla bla bla bla").into_any_element()); }
+        controls.push(self.edit_help("pref-word-help", "添加的字符会影响双击选词和查找中的全词匹配。", true, 414., 62.));
+        controls.push(preferences_surface::source_rect(102. * SCALE, 130. * SCALE, 166. * SCALE, 8. * SCALE).bg(rgb(0xd2d2d2)).text_size(px(12.)).line_height(px(14.)).overflow_hidden().child("bla bla bla bla bla bla").into_any_element());
+        if multiline { controls.push(preferences_surface::source_rect(62. * SCALE, 154. * SCALE, 206. * SCALE, 8. * SCALE).bg(rgb(0xd2d2d2)).text_size(px(12.)).line_height(px(14.)).overflow_hidden().child("bla bla bla bla bla bla bla bla bla bla bla bla").into_any_element()); }
         if custom {
             let text = self.pref_string("wordCharList.charsAdded", "");
             let spaces = text.chars().filter(|ch| *ch == ' ').count();
@@ -809,7 +809,7 @@ impl MatrixWindow {
                 let mut parts = Vec::new();
                 if spaces > 0 { parts.push(crate::localization::current_string("word-chars-list-space-warning").unwrap_or("$INT_REPLACE$ space(s)").replace("$INT_REPLACE$", &spaces.to_string())); }
                 if tabs > 0 { parts.push(crate::localization::current_string("word-chars-list-tab-warning").unwrap_or("$INT_REPLACE$ TAB(s)").replace("$INT_REPLACE$", &tabs.to_string())); }
-                controls.push(label(&format!("{}{}{}", crate::localization::current_string("word-chars-list-warning-begin").unwrap_or("Be aware: "), parts.join(" + "), crate::localization::current_string("word-chars-list-warning-end").unwrap_or(" in your character list.")), 111., 70., 210.));
+                controls.push(label(&format!("{}{}{}", crate::localization::current_string("word-chars-list-warning-begin").unwrap_or("Be aware: "), parts.join(" + "), crate::localization::current_string("word-chars-list-warning-end").unwrap_or(" in your character list.")), 32., 80., 408.));
             }
         }
         controls
@@ -831,33 +831,33 @@ impl MatrixWindow {
     fn edit_searching(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let fill = self.pref_bool("Searching.fillFindFieldWithSelected", true);
         vec![
-            group("调用查找对话框时", 31., 4., 330., 94.),
-            label_right("自动勾选“选取范围内”的最小值（选中字符数）：", 37., 16., 210.),
-            self.edit_input("Searching.inSelectionAutocheckThreshold", 250., 15., 27., true, cx),
-            self.edit_help("pref-search-selection-help", "自动勾选选取范围的最少选中字符数。最大值为 1024；0 禁用自动勾选。", true, 283., 16.),
-            self.edit_check("pref-search-directory", "使用当前文档所在目录填充目录字段（文件中查找）", "Searching.fillDirFieldFromActiveDoc", false, false, true, 37., 39., 311., cx),
-            self.edit_check("pref-search-selected", "使用选中文本填充查找字段", "Searching.fillFindFieldWithSelected", true, false, true, 37., 55., 300., cx),
-            self.edit_help("pref-search-fill-help", "从选区自动填充查找字段的最大字符数：1–16383。", fill, 52., 69.),
-            self.edit_input("Searching.fillFindWhatThreshold", 64., 68., 27., fill, cx),
-            preferences_surface::pref_label_colour("：从选择内容自动填充查找字段的最大字符数", 92. * SCALE, 69. * SCALE, 260. * SCALE, self.preferences_render_palette().control_text(fill)),
-            self.edit_check("pref-search-caret", "未选中内容时，使用光标下的单词填充", "Searching.fillFindFieldSelectCaret", true, false, fill, 52., 84., 275., cx),
-            self.edit_check("pref-search-monospace", "在查找对话框中使用等宽字体（需要重启 Notepad++）", "Searching.monospacedFontFindDlg", false, false, true, 37., 121., 350., cx),
-            self.edit_check("pref-search-remain-open", "搜索输出到结果窗口后，保持查找对话框开启", "Searching.findDlgAlwaysVisible", false, false, true, 37., 136., 350., cx),
-            self.edit_check("pref-search-single-result", "搜索结果窗口中，每个找到的行尽量仅显示一条", "FinderConfig.showOnlyOneEntryPerFoundLine", true, false, true, 37., 151., 350., cx),
-            self.edit_check("pref-search-disk-content", "在文件中查找：优先选择磁盘上的文件内容而非打开的缓冲区", "FinderConfig.FiF_ignoreunsavedChangesInOpenedFiles", false, false, true, 37., 166., 350., cx),
+            group("调用查找对话框时", 8., 4., 444., 104.),
+            label("自动勾选“选取范围内”的最小值（选中字符数）：", 20., 20., 174.),
+            self.edit_input("Searching.inSelectionAutocheckThreshold", 200., 18., 45., true, cx),
+            self.edit_help("pref-search-selection-help", "自动勾选选取范围的最少选中字符数。最大值为 1024；0 禁用自动勾选。", true, 256., 20.),
+            self.edit_check("pref-search-directory", "使用当前文档所在目录填充目录字段（文件中查找）", "Searching.fillDirFieldFromActiveDoc", false, false, true, 20., 42., 420., cx),
+            self.edit_check("pref-search-selected", "使用选中文本填充查找字段", "Searching.fillFindFieldWithSelected", true, false, true, 20., 59., 420., cx),
+            self.edit_help("pref-search-fill-help", "从选区自动填充查找字段的最大字符数：1–16383。", fill, 32., 77.),
+            self.edit_input("Searching.fillFindWhatThreshold", 48., 75., 42., fill, cx),
+            preferences_surface::pref_label_colour("：从选择内容自动填充查找字段的最大字符数", 96. * SCALE, 77. * SCALE, 344. * SCALE, self.preferences_render_palette().control_text(fill)),
+            self.edit_check("pref-search-caret", "未选中内容时，使用光标下的单词填充", "Searching.fillFindFieldSelectCaret", true, false, fill, 32., 94., 408., cx),
+            self.edit_check("pref-search-monospace", "在查找对话框中使用等宽字体（需要重启 Notepad++）", "Searching.monospacedFontFindDlg", false, false, true, 20., 124., 420., cx),
+            self.edit_check("pref-search-remain-open", "搜索输出到结果窗口后，保持查找对话框开启", "Searching.findDlgAlwaysVisible", false, false, true, 20., 145., 420., cx),
+            self.edit_check("pref-search-single-result", "搜索结果窗口中，每个找到的行尽量仅显示一条", "FinderConfig.showOnlyOneEntryPerFoundLine", true, false, true, 20., 166., 420., cx),
+            self.edit_check("pref-search-disk-content", "在文件中查找：优先选择磁盘上的文件内容而非打开的缓冲区", "FinderConfig.FiF_ignoreunsavedChangesInOpenedFiles", false, false, true, 20., 187., 420., cx),
         ]
     }
 
     fn edit_search_engine(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let engine = self.pref_int("searchEngine.searchEngineChoice", 2);
-        let mut controls = vec![group("搜索引擎（用于“在线搜索”操作）", 74., 24., 297., 145.)];
+        let mut controls = vec![group("搜索引擎（用于“在线搜索”操作）", 8., 4., 444., 194.)];
         for (id, text, value, y) in [
-            ("pref-engine-duckduckgo", "DuckDuckGo", 1, 43.), ("pref-engine-google", "谷歌", 2, 58.),
-            ("pref-engine-yahoo", "雅虎", 4, 73.), ("pref-engine-stackoverflow", "Stack Overflow", 5, 88.),
-            ("pref-engine-custom", "自定义搜索引擎：", 0, 103.),
-        ] { controls.push(self.edit_radio(id, text, "searchEngine.searchEngineChoice", 2.into(), value.into(), true, 105., y, 180., cx)); }
-        controls.push(self.edit_input("searchEngine.searchEngineCustom", 114., 119., 179., engine == 0, cx));
-        controls.push(label("示例：https://www.baidu.com/s?wd=$(CURRENT_WORD)", 114., 134., 245.));
+            ("pref-engine-duckduckgo", "DuckDuckGo", 1, 24.), ("pref-engine-google", "谷歌", 2, 46.),
+            ("pref-engine-yahoo", "雅虎", 4, 68.), ("pref-engine-stackoverflow", "Stack Overflow", 5, 90.),
+            ("pref-engine-custom", "自定义搜索引擎：", 0, 112.),
+        ] { controls.push(self.edit_radio(id, text, "searchEngine.searchEngineChoice", 2.into(), value.into(), true, 20., y, 420., cx)); }
+        controls.push(self.edit_input("searchEngine.searchEngineCustom", 32., 134., 408., engine == 0, cx));
+        controls.push(label("示例：https://www.baidu.com/s?wd=$(CURRENT_WORD)", 32., 158., 408.));
         controls
     }
 
@@ -1037,7 +1037,7 @@ impl MatrixWindow {
         let text = crate::localization::current_preference_source_label(id, "折叠显示语言菜单");
         let checked = self.pref_bool("langsExcluded.langMenuCompact", true);
         let focus = self.preference_control_focus(id, cx).tab_stop(true);
-        preferences_surface::source_rect(134. * SCALE, 14. * SCALE, 174. * SCALE, 10. * SCALE).id(id)
+        preferences_surface::source_rect(20. * SCALE, 20. * SCALE, 420. * SCALE, 10. * SCALE).id(id)
             .role(Role::CheckBox).aria_label(text).aria_toggled(checked.into()).track_focus(&focus)
             .text_size(px(12.)).line_height(px(14.)).text_color(rgb(self.preferences_render_palette().text))
             .flex().items_center().gap(px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())

@@ -388,6 +388,9 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        if matrix_surface::locked() {
+            return false;
+        }
         if self.file_busy
             || self.close_dialog
             || self.save_all_dialog

@@ -27,6 +27,27 @@ fn enabled(
         }
 }
 
+fn about_icon(icon_size: f32, dark: bool) -> AnyElement {
+    gpui::canvas(|_, _, _| (), move |bounds, _, window, _| {
+        let scale = f32::from(bounds.size.width) / 16.;
+        let centre = bounds.origin + gpui::point(px(8. * scale), px(8. * scale));
+        let colour = rgb(if dark { 0x4ade80 } else { 0x15803d });
+        let mut circle = gpui::PathBuilder::stroke(px(1.4 * scale));
+        for step in 0..=48 {
+            let angle = step as f32 * std::f32::consts::TAU / 48.;
+            let point = centre + gpui::point(px(angle.cos() * 6.5 * scale), px(angle.sin() * 6.5 * scale));
+            if step == 0 { circle.move_to(point); } else { circle.line_to(point); }
+        }
+        match circle.build() {
+            Ok(path) => window.paint_path(path, colour),
+            Err(error) => eprintln!("Could not paint About icon: {error}"),
+        }
+        for (x, y, width, height) in [(7.1, 3.8, 1.8, 1.8), (7.1, 7., 1.8, 5.)] {
+            window.paint_quad(gpui::fill(Bounds::new(bounds.origin + gpui::point(px(x * scale), px(y * scale)), size(px(width * scale), px(height * scale))), colour));
+        }
+    }).size(px(icon_size)).into_any_element()
+}
+
 pub(super) fn render(
     view: &MatrixWindow,
     window: &Window,
@@ -464,6 +485,23 @@ pub(super) fn render(
                 )
         })
         .collect::<Vec<_>>();
+    let about_available = enabled(view, MenuCommand::About, availability);
+    let about_label = if locale.starts_with("chinese") { "关于 Notepad Matrix" } else { "About Notepad Matrix" };
+    let about = div().id("toolbar-about").debug_selector(|| "toolbar-about".into())
+        .role(Role::Button).aria_label(about_label)
+        .tooltip(move |_, cx| icon_tooltip::view(about_label, dark, cx))
+        .a11y_synthetic_children(move |builder| { if !about_available { builder.parent_node().set_disabled(); } })
+        .w(px(button_width)).h(px(button_height)).flex_shrink_0().flex().items_center().justify_center()
+        .when(about_available, |button| button.hover(move |style| style.bg(rgb(hover))))
+        .when(!about_available, |button| button.opacity(0.35))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_click(cx.listener(|view, _, window, cx| {
+            if enabled(view, MenuCommand::About, menu_surface::availability(view, window, cx)) {
+                view.show_about(window, cx);
+            }
+            cx.stop_propagation();
+        }))
+        .child(about_icon(icon_size, dark));
     div()
         .id("editing-toolbar")
         .debug_selector(|| "editing-toolbar".into())
@@ -473,10 +511,12 @@ pub(super) fn render(
         .flex_shrink_0()
         .flex()
         .items_center()
-        .px(px(5.))
+        .pl(px(5.))
+        .pr(px(5. + button_width / 2.))
         .bg(rgb(background))
         .border_b_1()
         .border_color(rgb(0x808080))
-        .children(buttons)
+        .child(div().id("editing-toolbar-buttons").flex().flex_1().min_w(px(0.)).items_center().overflow_x_scroll().children(buttons))
+        .child(about)
         .into_any_element()
 }

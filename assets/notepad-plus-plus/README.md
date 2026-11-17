@@ -1,6 +1,6 @@
 # Notepad++ toolbar artwork
 
-The original Standard BMP resources are copied **without modification** from
+The Standard PNG resources are converted from the original BMP resources in
 Notepad++ v8.9.9, commit `d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e`:
 
 `PowerEditor/src/icons/standard/toolbar/*.bmp`
@@ -12,14 +12,18 @@ the newer regular ICO set. The command mapping is upstream
 Runtime PNGs preserve the original RGB artwork and dimensions. Indexed BMPs map
 the classic RGB(192,192,192) toolbar background to alpha zero; 32-bit BMPs preserve
 their original alpha. This replaces Win32's bitmap transparency handling, not the
-artwork. The external Spec tool `standard_toolbar_assets.py` reproducibly generates
-and verifies the PNGs against the fixed source. There is no redraw or resampling.
+artwork. There is no redraw or resampling. The unused BMP copies are not retained;
+their originals remain available at the fixed upstream commit.
 
 The zoom, wrap, invisible-character, indent-guide, document-map, function-list,
 folder-workspace, monitoring and macro PNGs
 use the corresponding BMPs in that same upstream directory. Four-bit and
 eight-bit palettes use the same classic-background alpha adaptation. These
-additional runtime images do not require bundling another copy of their BMP inputs.
+runtime images do not require bundling another copy of their BMP inputs.
+
+`icons/{light,dark}/toolbar/{regular,filled}/` retains upstream ICO resources for
+the selectable toolbar sets, including disabled states. `icons/standard/tabbar/`
+retains the alternative saved, modified and read-only document-state ICOs.
 
 `saved.png` and `unsaved.png` preserve the original 16×16 PNG entries from
 `PowerEditor/src/icons/standard/tabbar/{saved,unsaved}.ico` at the same commit.
@@ -53,24 +57,17 @@ Win32-generated disabled-state and DPI/pixel alignment remain unverified.
 
 Source: <https://github.com/notepad-plus-plus/notepad-plus-plus/tree/d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e/PowerEditor/src/icons>
 
-Copyright and license: Notepad++ contributors, including Don HO; see the unmodified
-upstream `LICENSE` in this directory (GNU GPL version 3 and upstream terms).
+Copyright and license: Notepad++ contributors, including Don HO; see the retained
+upstream notice in [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) and the
+shared GNU GPL version 3 text in [LICENSE](../../LICENSE).
 This provenance notice does not replace those terms or authorize a release.
 
-`bookmark14.rgba` is the unchanged `bookmark14` array from upstream
-`PowerEditor/src/rgba_icons.h`. `bookmark14.png` adds only a PNG container to those
-original 14×14 RGBA bytes; no redraw, recoloring or scaling. Upstream usage:
+`bookmark14.png` adds only a PNG container to the original 14×14 RGBA bytes in
+the `bookmark14` array from upstream `PowerEditor/src/rgba_icons.h`; no redraw,
+recoloring or scaling. The unused raw RGBA copy is not retained. Upstream usage:
 `ScintillaEditView.cpp:425–430`.
 
-`npp.icns` uses the original 256×256 PNG entry from
-`PowerEditor/src/icons/npp.ico` at the same fixed commit. The PNG bytes are unchanged;
-only the macOS ICNS container (`ic08`) is added. Source ICO SHA-256:
-`7f00c181277bddfe06f51e7712c713e24e29a167b20033c43829136cdadc655d`.
-It supplies the application, Finder and Dock icon without redesigning the artwork.
-
-`app16.png` preserves the 16×16, 32-bit RGBA image from the same original ICO
-for the custom main-window title. Only its DIB container is converted to PNG;
-there is no resampling or recoloring.
+Application branding is supplied by `../notepad-matrix.icns`.
 
 The Rust UDL implementation also derives behavior from the fixed checkout's
 `lexilla/lexers/LexUser.cxx`, copyright (C) 2003 Don HO, GPL version 2 or later.
@@ -79,4 +76,4 @@ library or DLL is linked.
 
 The URI scanner in `src/links.rs` is adapted from Notepad++, copyright (C) 2021
 Don HO <don.h@free.fr>, GPL version 3 or later, distributed without any warranty.
-The complete license is retained in `LICENSE` in this directory.
+The copyright notice and complete license are retained in the shared legal files above.

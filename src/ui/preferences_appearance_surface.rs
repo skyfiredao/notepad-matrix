@@ -31,59 +31,59 @@ impl Default for State {
 }
 
 const DARK_COLORS: [(&str, &str, u32, f32, f32); 12] = [
-    ("DarkMode.customColorMain", "内容背景", 0x202020, 112., 80.),
+    ("DarkMode.customColorMain", "内容背景", 0x202020, 134., 74.),
     (
         "DarkMode.customColorMenuHotTrack",
         "高亮项",
         0x454545,
-        112.,
-        100.,
+        134.,
+        94.,
     ),
     (
         "DarkMode.customColorActive",
         "控件背景",
         0x383838,
-        112.,
-        120.,
+        134.,
+        114.,
     ),
     (
         "DarkMode.customColorTop",
         "对话框背景",
         0x202020,
-        112.,
-        140.,
+        134.,
+        134.,
     ),
-    ("DarkMode.customColorError", "错误", 0x0000b0, 112., 160.),
-    ("DarkMode.customColorText", "文本", 0xe0e0e0, 227., 80.),
+    ("DarkMode.customColorError", "错误", 0x0000b0, 134., 154.),
+    ("DarkMode.customColorText", "文本", 0xe0e0e0, 244., 74.),
     (
         "DarkMode.customColorDarkText",
         "深色文本",
         0xc0c0c0,
-        227.,
-        100.,
+        244.,
+        94.,
     ),
     (
         "DarkMode.customColorDisabledText",
         "禁用文本",
         0x808080,
-        227.,
-        120.,
+        244.,
+        114.,
     ),
-    ("DarkMode.customColorLinkText", "链接", 0x00ffff, 227., 140.),
-    ("DarkMode.customColorEdge", "边缘", 0x646464, 342., 80.),
+    ("DarkMode.customColorLinkText", "链接", 0x00ffff, 244., 134.),
+    ("DarkMode.customColorEdge", "边缘", 0x646464, 354., 74.),
     (
         "DarkMode.customColorHotEdge",
         "边缘高亮",
         0x9b9b9b,
-        342.,
-        100.,
+        354.,
+        94.,
     ),
     (
         "DarkMode.customColorDisabledEdge",
         "边缘禁用",
         0x484848,
-        342.,
-        120.,
+        354.,
+        114.,
     ),
 ];
 
@@ -230,6 +230,7 @@ fn restore_theme_icons(settings: &mut Value, dark: bool) -> io::Result<()> {
 
 pub(super) fn appearance_changed(path: &str, settings: &mut Value) -> io::Result<()> {
     let range = match path {
+        "MenuFont.size" => Some((8, 24)),
         "ToolBar.fluentColor" => Some((0, 9)),
         "Caret.width" => Some((0, 5)),
         "ScintillaPrimaryView.currentLineIndicator" => Some((0, 2)),
@@ -252,6 +253,10 @@ pub(super) fn appearance_changed(path: &str, settings: &mut Value) -> io::Result
         }
     }
     match path {
+        "MenuFont.fontName" => {
+            let name = setting(settings, path).and_then(Value::as_str).ok_or_else(|| invalid(path))?;
+            if name.trim().is_empty() || name.contains('\0') { return Err(invalid(path)); }
+        }
         "NativeLang.filename" => {
             let filename = setting(settings, path)
                 .and_then(Value::as_str)
@@ -984,7 +989,7 @@ impl MatrixWindow {
         });
         let text = gpui::StyledText::new(gpui::SharedString::from(label.to_owned()))
             .with_highlights(highlights);
-        source_rect(28. * SCALE, y * SCALE, 135. * SCALE, 10. * SCALE)
+        source_rect(18. * SCALE, y * SCALE, 112. * SCALE, 10. * SCALE)
             .id(id)
             .role(Role::RadioButton)
             .aria_label(label)
@@ -1167,8 +1172,9 @@ impl MatrixWindow {
         fonts.push(dialog_font::system_font_family());
         fonts.sort_unstable_by_key(|name| name.to_lowercase());
         fonts.dedup();
+        let chinese = self.native_locale().starts_with("chinese");
         vec![
-            group("界面语言", 134., 22.5, 186., 36.),
+            group("界面语言", 12., 12., 212., 43.),
             self.appearance_choice(
                 "NativeLang.filename",
                 crate::localization::languages()
@@ -1177,12 +1183,24 @@ impl MatrixWindow {
                     .collect(),
                 "english.xml".into(),
                 true,
-                167.,
-                36.,
-                125.,
+                24.,
+                27.,
+                188.,
                 cx,
             ),
-            group("菜单栏", 134., 68.5, 186., 43.),
+            group(if chinese { "菜单字体" } else { "Menu font" }, 236., 12., 212., 87.),
+            label_right(if chinese { "字体：" } else { "Font:" }, 242., 29., 27.),
+            self.appearance_choice("MenuFont.fontName", fonts.iter().map(|name| (name.clone().into(), name.clone())).collect(),
+                menu_surface::DEFAULT_FONT_NAME.into(), true, 274., 27., 166., cx),
+            label_right(if chinese { "字号：" } else { "Size:" }, 242., 52., 27.),
+            self.appearance_choice("MenuFont.size", (8..=24).map(|size: i64| (size.into(), size.to_string())).collect(),
+                menu_surface::DEFAULT_FONT_SIZE.into(), true, 274., 50., 48., cx),
+            label(if chinese { "即时生效" } else { "Applies immediately" }, 242., 75., 198.),
+            group(if chinese { "Matrix 彩蛋" } else { "Matrix" }, 236., 110., 212., 47.),
+            self.appearance_check("pref-matrix-lock", if chinese { "Matrix 锁屏保护" } else { "Matrix screen lock" }, "Matrix.lockScreen", false, false, true, 242., 122., 200., cx),
+            label_right(if chinese { "样式：" } else { "Style:" }, 242., 140., 36.),
+            self.appearance_choice("Matrix.style", vec![("matrix".into(), "Matrix".into()), ("terminal".into(), if chinese { "伪终端" } else { "Simulated terminal" }.into())], "matrix".into(), true, 284., 137., 156., cx),
+            group("菜单栏", 12., 64., 212., 50.),
             self.appearance_check(
                 "pref-hide-menu",
                 "隐藏菜单栏（按下 Alt 或 F10 显示）",
@@ -1190,9 +1208,9 @@ impl MatrixWindow {
                 true,
                 true,
                 true,
-                140.,
-                80.,
-                174.,
+                18.,
+                78.,
+                200.,
                 cx,
             ),
             self.appearance_check(
@@ -1202,12 +1220,12 @@ impl MatrixWindow {
                 false,
                 false,
                 true,
-                140.,
-                95.,
-                174.,
+                18.,
+                94.,
+                200.,
                 cx,
             ),
-            group("状态栏", 134., 123., 186., 33.),
+            group("状态栏", 12., 120., 212., 33.),
             self.appearance_check(
                 "pref-hide-status",
                 "隐藏状态栏",
@@ -1215,16 +1233,16 @@ impl MatrixWindow {
                 true,
                 true,
                 true,
-                140.,
-                134.,
-                174.,
+                18.,
+                132.,
+                200.,
                 cx,
             ),
-            group(crate::localization::current_preference_control(7165).unwrap_or("Dialog Font (Need to restart Notepad Matrix)"), 134., 160., 232., 43.),
-            label_right(crate::localization::current_preference_control(7166).unwrap_or("Size:"), 140., 175., 45.),
-            self.appearance_choice("DialogFont.size", dialog_font::SIZES.into_iter().map(|size| (size.into(), size.to_string())).collect(), 8.into(), true, 191., 173., 35., cx),
-            label_right(crate::localization::current_preference_control(7168).unwrap_or("Name:"), 140., 190., 45.),
-            self.appearance_choice("DialogFont.fontName", fonts.into_iter().map(|name| (name.clone().into(), name)).collect(), dialog_font::system_font_family().into(), true, 191., 188., 163., cx),
+            group(crate::localization::current_preference_control(7165).unwrap_or("Dialog Font (Need to restart Notepad Matrix)"), 12., 162., 436., 36.),
+            label_right(crate::localization::current_preference_control(7166).unwrap_or("Size:"), 18., 176., 27.),
+            self.appearance_choice("DialogFont.size", dialog_font::SIZES.into_iter().map(|size| (size.into(), size.to_string())).collect(), 8.into(), true, 51., 174., 35., cx),
+            label_right(crate::localization::current_preference_control(7168).unwrap_or("Name:"), 110., 176., 45.),
+            self.appearance_choice("DialogFont.fontName", fonts.into_iter().map(|name| (name.clone().into(), name)).collect(), dialog_font::system_font_family().into(), true, 159., 174., 281., cx),
         ]
     }
 
@@ -1239,12 +1257,12 @@ impl MatrixWindow {
                 true,
                 true,
                 true,
-                28.,
+                18.,
                 25.,
-                100.,
+                112.,
                 cx,
             ),
-            group("图标着色", 171., 19., 250., 173.),
+            group("图标着色", 142., 19., 306., 173.),
             self.appearance_radio(
                 "pref-toolbar-complete",
                 "完全着色",
@@ -1252,9 +1270,9 @@ impl MatrixWindow {
                 false.into(),
                 true.into(),
                 colorable,
-                197.,
+                154.,
                 32.,
-                93.,
+                282.,
                 cx,
             ),
             self.appearance_radio(
@@ -1264,12 +1282,12 @@ impl MatrixWindow {
                 false.into(),
                 false.into(),
                 colorable,
-                197.,
+                154.,
                 45.,
-                79.,
+                282.,
                 cx,
             ),
-            group("颜色选择", 184., 67., 224., 115.),
+            group("颜色选择", 154., 67., 282., 115.),
         ];
         for (id, text, value, y) in [
             ("pref-toolbar-small", "Fluent UI 图标：小图标", "small", 67.),
@@ -1304,23 +1322,23 @@ impl MatrixWindow {
                 default_icons.into(),
                 value.into(),
                 true,
-                28.,
+                18.,
                 y,
-                135.,
+                112.,
                 cx,
             ));
         }
         for (id, text, value, x, y, w) in [
-            ("pref-toolbar-red", "红色", 1, 195., 80., 77.),
-            ("pref-toolbar-green", "绿色", 2, 195., 94., 77.),
-            ("pref-toolbar-blue", "蓝色", 3, 195., 108., 77.),
-            ("pref-toolbar-purple", "紫色", 4, 195., 122., 77.),
-            ("pref-toolbar-cyan", "青色", 5, 195., 136., 77.),
-            ("pref-toolbar-olive", "橄榄色", 6, 195., 150., 77.),
-            ("pref-toolbar-yellow", "黄色", 7, 195., 164., 77.),
-            ("pref-toolbar-default", "默认颜色", 0, 278., 80., 112.),
-            ("pref-toolbar-accent", "系统强调色", 8, 278., 94., 112.),
-            ("pref-toolbar-custom", "自定义颜色", 9, 278., 108., 112.),
+            ("pref-toolbar-red", "红色", 1, 162., 80., 100.),
+            ("pref-toolbar-green", "绿色", 2, 162., 94., 100.),
+            ("pref-toolbar-blue", "蓝色", 3, 162., 108., 100.),
+            ("pref-toolbar-purple", "紫色", 4, 162., 122., 100.),
+            ("pref-toolbar-cyan", "青色", 5, 162., 136., 100.),
+            ("pref-toolbar-olive", "橄榄色", 6, 162., 150., 100.),
+            ("pref-toolbar-yellow", "黄色", 7, 162., 164., 100.),
+            ("pref-toolbar-default", "默认颜色", 0, 280., 80., 128.),
+            ("pref-toolbar-accent", "系统强调色", 8, 280., 94., 128.),
+            ("pref-toolbar-custom", "自定义颜色", 9, 280., 108., 128.),
         ] {
             elements.push(self.appearance_radio(
                 id,
@@ -1339,7 +1357,7 @@ impl MatrixWindow {
             "ToolBar.fluentCustomColor",
             0,
             colorable && self.pref_int("ToolBar.fluentColor", 0) == 9,
-            293. * SCALE,
+            286. * SCALE,
             121. * SCALE,
             cx,
         ));
@@ -1348,7 +1366,7 @@ impl MatrixWindow {
             "toolbar-accent-tip",
             "This option makes your toolbar icons follow the system accent color.",
             colorable,
-            393.,
+            416.,
             94.,
             10.,
         ));
@@ -1376,19 +1394,19 @@ impl MatrixWindow {
                 false,
                 false,
                 true,
-                62.,
+                18.,
                 21.,
-                100.,
+                200.,
                 cx,
             ),
-            group("行为", 50., 38., 181., 130.),
-            group("外观和体验", 239., 38., 181., 130.),
-            label_right("标签最大长度：", 52., 147., 132.),
+            group("行为", 12., 38., 212., 130.),
+            group("外观和体验", 236., 38., 212., 130.),
+            label_right("标签最大长度：", 18., 147., 146.),
             self.pref_input(
                 "tabCompactLabelLen",
-                187. * SCALE,
+                168. * SCALE,
                 146. * SCALE,
-                20. * SCALE,
+                32. * SCALE,
                 true,
                 cx,
             ),
@@ -1397,7 +1415,7 @@ impl MatrixWindow {
                 "tabbar-tabcompactlabellen-tip",
                 "Limits the visible length of long tab names. Enter to apply the given value. Value range: 1-257 characters (0 disables the truncation).",
                 true,
-                213.,
+                206.,
                 147.,
                 11.,
             ),
@@ -1445,7 +1463,7 @@ impl MatrixWindow {
             ),
         ] {
             elements.push(
-                self.appearance_check(id, text, path, default, invert, visible, 62., y, 164., cx),
+                self.appearance_check(id, text, path, default, invert, visible, 18., y, 200., cx),
             );
         }
         for (id, text, path, default, enabled, y) in [
@@ -1515,7 +1533,7 @@ impl MatrixWindow {
             ),
         ] {
             elements.push(
-                self.appearance_check(id, text, path, default, false, enabled, 251., y, 164., cx),
+                self.appearance_check(id, text, path, default, false, enabled, 242., y, 200., cx),
             );
         }
         elements
@@ -1568,7 +1586,7 @@ impl MatrixWindow {
                 true,
                 73.,
                 97.,
-                40.,
+                80.,
                 cx,
             ),
             label_right("闪烁频率：", 14., 114., 53.),
@@ -1690,7 +1708,7 @@ impl MatrixWindow {
             2
         };
         vec![
-            group("多重编辑", 11., 3., 290., 59.),
+            group("多重编辑", 12., 3., 260., 59.),
             self.appearance_check(
                 "pref-multiple-selection",
                 "启用多重编辑（Ctrl+鼠标点选）",
@@ -1698,9 +1716,9 @@ impl MatrixWindow {
                 true,
                 false,
                 true,
-                17.,
+                18.,
                 16.,
-                270.,
+                248.,
                 cx,
             ),
             self.appearance_check(
@@ -1710,12 +1728,12 @@ impl MatrixWindow {
                 true,
                 false,
                 multi,
-                29.,
+                30.,
                 31.,
-                270.,
+                236.,
                 cx,
             ),
-            group("换行符（CRLF）", 311., 3., 138., 59.),
+            group("换行符（CRLF）", 284., 3., 164., 59.),
             self.appearance_radio(
                 "pref-eol-rounded",
                 "默认",
@@ -1723,9 +1741,9 @@ impl MatrixWindow {
                 eol.into(),
                 ((eol & 2) | 1).into(),
                 true,
-                317.,
+                290.,
                 16.,
-                100.,
+                150.,
                 cx,
             ),
             self.appearance_radio(
@@ -1735,9 +1753,9 @@ impl MatrixWindow {
                 eol.into(),
                 (eol & 2).into(),
                 true,
-                317.,
+                290.,
                 31.,
-                100.,
+                150.,
                 cx,
             ),
             self.appearance_check(
@@ -1747,24 +1765,24 @@ impl MatrixWindow {
                 eol & 2 != 0,
                 false,
                 true,
-                317.,
+                290.,
                 47.,
-                100.,
+                128.,
                 cx,
             ),
             self.appearance_button(
                 "pref-eol-style",
                 "...",
                 true,
-                429.,
+                424.,
                 44.,
                 16.,
                 |view, window, cx| view.show_style_configurator_target("EOL custom color", window, cx),
                 cx,
             ),
-            group("非打印字符", 11., 68., 310., 121.),
-            group("", 21., 78., 290., 89.),
-            group("外观", 31., 88., 150., 59.),
+            group("非打印字符", 12., 68., 436., 127.),
+            group("", 22., 78., 416., 89.),
+            group("外观", 32., 88., 202., 59.),
             self.appearance_radio(
                 "pref-npc-abbreviation",
                 "缩写",
@@ -1772,9 +1790,9 @@ impl MatrixWindow {
                 npc_appearance.into(),
                 1.into(),
                 true,
-                37.,
+                38.,
                 101.,
-                110.,
+                66.,
                 cx,
             ),
             self.appearance_radio(
@@ -1784,16 +1802,16 @@ impl MatrixWindow {
                 npc_appearance.into(),
                 2.into(),
                 true,
-                37.,
+                38.,
                 116.,
-                110.,
+                66.,
                 cx,
             ),
             self.appearance_button(
                 "pref-npc-help",
                 "?",
                 true,
-                161.,
+                110.,
                 98.,
                 16.,
                 |_, _, cx| cx.open_url("https://npp-user-manual.org/docs/views/#show-symbol"),
@@ -1806,17 +1824,17 @@ impl MatrixWindow {
                 false,
                 false,
                 true,
-                37.,
-                132.,
-                110.,
+                142.,
+                101.,
+                58.,
                 cx,
             ),
             self.appearance_button(
                 "pref-npc-style",
                 "...",
                 true,
-                161.,
-                129.,
+                206.,
+                98.,
                 16.,
                 |view, window, cx| view.show_style_configurator_target("Non-printing characters custom color", window, cx),
                 cx,
@@ -1828,9 +1846,9 @@ impl MatrixWindow {
                 false,
                 false,
                 true,
-                27.,
+                28.,
                 153.,
-                281.,
+                404.,
                 cx,
             ),
             self.appearance_check(
@@ -1840,9 +1858,9 @@ impl MatrixWindow {
                 true,
                 false,
                 true,
-                17.,
-                173.,
-                281.,
+                18.,
+                177.,
+                424.,
                 cx,
             ),
         ]
@@ -1857,11 +1875,11 @@ impl MatrixWindow {
         let mode = self.pref_int("darkMode.mode", mode_default);
         let enabled = mode == 1 || (mode == 2 && self.dark);
         let custom = enabled && self.pref_int("DarkMode.colorTone", 0) == 32;
-        let mut elements = vec![group("色调", 3., 47., 435., 132.)];
-        for (id, text, value, y, w) in [
-            ("pref-light-mode", "浅色模式", 0, 3., 150.),
-            ("pref-dark-mode", "深色模式", 1, 18., 131.),
-            ("pref-system-mode", "跟随系统", 2, 33., 172.),
+        let mut elements = vec![group("色调", 12., 38., 436., 160.)];
+        for (id, text, value, x, w) in [
+            ("pref-light-mode", "浅色模式", 0, 18., 136.),
+            ("pref-dark-mode", "深色模式", 1, 160., 136.),
+            ("pref-system-mode", "跟随系统", 2, 302., 140.),
         ] {
             elements.push(self.appearance_radio(
                 id,
@@ -1870,21 +1888,21 @@ impl MatrixWindow {
                 mode_default.into(),
                 value.into(),
                 true,
-                11.,
-                y,
+                x,
+                12.,
                 w,
                 cx,
             ));
         }
         for (id, text, value, x, y, w) in [
-            ("pref-dark-black", "黑色", 0, 11., 60., 80.),
-            ("pref-dark-red", "红色", 1, 11., 75., 80.),
-            ("pref-dark-green", "绿色", 2, 11., 90., 80.),
-            ("pref-dark-blue", "蓝色", 3, 11., 105., 80.),
-            ("pref-dark-purple", "紫色", 4, 11., 120., 80.),
-            ("pref-dark-cyan", "青色", 5, 11., 135., 80.),
-            ("pref-dark-olive", "橄榄色", 6, 11., 150., 80.),
-            ("pref-dark-custom", "自定义颜色", 32, 96., 60., 120.),
+            ("pref-dark-black", "黑色", 0, 18., 54., 90.),
+            ("pref-dark-red", "红色", 1, 18., 69., 90.),
+            ("pref-dark-green", "绿色", 2, 18., 84., 90.),
+            ("pref-dark-blue", "蓝色", 3, 18., 99., 90.),
+            ("pref-dark-purple", "紫色", 4, 18., 114., 90.),
+            ("pref-dark-cyan", "青色", 5, 18., 129., 90.),
+            ("pref-dark-olive", "橄榄色", 6, 18., 144., 90.),
+            ("pref-dark-custom", "自定义颜色", 32, 116., 54., 210.),
         ] {
             elements.push(self.appearance_radio(
                 id,
@@ -1909,16 +1927,16 @@ impl MatrixWindow {
                 cx,
             ));
             elements.push(pref_label_colour(text, x * SCALE, y * SCALE,
-                (if x == 342. { 94. } else { 95. }) * SCALE,
+                (if x == 354. { 86. } else { 90. }) * SCALE,
                 self.preferences_render_palette().control_text(custom)));
         }
         elements.push(self.appearance_button(
             "pref-dark-reset",
             "重置",
             custom,
-            330.,
-            158.,
-            50.,
+            304.,
+            177.,
+            56.,
             |view, window, cx| {
                 view.set_preference("DarkMode.resetTone", 0.into(), window, cx);
             },
@@ -1941,9 +1959,9 @@ impl MatrixWindow {
                 .collect(),
                 Value::Null,
                 custom,
-                380.,
-                158.,
-                15.,
+                366.,
+                177.,
+                74.,
                 cx,
             ),
         );
@@ -1956,16 +1974,16 @@ impl MatrixWindow {
         let can_be_background = edge_columns(&columns).is_ok_and(|columns| columns.len() == 1);
         let history = self.pref_int("ScintillaPrimaryView.isChangeHistoryEnabled", 1);
         let mut elements = vec![
-            group("代码折叠标志", 22., 21., 83., 89.),
-            group("边框宽度", 22., 116., 83., 45.),
+            group("代码折叠标志", 12., 21., 106., 89.),
+            group("边框宽度", 12., 116., 106., 45.),
             self.appearance_slider(
                 "ScintillaPrimaryView.borderWidth",
                 0,
                 30,
                 2,
-                24.,
+                18.,
                 129.,
-                67.,
+                76.,
                 true,
                 cx,
             ),
@@ -1973,7 +1991,7 @@ impl MatrixWindow {
                 &self
                     .pref_int("ScintillaPrimaryView.borderWidth", 2)
                     .to_string(),
-                92.,
+                98.,
                 130.,
                 12.,
             ),
@@ -1984,25 +2002,25 @@ impl MatrixWindow {
                 true,
                 true,
                 true,
-                28.,
+                18.,
                 146.,
-                60.,
+                94.,
                 cx,
             ),
-            group("列边线设置", 116., 21., 148., 89.),
+            group("列边线设置", 130., 21., 142., 89.),
             self.appearance_help(
                 "pref-edge-help",
                 "verticalEdge-tip",
                 "Add your column marker by indicating its position with a decimal number. You can define several column markers by using white space to separate the different numbers.",
                 true,
-                184.,
+                250.,
                 33.,
                 10.,
             ),
             self.pref_column_input(
-                126. * SCALE,
+                140. * SCALE,
                 51. * SCALE,
-                128. * SCALE,
+                122. * SCALE,
                 36. * SCALE,
             ),
             self.appearance_check(
@@ -2012,12 +2030,12 @@ impl MatrixWindow {
                 false,
                 false,
                 can_be_background,
-                127.,
+                136.,
                 94.,
-                122.,
+                130.,
                 cx,
             ),
-            group("变更历史", 116., 116., 148., 45.),
+            group("变更历史", 130., 116., 142., 45.),
             self.appearance_check(
                 "pref-history-margin",
                 "在侧边显示",
@@ -2025,9 +2043,9 @@ impl MatrixWindow {
                 history & 1 != 0,
                 false,
                 true,
-                122.,
+                136.,
                 129.,
-                140.,
+                130.,
                 cx,
             ),
             self.appearance_check(
@@ -2037,12 +2055,12 @@ impl MatrixWindow {
                 history & 2 != 0,
                 false,
                 true,
-                122.,
+                136.,
                 144.,
-                140.,
+                130.,
                 cx,
             ),
-            group("行号", 274., 21., 135., 59.),
+            group("行号", 284., 21., 164., 59.),
             self.appearance_check(
                 "pref-line-numbers",
                 "显示行号栏",
@@ -2050,9 +2068,9 @@ impl MatrixWindow {
                 true,
                 false,
                 true,
-                280.,
+                290.,
                 34.,
-                85.,
+                152.,
                 cx,
             ),
             self.appearance_radio(
@@ -2062,9 +2080,9 @@ impl MatrixWindow {
                 true.into(),
                 true.into(),
                 number,
-                292.,
+                302.,
                 49.,
-                110.,
+                140.,
                 cx,
             ),
             self.appearance_radio(
@@ -2074,15 +2092,15 @@ impl MatrixWindow {
                 true.into(),
                 false.into(),
                 number,
-                292.,
+                302.,
                 64.,
-                110.,
+                140.,
                 cx,
             ),
-            group("边距", 274., 86., 135., 63.),
-            label_right("左侧", 280., 100., 45.),
-            label_right("右侧", 282., 116., 43.),
-            label_right("沉浸模式", 275., 132., 72.),
+            group("边距", 284., 86., 164., 63.),
+            label_right("左侧", 290., 100., 50.),
+            label_right("右侧", 290., 116., 50.),
+            label_right("沉浸模式", 290., 132., 80.),
             self.appearance_check(
                 "pref-bookmark-margin",
                 "显示书签栏",
@@ -2090,9 +2108,9 @@ impl MatrixWindow {
                 true,
                 false,
                 true,
-                280.,
+                290.,
                 155.,
-                150.,
+                152.,
                 cx,
             ),
         ];
@@ -2110,37 +2128,37 @@ impl MatrixWindow {
                 "box".into(),
                 value.into(),
                 true,
-                28.,
+                18.,
                 y,
-                62.,
+                94.,
                 cx,
             ));
         }
         for (path, min, max, default, x, y, w) in [
-            ("ScintillaPrimaryView.paddingLeft", 0, 30, 0, 328., 99., 67.),
+            ("ScintillaPrimaryView.paddingLeft", 0, 30, 0, 344., 99., 82.),
             (
                 "ScintillaPrimaryView.paddingRight",
                 0,
                 30,
                 0,
-                328.,
+                344.,
                 115.,
-                67.,
+                82.,
             ),
             (
                 "ScintillaPrimaryView.distractionFreeDivPart",
                 3,
                 9,
                 4,
-                348.,
+                374.,
                 131.,
-                47.,
+                52.,
             ),
         ] {
             elements.push(self.appearance_slider(path, min, max, default, x, y, w, true, cx));
             elements.push(value_label(
                 &self.pref_int(path, default).to_string(),
-                396.,
+                430.,
                 y + 1.,
                 12.,
             ));
@@ -2152,10 +2170,10 @@ impl MatrixWindow {
         let smart = self.pref_bool("SmartHighLight.enabled", true);
         let tags = self.pref_bool("TagsMatchHighLight.enabled", true);
         let mut elements = vec![
-            group("用格式标记全部", 61., 29., 155., 45.),
-            group("高亮显示匹配标签", 61., 80., 155., 59.),
-            group("智能高亮", 226., 29., 172., 110.),
-            group("匹配规则", 233., 72., 157., 59.),
+            group("用格式标记全部", 12., 29., 212., 45.),
+            group("高亮显示匹配标签", 12., 80., 212., 59.),
+            group("智能高亮", 236., 29., 212., 110.),
+            group("匹配规则", 242., 72., 200., 59.),
         ];
         for (id, text, path, default, enabled, x, y) in [
             (
@@ -2164,7 +2182,7 @@ impl MatrixWindow {
                 "MarkAll.matchCase",
                 false,
                 true,
-                67.,
+                18.,
                 42.,
             ),
             (
@@ -2173,7 +2191,7 @@ impl MatrixWindow {
                 "MarkAll.wholeWordOnly",
                 true,
                 true,
-                67.,
+                18.,
                 57.,
             ),
             (
@@ -2182,7 +2200,7 @@ impl MatrixWindow {
                 "TagsMatchHighLight.enabled",
                 true,
                 true,
-                67.,
+                18.,
                 93.,
             ),
             (
@@ -2191,7 +2209,7 @@ impl MatrixWindow {
                 "TagsMatchHighLight.TagAttrHighLight",
                 true,
                 tags,
-                67.,
+                18.,
                 108.,
             ),
             (
@@ -2200,7 +2218,7 @@ impl MatrixWindow {
                 "TagsMatchHighLight.HighLightNonHtmlZone",
                 false,
                 tags,
-                67.,
+                18.,
                 123.,
             ),
             (
@@ -2209,7 +2227,7 @@ impl MatrixWindow {
                 "SmartHighLight.enabled",
                 true,
                 true,
-                232.,
+                242.,
                 42.,
             ),
             (
@@ -2218,7 +2236,7 @@ impl MatrixWindow {
                 "SmartHighLight.onAnotherView",
                 false,
                 smart,
-                232.,
+                242.,
                 57.,
             ),
             (
@@ -2227,7 +2245,7 @@ impl MatrixWindow {
                 "SmartHighLight.matchCase",
                 false,
                 smart,
-                239.,
+                248.,
                 85.,
             ),
             (
@@ -2236,7 +2254,7 @@ impl MatrixWindow {
                 "SmartHighLight.wholeWordOnly",
                 true,
                 smart,
-                239.,
+                248.,
                 100.,
             ),
             (
@@ -2245,12 +2263,12 @@ impl MatrixWindow {
                 "SmartHighLight.useFindSettings",
                 false,
                 smart,
-                239.,
+                248.,
                 115.,
             ),
         ] {
             elements.push(
-                self.appearance_check(id, text, path, default, false, enabled, x, y, 142., cx),
+                self.appearance_check(id, text, path, default, false, enabled, x, y, if x == 248. { 188. } else { 200. }, cx),
             );
         }
         elements

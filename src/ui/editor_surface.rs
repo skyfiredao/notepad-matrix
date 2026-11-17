@@ -1399,14 +1399,16 @@ impl MatrixWindow {
         true
     }
 
-    fn render_editor_hidden_markers(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    fn render_editor_hidden_markers(&self, lines: &[PaintedLine], cx: &mut Context<Self>) -> Vec<AnyElement> {
         let hidden = self.editor_hidden_lines();
         let pane = self.pane;
         let owner = self.workspace.active().id();
         let row_height = self.editor_line_height();
-        self.editor_visible_gutter_rows().into_iter().enumerate()
-            .filter_map(|(row, (line, first))| {
-                let last = self.editor_lines.get(row).is_none_or(|row| row.last);
+        lines.iter().enumerate()
+            .filter_map(|(row, visual)| {
+                let line = visual.logical_line;
+                let first = visual.first;
+                let last = visual.last;
                 let &(start, _) = hidden.iter()
                     .find(|&&(start, _)| last && line + 1 == start)
                     .or_else(|| hidden.iter().find(|&&(_, end)| first && line == end + 1))?;
@@ -1465,19 +1467,6 @@ impl MatrixWindow {
         self.editor_word_wrap_enabled()
     }
 
-    pub(super) fn editor_visible_gutter_rows(&self) -> Vec<(usize, bool)> {
-        if self.editor_cached_layout().is_none() {
-            return self.editor_visible_logical_lines().into_iter()
-                .skip(self.editor_top_line)
-                .take(self.editor_visible_capacity())
-                .map(|line| (line, true))
-                .collect();
-        }
-        self.editor_lines
-            .iter()
-            .map(|line| (line.logical_line, line.first))
-            .collect()
-    }
     pub(super) fn editor_visual_row_count(&self) -> usize {
         self.editor_cached_layout().map_or_else(
             || self.editor_visible_logical_lines().len(),
@@ -3763,8 +3752,6 @@ impl MatrixWindow {
                 view: cx.entity(),
                 pane,
             })
-            .child(self.render_bookmark_gutter(cx))
-            .children(self.render_editor_hidden_markers(cx))
             .child(
                 div()
                     .id("editor-scrollbar-vertical")
@@ -4082,6 +4069,7 @@ struct EditorElement {
     pane: crate::workspace::ViewId,
 }
 pub(super) struct EditorPaint {
+    margins: AnyElement,
     lines: Vec<PaintedLine>,
     revision: crate::input::DisplayRevision,
     top_line: usize,
@@ -4349,7 +4337,22 @@ impl Element for EditorElement {
                 line.origin.x -= horizontal_offset;
                 line.clip.origin.x -= horizontal_offset;
             }
+            let mut margins = div()
+                .id(("editor-margins", self.pane as usize))
+                .relative()
+                .w(bounds.size.width)
+                .h(bounds.size.height)
+                .child(view.render_bookmark_gutter(lines.iter().map(|line| (line.logical_line, line.first)), cx))
+                .children(view.render_editor_hidden_markers(&lines, cx))
+                .into_any_element();
+            margins.prepaint_as_root(
+                bounds.origin,
+                size(gpui::AvailableSpace::Definite(bounds.size.width), gpui::AvailableSpace::Definite(bounds.size.height)),
+                window,
+                cx,
+            );
             let paint = EditorPaint {
+                margins,
                 lines,
                 revision: view.editor().display_revision(),
                 top_line,
@@ -4962,7 +4965,7 @@ impl Element for EditorElement {
                 let enabled = axis.step_by(if decrement { -1. } else { 1. }) != offset;
                 paint_scroll_arrow(arrow, vertical, decrement, enabled, window);
             }
-            let gutter_changed = view
+            let layout_changed = view
                 .editor_chrome
                 .layout
                 .as_ref()
@@ -5002,7 +5005,7 @@ impl Element for EditorElement {
                 view.split_sync_source = None;
                 view.sync_pane_viewport(cx);
             }
-            if gutter_changed {
+            if layout_changed {
                 cx.notify();
             }
             if let Some(error) = failure {
@@ -5010,5 +5013,6 @@ impl Element for EditorElement {
             }
             view.scope_editor_pane(previous);
         });
+        prepaint.margins.paint(window, cx);
     }
 }

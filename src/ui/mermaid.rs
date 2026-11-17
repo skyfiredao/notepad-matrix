@@ -57,15 +57,11 @@ impl Renderer {
         let mtm = MainThreadMarker::new().ok_or("Mermaid rendering requires the main thread")?;
         let input = serde_json::to_string(sources).map_err(|error| error.to_string())?;
         let source_length: usize = include!(concat!(env!("OUT_DIR"), "/mermaid-source-len.rs"));
-        let license = include_str!("../../assets/mermaid/LICENSE");
         let render = include_str!("../../assets/mermaid/render.js");
-        let mut script = String::with_capacity(source_length.saturating_add(license.len()).saturating_add(input.len()).saturating_add(render.len()).saturating_add(128));
-        script.push_str("/*");
-        script.push_str(license);
-        script.push_str("*/\n");
+        let mut script = String::with_capacity(source_length.saturating_add(input.len()).saturating_add(render.len()).saturating_add(128));
         flate2::bufread::DeflateDecoder::new(include_bytes!(concat!(env!("OUT_DIR"), "/mermaid-script.deflate")).as_slice())
             .read_to_string(&mut script).map_err(|error| format!("Mermaid resource could not be decoded: {error}"))?;
-        if script.len() != source_length.saturating_add(license.len()).saturating_add(5) {
+        if script.len() != source_length {
             return Err("Mermaid resource has an invalid decoded length".into());
         }
         script.push_str("\nwindow.__mermaidSources=");

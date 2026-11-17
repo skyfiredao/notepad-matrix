@@ -82,7 +82,7 @@ impl MatrixWindow {
         let palette = self.preferences_render_palette();
         let state = &self.preferences.files;
         let ready = state.association_loaded && state.association_available && !state.association_busy; let category_focus = self.preference_control_focus("pref-association-groups",cx).tab_stop(ready); let available_focus = self.preference_control_focus("pref-association-available",cx).tab_stop(ready); let registered_focus = self.preference_control_focus("pref-association-registered",cx).tab_stop(ready);
-        let mut categories = at(70.,30.,100.,125.).id("pref-association-groups").role(Role::ListBox).track_focus(&category_focus).aria_label("支持的扩展名分类").bg(rgb(palette.background)).border_1().border_color(rgb(palette.control_edge(ready))).overflow_y_scroll().track_scroll(&state.association_scroll[0]).on_key_down(cx.listener(|view,event,_,cx| view.preferences_association_key(0,event,cx)));
+        let mut categories = at(18.,30.,150.,153.).id("pref-association-groups").role(Role::ListBox).track_focus(&category_focus).aria_label("支持的扩展名分类").bg(rgb(palette.background)).border_1().border_color(rgb(palette.control_edge(ready))).overflow_y_scroll().track_scroll(&state.association_scroll[0]).on_key_down(cx.listener(|view,event,_,cx| view.preferences_association_key(0,event,cx)));
         for (index,(name,_)) in ASSOCIATION_GROUPS.iter().enumerate() {
             let selected = state.association_group == Some(index); let focus = category_focus.clone();
             categories = categories.child(div().id(format!("pref-association-group-{index}")).h(px(14.)).line_height(px(14.)).role(Role::ListBoxOption).aria_selected(selected).bg(rgb(if selected { palette.hot_background } else { palette.background })).text_color(rgb(palette.control_text(ready))).child(*name).on_click(cx.listener(move |view,_,window,cx| {
@@ -93,7 +93,7 @@ impl MatrixWindow {
             })));
         }
         let custom = state.association_group == Some(9);
-        let mut available = at(175.,30.,80.,125.).id("pref-association-available").role(Role::ListBox).track_focus(&available_focus).aria_label("可关联的扩展名").bg(rgb(palette.background)).border_1().border_color(rgb(palette.control_edge(ready))).overflow_y_scroll().track_scroll(&state.association_scroll[1]).on_key_down(cx.listener(|view,event,_,cx| view.preferences_association_key(1,event,cx)))
+        let mut available = at(176.,30.,100.,153.).id("pref-association-available").role(Role::ListBox).track_focus(&available_focus).aria_label("可关联的扩展名").bg(rgb(palette.background)).border_1().border_color(rgb(palette.control_edge(ready))).overflow_y_scroll().track_scroll(&state.association_scroll[1]).on_key_down(cx.listener(|view,event,_,cx| view.preferences_association_key(1,event,cx)))
             .on_scroll(cx.listener(|_,_,_,cx| cx.notify()));
         let mut available_count = 0;
         if let Some((_,extensions)) = state.association_group.and_then(|index| ASSOCIATION_GROUPS.get(index)) {
@@ -110,7 +110,7 @@ impl MatrixWindow {
                 })));
             }
         }
-        let mut registered = at(300.,30.,80.,125.).id("pref-association-registered").role(Role::ListBox).track_focus(&registered_focus).aria_label("默认由本应用打开的扩展名").bg(rgb(palette.background)).border_1().border_color(rgb(palette.control_edge(ready))).overflow_y_scroll().track_scroll(&state.association_scroll[2]).on_key_down(cx.listener(|view,event,_,cx| view.preferences_association_key(2,event,cx)))
+        let mut registered = at(324.,30.,118.,153.).id("pref-association-registered").role(Role::ListBox).track_focus(&registered_focus).aria_label("默认由本应用打开的扩展名").bg(rgb(palette.background)).border_1().border_color(rgb(palette.control_edge(ready))).overflow_y_scroll().track_scroll(&state.association_scroll[2]).on_key_down(cx.listener(|view,event,_,cx| view.preferences_association_key(2,event,cx)))
             .on_scroll(cx.listener(|_,_,_,cx| cx.notify()));
         let mut registered_count = 0;
         for entry in state.associations.iter().filter(|entry| entry.is_current_application) {
@@ -127,8 +127,8 @@ impl MatrixWindow {
         }
         let add = ready && if custom { MacAssociations::extension(&state.custom_extension.read(cx).text()).is_ok() } else { state.selected_extension.is_some() };
         let remove = ready && state.selected_registered.as_ref().is_some_and(|extension| state.associations.iter().any(|entry| entry.extension == *extension && entry.is_current_application && entry.has_backup));
-        if available_count as f32 * 14. > 125. * 1.75 - 2. { available = available.pr(px(12.)); }
-        if registered_count as f32 * 14. > 125. * 1.75 - 2. { registered = registered.pr(px(12.)); }
+        if available_count as f32 * 14. > 153. * 1.75 - 2. { available = available.pr(px(12.)); }
+        if registered_count as f32 * 14. > 153. * 1.75 - 2. { registered = registered.pr(px(12.)); }
         let status = state.association_status.clone();
         let custom_field = state.custom_extension.clone();
         let mut body = div().relative().w(px(805.)).h(px(358.75)).text_size(px(12.)).line_height(px(14.)).bg(rgb(palette.pure_background)).text_color(rgb(palette.text))
@@ -139,22 +139,22 @@ impl MatrixWindow {
             .on_mouse_up_out(MouseButton::Left,cx.listener(|view,_,_,_| {
                 for grab in &view.preferences.files.association_scroll_grab { grab.set(None); }
             }))
-            .child(preferences_surface::pref_value_label(&status,20. * 1.75,0.,420. * 1.75))
-            .child(pref_label(crate::localization::current_preference_control(4009).unwrap_or("Supported extensions:"),70. * 1.75,18. * 1.75,80. * 1.75))
-            .child(pref_label(crate::localization::current_preference_control(4010).unwrap_or("Registered extensions:"),300. * 1.75,18. * 1.75,80. * 1.75))
+            .child(preferences_surface::pref_value_label(&status,18. * 1.75,0.,424. * 1.75))
+            .child(pref_label(crate::localization::current_preference_control(4009).unwrap_or("Supported extensions:"),18. * 1.75,18. * 1.75,258. * 1.75))
+            .child(pref_label(crate::localization::current_preference_control(4010).unwrap_or("Registered extensions:"),324. * 1.75,18. * 1.75,118. * 1.75))
             .child(categories).child(registered)
-            .child(self.pref_button("pref-association-add","->",add,265. * 1.75,76. * 1.75,25. * 1.75,Self::preferences_add_association,cx))
-            .child(self.pref_button("pref-association-remove","<-",remove,265. * 1.75,96. * 1.75,25. * 1.75,Self::preferences_remove_association,cx));
+            .child(self.pref_button("pref-association-add","->",add,286. * 1.75,86. * 1.75,28. * 1.75,Self::preferences_add_association,cx))
+            .child(self.pref_button("pref-association-remove","<-",remove,286. * 1.75,108. * 1.75,28. * 1.75,Self::preferences_remove_association,cx));
         custom_field.update(cx,|field,cx| { if field.enabled() != ready { field.set_enabled(ready,cx); } });
-        if custom { body = body.child(at(175.,86.,80.,12.).child(custom_field)); }
+        if custom { body = body.child(at(176.,98.,100.,12.).child(custom_field)); }
         else {
             body = body.child(available);
-            if available_count as f32 * 14. > 125. * 1.75 - 2. {
-                body = body.child(self.preferences_association_scrollbar(1,175.,80.,cx));
+            if available_count as f32 * 14. > 153. * 1.75 - 2. {
+                body = body.child(self.preferences_association_scrollbar(1,176.,100.,cx));
             }
         }
-        if registered_count as f32 * 14. > 125. * 1.75 - 2. {
-            body = body.child(self.preferences_association_scrollbar(2,300.,80.,cx));
+        if registered_count as f32 * 14. > 153. * 1.75 - 2. {
+            body = body.child(self.preferences_association_scrollbar(2,324.,118.,cx));
         }
         body.into_any_element()
     }
@@ -164,8 +164,8 @@ impl MatrixWindow {
         let scroll = self.preferences.files.association_scroll[index].clone();
         let paint_scroll = scroll.clone();
         let grab = self.preferences.files.association_scroll_grab[index].clone();
-        let height = 125. * 1.75 - 2.;
-        at(x,30.,width,125.).child(div().absolute().right(px(1.)).top(px(1.)).w(px(12.)).h(px(height))
+        let height = 153. * 1.75 - 2.;
+        at(x,30.,width,153.).child(div().absolute().right(px(1.)).top(px(1.)).w(px(12.)).h(px(height))
             .id(format!("pref-association-scrollbar-{index}")).role(Role::ScrollBar).aria_orientation(gpui::accesskit::Orientation::Vertical)
             .map(|element| preferences_editing_surface::scrollbar_accessibility(element, scroll.clone()))
             .on_mouse_down(MouseButton::Left,cx.listener(move |_,event: &gpui::MouseDownEvent,_,cx| {
@@ -732,7 +732,7 @@ impl MatrixWindow {
                 Err(error) => {
                     self.notify_editor_error(format!("URI 输入框无法创建: {error}"),cx);
                     let palette = self.preferences_render_palette();
-                    return at(106.,148.,238.,30.).text_color(rgb(palette.disabled_text)).child(error.to_string()).into_any_element();
+                    return at(26.,91.,408.,70.).text_color(rgb(palette.disabled_text)).child(error.to_string()).into_any_element();
                 }
             }
             self.preferences.files.uri_value = Some(value.clone());
@@ -757,13 +757,13 @@ impl MatrixWindow {
                 }
             }));
         }
-        let Some(field) = &self.preferences.files.uri_field else { return at(106.,148.,238.,30.).into_any_element(); };
+        let Some(field) = &self.preferences.files.uri_field else { return at(26.,91.,408.,70.).into_any_element(); };
         let palette = self.preferences_render_palette();
         field.set_enabled(enabled,palette);
-        at(106.,148.,238.,30.).border_1().border_color(rgb(palette.control_edge(enabled))).bg(rgb(if enabled { palette.background } else { palette.pure_background })).child(field.element()).into_any_element()
+        at(26.,91.,408.,70.).border_1().border_color(rgb(palette.control_edge(enabled))).bg(rgb(if enabled { palette.background } else { palette.pure_background })).child(field.element()).into_any_element()
     }
 
-    fn preferences_recent_length(&mut self,value: i64,window: &mut Window,cx: &mut Context<Self>) -> AnyElement {
+    fn preferences_recent_length(&mut self,value: i64,x: f32,window: &mut Window,cx: &mut Context<Self>) -> AnyElement {
         if self.preferences.files.recent_length_blur.is_none() {
             let focus = self.preferences.files.recent_length.read(cx).focus_handle();
             self.preferences.files.recent_length_blur = Some(cx.on_blur(&focus,window,|view,window,cx| {
@@ -784,7 +784,7 @@ impl MatrixWindow {
             entity.update(cx,|field,cx| field.set_text(&value.max(0).to_string(),window,cx));
         }
         entity.update(cx,|field,cx| { if field.enabled() != (value > 0) { field.set_enabled(value > 0,cx); } });
-        at(230.,127.,20.,12.).child(entity).into_any_element()
+        at(x,137.,32.,12.).child(entity).into_any_element()
     }
 
     fn preferences_performance_size(&mut self,enabled: bool,window: &mut Window,cx: &mut Context<Self>) -> AnyElement {
@@ -843,7 +843,7 @@ impl MatrixWindow {
             entity.update(cx,|field,cx| field.set_text(&value,window,cx));
         }
         entity.update(cx,|field,cx| { if field.enabled() != enabled { field.set_enabled(enabled,cx); } });
-        at(153.,62.,208.,12.).child(entity).into_any_element()
+        at(92.,65.,342.,12.).child(entity).into_any_element()
     }
 
     pub(super) fn apply_file_preferences(&mut self,settings: &Value,window: &mut Window,cx: &mut Context<Self>) {
@@ -1002,55 +1002,61 @@ impl MatrixWindow {
         }
         match page {
             Page::Directories => {
-                group!("默认打开/保存目录",110.,29.,232.,101.);
-                radio!("pref-dir-current","跟随当前文件","openSaveDir.value",0,0,118.,60.,200.);
-                radio!("pref-dir-last","记住上次使用的目录","openSaveDir.value",0,1,118.,75.,217.);
-                radio!("pref-dir-custom","","openSaveDir.value",0,2,118.,90.,11.);
+                group!("默认打开/保存目录",18.,12.,424.,105.);
+                radio!("pref-dir-current","跟随当前文件","openSaveDir.value",0,0,26.,34.,408.);
+                radio!("pref-dir-last","记住上次使用的目录","openSaveDir.value",0,1,26.,54.,408.);
+                radio!("pref-dir-custom","","openSaveDir.value",0,2,26.,76.,11.);
                 let custom = self.pref_int("openSaveDir.value",0) == 2;
-                input!("openSaveDir.defaultDirPath",custom,134.,89.,179.);
-                button!("pref-dir-browse","...",custom,320.,88.,16.,Self::preferences_browse_default_directory);
-                check!("pref-folder-drop","拖放文件夹时打开其中所有文件，而非文件夹工作区","isFolderDroppedOpenFiles",false,false,true,110.,145.,342.);
+                input!("openSaveDir.defaultDirPath",custom,42.,75.,370.);
+                button!("pref-dir-browse","...",custom,420.,74.,16.,Self::preferences_browse_default_directory);
+                check!("pref-folder-drop","拖放文件夹时打开其中所有文件，而非文件夹工作区","isFolderDroppedOpenFiles",false,false,true,18.,136.,424.);
             }
             Page::RecentFiles => {
-                group!("最近文件记录",94.,25.,270.,125.);
-                check!("pref-history-validate","启动时不检查文件","validate_recent_files_at_startup",false,true,true,100.,38.,140.);
-                label_right!(6306,"Max. number of entries:",98.,52.,112.);
-                input!("recent_files_limit",true,214.,51.,14.);
-                label!(crate::localization::current_preference_control(6462).unwrap_or("(0 – 30)"),234.,52.,90.);
-                group!("显示",100.,70.,258.,74.);
-                check!("pref-history-submenu","在子菜单中","History.inSubMenu",false,false,true,106.,83.,79.);
-                radio!("pref-history-name","仅文件名","History.customLength",-1,0,106.,98.,170.);
-                radio!("pref-history-path","完整文件路径","History.customLength",-1,-1,106.,113.,170.);
+                group!("最近文件记录",18.,12.,424.,158.);
+                check!("pref-history-validate","启动时不检查文件","validate_recent_files_at_startup",false,true,true,26.,29.,408.);
+                label_right!(6306,"Max. number of entries:",26.,51.,154.);
+                input!("recent_files_limit",true,186.,49.,28.);
+                label!(crate::localization::current_preference_control(6462).unwrap_or("(0 – 30)"),224.,51.,100.);
+                group!("显示",26.,72.,408.,88.);
+                check!("pref-history-submenu","在子菜单中","History.inSubMenu",false,false,true,34.,87.,392.);
+                radio!("pref-history-name","仅文件名","History.customLength",-1,0,34.,104.,392.);
+                radio!("pref-history-path","完整文件路径","History.customLength",-1,-1,34.,121.,392.);
                 let length = self.pref_int("History.customLength",-1);
-                radio!("pref-history-length","自定义最大长度:","History.customLength",-1,if length > 0 { length } else { 100 },106.,128.,120.);
-                body = body.child(self.preferences_recent_length(length,window,cx));
-                label_enabled!(crate::localization::current_preference_control(6464).unwrap_or("(1 – 259)"),length > 0,256.,129.,95.);
+                let length_label = crate::localization::current_preference_source_label("pref-history-length","自定义最大长度:");
+                let length_label_width = dialog_font::logical(window.text_system().shape_line(length_label.to_owned().into(),px(12.),&[gpui::TextRun {
+                    len: length_label.len(),font: gpui::font(dialog_font::font_family()),color: rgb(palette.text).into(),background_color: None,underline: None,strikethrough: None,
+                }],None).width()).ceil();
+                let length_radio_width = (16. + length_label_width) / 1.75;
+                let length_input_x = 34. + length_radio_width + 6.;
+                radio!("pref-history-length","自定义最大长度:","History.customLength",-1,if length > 0 { length } else { 100 },34.,138.,length_radio_width);
+                body = body.child(self.preferences_recent_length(length,length_input_x,window,cx));
+                label_enabled!(crate::localization::current_preference_control(6464).unwrap_or("(1 – 259)"),length > 0,length_input_x + 40.,139.,150.);
             }
             Page::Associations => return self.render_preferences_associations(window,cx),
             Page::Backup => {
-                group!("会话快照与定时备份",79.,1.,289.,98.);
+                group!("会话快照与定时备份",18.,4.,424.,96.);
                 let remember = self.pref_bool("remember_last_session",true);
                 let snapshot = remember && self.preferences.files.snapshot_ui.unwrap_or(self.pref_bool("snapshot_mode",true) && !self.preferences.files.launch_no_session);
                 self.preferences.files.snapshot_ui = Some(snapshot);
-                check!("pref-backup-session","记住当前会话供下次启动使用","remember_last_session",true,false,true,85.,14.,270.);
+                check!("pref-backup-session","记住当前会话供下次启动使用","remember_last_session",true,false,true,26.,17.,408.);
                 body = body.child(self.preferences_snapshot_check(snapshot,remember,cx));
-                label_right_enabled!(6819,"Trigger backup on modification in every",snapshot,82.,46.,190.);
-                input!("snapshot_backup_ms",snapshot,276.,44.,21.);
-                label_enabled!(crate::localization::current_preference_control(6821).unwrap_or("seconds"),snapshot,302.,46.,66.);
-                label_right_enabled!(6822,"Backup path:",snapshot,85.,64.,61.);
+                label_right_enabled!(6819,"Trigger backup on modification in every",snapshot,26.,49.,236.);
+                input!("snapshot_backup_ms",snapshot,268.,47.,30.);
+                label_enabled!(crate::localization::current_preference_control(6821).unwrap_or("seconds"),snapshot,306.,49.,120.);
+                label_right_enabled!(6822,"Backup path:",snapshot,26.,67.,60.);
                 body = body.child(self.preferences_backup_path(snapshot,window,cx));
-                check!("pref-backup-absent","记住上次会话中无法访问的文件","KeepSessionAbsentFileEntries",false,false,true,85.,83.,270.);
-                group!("保存时备份",79.,102.,289.,101.);
-                radio!("pref-backup-none","无","save_backup","none","none",85.,115.,87.);
-                radio!("pref-backup-simple","简单备份","save_backup","none","simple",85.,128.,111.);
-                radio!("pref-backup-verbose","详细备份","save_backup","none","verbose",85.,141.,111.);
+                check!("pref-backup-absent","记住上次会话中无法访问的文件","KeepSessionAbsentFileEntries",false,false,true,26.,83.,408.);
+                group!("保存时备份",18.,106.,424.,95.);
+                radio!("pref-backup-none","无","save_backup","none","none",26.,123.,110.);
+                radio!("pref-backup-simple","简单备份","save_backup","none","simple",150.,123.,116.);
+                radio!("pref-backup-verbose","详细备份","save_backup","none","verbose",280.,123.,146.);
                 let enabled = self.pref_string("save_backup","none") != "none";
                 let custom = enabled && self.pref_bool("backup_use_directory",false);
-                group!("",89.,156.,269.,37.);
-                check!("pref-backup-directory","自定义备份目录","backup_use_directory",false,false,enabled,85.,156.,200.);
-                label_right_enabled!(6803,"Directory:",custom,95.,173.,40.);
-                input!("backup_directory",custom,141.,171.,185.);
-                button!("pref-backup-browse","...",custom,333.,170.,16.,Self::preferences_browse_backup_directory);
+                group!("",26.,157.,408.,33.);
+                check!("pref-backup-directory","自定义备份目录","backup_use_directory",false,false,enabled,34.,145.,390.);
+                label_right_enabled!(6803,"Directory:",custom,34.,170.,58.);
+                input!("backup_directory",custom,98.,168.,300.);
+                button!("pref-backup-browse","...",custom,406.,167.,20.,Self::preferences_browse_backup_directory);
             }
             Page::Instances => {
                 group!("多实例设置 *",11.,3.,268.,71.);
@@ -1067,7 +1073,7 @@ impl MatrixWindow {
                 label_right!(6172,"Custom format:",14.,148.,77.);
                 input!("insertDateTime.customizedFormat",true,92.,146.,175.);
                 body = body.child(preferences_surface::pref_value_label(&self.preferences_date_preview(),94. * 1.75,163. * 1.75,180. * 1.75));
-                group!("面板状态与 [-nosession] *",288.,3.,160.,175.);
+                group!("面板状态与 [-nosession] *",288.,3.,160.,181.);
                 label!("在其他实例或使用 [-nosession] 参数时，记住已打开的面板状态。",294.,14.,150.);
                 check!("pref-panel-doclist","文件列表","multiInst.documentList",false,false,true,294.,70.,134.);
                 check!("pref-panel-characters","字符面板","multiInst.characterPanel",false,false,true,294.,85.,134.);
@@ -1084,56 +1090,56 @@ impl MatrixWindow {
             }
             Page::Performance => {
                 let enabled = self.pref_bool("largeFileRestriction.isEnabled",true);
-                group!("大文件限制",73.,7.,301.,189.);
-                body = body.child(at(217.,23.,10.,8.).id("pref-large-help").role(Role::Button).focusable().tab_index(0).text_color(rgb(palette.link_text)).child("(?)").on_click(cx.listener(|view,_,window,cx| view.preferences_large_file_help(window,cx))));
-                check!("pref-large-enabled","启用大文件限制（不使用语法高亮）","largeFileRestriction.isEnabled",true,false,true,79.,41.,290.);
-                label_right_enabled!(7144,"Define Large File Size:",enabled,75.,59.,125.);
+                group!("大文件限制",18.,7.,286.,189.);
+                body = body.child(at(282.,23.,14.,8.).id("pref-large-help").role(Role::Button).focusable().tab_index(0).text_color(rgb(palette.link_text)).child("(?)").on_click(cx.listener(|view,_,window,cx| view.preferences_large_file_help(window,cx))));
+                check!("pref-large-enabled","启用大文件限制（不使用语法高亮）","largeFileRestriction.isEnabled",true,false,true,26.,41.,260.);
+                label_right_enabled!(7144,"Define Large File Size:",enabled,26.,59.,165.);
                 body = body.child(self.preferences_performance_size(enabled,window,cx));
-                label_enabled!(crate::localization::current_preference_control(7146).unwrap_or("MB   (1 – 2046)"),enabled,228.,59.,90.);
-                check!("pref-large-wrap","全局停用自动换行","largeFileRestriction.deactivateWordWrap",true,false,enabled,127.,80.,200.);
-                check!("pref-large-completion","允许自动补全","largeFileRestriction.allowAutoCompletion",false,false,enabled,127.,95.,200.);
-                check!("pref-large-highlight","允许智能高亮","largeFileRestriction.allowSmartHilite",false,false,enabled,127.,110.,200.);
-                check!("pref-large-braces","允许括号匹配","largeFileRestriction.allowBraceMatch",false,false,enabled,127.,125.,200.);
-                check!("pref-large-links","允许可点击链接","largeFileRestriction.allowClickableLink",false,false,enabled,127.,140.,200.);
-                check!("pref-large-warning","打开 ≥2GB 文件时不显示警告","largeFileRestriction.suppress2GBWarning",false,false,true,79.,178.,280.);
+                label_enabled!(crate::localization::current_preference_control(7146).unwrap_or("MB   (1 – 2046)"),enabled,228.,59.,70.);
+                check!("pref-large-wrap","全局停用自动换行","largeFileRestriction.deactivateWordWrap",true,false,enabled,42.,80.,200.);
+                check!("pref-large-completion","允许自动补全","largeFileRestriction.allowAutoCompletion",false,false,enabled,42.,95.,200.);
+                check!("pref-large-highlight","允许智能高亮","largeFileRestriction.allowSmartHilite",false,false,enabled,42.,110.,200.);
+                check!("pref-large-braces","允许括号匹配","largeFileRestriction.allowBraceMatch",false,false,enabled,42.,125.,200.);
+                check!("pref-large-links","允许可点击链接","largeFileRestriction.allowClickableLink",false,false,enabled,42.,140.,200.);
+                check!("pref-large-warning","打开 ≥2GB 文件时不显示警告","largeFileRestriction.suppress2GBWarning",false,false,true,26.,178.,260.);
             }
             Page::CloudLinks => {
-                group!("超链接设置",89.,95.,268.,90.);
+                group!("超链接设置",18.,18.,424.,161.);
                 let enabled = self.preferences_link_enabled();
-                body = body.child(self.preferences_link_check("pref-link-enabled","启用","enabled",enabled,true,123.,108.,83.,cx));
-                body = body.child(self.preferences_link_check("pref-link-underline","不显示下划线","noUnderline",self.preferences_link_no_underline(),enabled,209.,108.,140.,cx));
-                body = body.child(self.preferences_link_check("pref-link-box","启用全框模式","fullBox",self.preferences_link_full_box(),enabled,209.,122.,140.,cx));
-                label_enabled!(crate::localization::current_preference_control(6264).unwrap_or("URI customized schemes:"),enabled,107.,137.,120.);
+                body = body.child(self.preferences_link_check("pref-link-enabled","启用","enabled",enabled,true,26.,36.,110.,cx));
+                body = body.child(self.preferences_link_check("pref-link-underline","不显示下划线","noUnderline",self.preferences_link_no_underline(),enabled,150.,36.,280.,cx));
+                body = body.child(self.preferences_link_check("pref-link-box","启用全框模式","fullBox",self.preferences_link_full_box(),enabled,150.,54.,280.,cx));
+                label_enabled!(crate::localization::current_preference_control(6264).unwrap_or("URI customized schemes:"),enabled,26.,78.,408.);
                 body = body.child(self.preferences_uri_schemes(enabled,window,cx));
             }
             Page::Miscellaneous => {
-                group!("自动检测文件状态",36.,4.,155.,60.);
+                group!("自动检测文件状态",12.,4.,214.,68.);
                 let value = self.pref_int("FileAutoDetection",2);
                 let detection = if value & 1 != 0 { 1 } else if value & 2 != 0 { 2 } else { 0 };
                 let silent = *self.preferences.files.detection_silent.get_or_insert(value & 4 != 0);
                 let end = *self.preferences.files.detection_end.get_or_insert(value & 8 != 0);
                 let flags = if silent { 4 } else { 0 } | if end { 8 } else { 0 };
-                body = body.child(self.pref_choice("FileAutoDetection",vec![(json!(2 | flags),"对当前文件启用".into()),(json!(1 | flags),"对所有打开文件启用".into()),(json!(0),"禁用".into())],json!(value),true,44. * 1.75,16. * 1.75,140. * 1.75,cx));
-                body = body.child(self.preferences_detection_check("pref-file-silent","自动更新文件内容",4,silent,detection != 0,32.,cx));
-                body = body.child(self.preferences_detection_check("pref-file-end","更新后定位到末行",8,end,detection != 0,44.,cx));
-                group!("文档切换（Ctrl+TAB）",261.,4.,155.,39.);
+                body = body.child(self.pref_choice("FileAutoDetection",vec![(json!(2 | flags),"对当前文件启用".into()),(json!(1 | flags),"对所有打开文件启用".into()),(json!(0),"禁用".into())],json!(value),true,20. * 1.75,20. * 1.75,198. * 1.75,cx));
+                body = body.child(self.preferences_detection_check("pref-file-silent","自动更新文件内容",4,silent,detection != 0,38.,cx));
+                body = body.child(self.preferences_detection_check("pref-file-end","更新后定位到末行",8,end,detection != 0,52.,cx));
+                group!("文档切换（Ctrl+TAB）",234.,4.,214.,39.);
                 let switcher = self.pref_bool("document_switcher",true);
-                check!("pref-switcher-enabled","启用","document_switcher",true,false,true,269.,15.,140.);
-                check!("pref-switcher-mru","按最近使用顺序切换","mru_switching",true,false,switcher,269.,28.,140.);
-                group!("文档速览",261.,47.,155.,39.);
-                check!("pref-peek-tab","在标签中启用速览","docPeekOnTab",false,false,true,269.,58.,140.);
-                check!("pref-peek-map","在文档结构图中启用速览","docPeekOnMap",false,false,true,269.,71.,140.);
-                body = body.child(at(37.,92.,115.,12.).id("pref-rendering-mode").role(Role::ComboBox).aria_label("macOS 原生渲染").bg(rgb(palette.control_background(false))).border_1().border_color(rgb(palette.disabled_edge)).text_color(rgb(palette.disabled_text)).child("macOS 原生（GPUI）"));
-                label!("渲染模式",157.,93.,88.);
-                check!("pref-mute","全部静音","muteSounds",false,false,true,37.,130.,210.);
-                check!("pref-detect-encoding","自动检测字符编码","DetectEncoding",true,false,true,37.,145.,230.);
-                check!("pref-short-title","标题栏仅显示文件名","titleBar.short",false,false,true,37.,160.,230.);
-                check!("pref-save-all-confirm","全部保存时弹出确认对话框","SaveAllConfirm",self.pref_bool("save_all_confirm",true),false,true,37.,175.,230.);
-                check!("pref-folder-symlinks","允许文件夹工作区载入符号链接","isFawSymlinkAllowed",false,false,true,37.,190.,330.);
-                label_right!(6322,"Session file ext.:",270.,126.,108.);
-                input!("sessionExt",true,380.,123.,34.);
-                label_right!(6337,"Workspace file ext.:",270.,143.,108.);
-                input!("workspaceExt",true,380.,140.,34.);
+                check!("pref-switcher-enabled","启用","document_switcher",true,false,true,242.,15.,198.);
+                check!("pref-switcher-mru","按最近使用顺序切换","mru_switching",true,false,switcher,242.,28.,198.);
+                group!("文档速览",234.,47.,214.,39.);
+                check!("pref-peek-tab","在标签中启用速览","docPeekOnTab",false,false,true,242.,58.,198.);
+                check!("pref-peek-map","在文档结构图中启用速览","docPeekOnMap",false,false,true,242.,71.,198.);
+                label!("渲染模式",20.,83.,198.);
+                body = body.child(at(20.,96.,198.,12.).id("pref-rendering-mode").role(Role::ComboBox).aria_label("macOS 原生渲染").bg(rgb(palette.control_background(false))).border_1().border_color(rgb(palette.disabled_edge)).text_color(rgb(palette.disabled_text)).child("macOS 原生（GPUI）"));
+                check!("pref-mute","全部静音","muteSounds",false,false,true,20.,132.,420.);
+                check!("pref-detect-encoding","自动检测字符编码","DetectEncoding",true,false,true,20.,147.,420.);
+                check!("pref-short-title","标题栏仅显示文件名","titleBar.short",false,false,true,20.,162.,420.);
+                check!("pref-save-all-confirm","全部保存时弹出确认对话框","SaveAllConfirm",self.pref_bool("save_all_confirm",true),false,true,20.,177.,420.);
+                check!("pref-folder-symlinks","允许文件夹工作区载入符号链接","isFawSymlinkAllowed",false,false,true,20.,192.,420.);
+                label_right!(6322,"Session file ext.:",242.,97.,124.);
+                input!("sessionExt",true,372.,94.,68.);
+                label_right!(6337,"Workspace file ext.:",242.,115.,124.);
+                input!("workspaceExt",true,372.,112.,68.);
             }
             _ => {}
         }
@@ -1179,7 +1185,7 @@ impl MatrixWindow {
         let label = crate::localization::current_preference_control(6818).unwrap_or("Enable session snapshot and periodic backup");
         let focus = self.preference_control_focus("pref-backup-snapshot",cx).tab_stop(enabled);
         let palette = self.preferences_render_palette();
-        at(85.,29.,270.,10.).id("pref-backup-snapshot").role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
+        at(26.,32.,408.,10.).id("pref-backup-snapshot").role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
             if !enabled { return; }
             focus.focus(window,cx);
             view.preferences_toggle_snapshot(window,cx);
@@ -1211,7 +1217,7 @@ impl MatrixWindow {
         let label = crate::localization::current_preference_control(if flag == 4 { 6313 } else { 6325 }).unwrap_or(label);
         let palette = self.preferences_render_palette();
         let focus = self.preference_control_focus(id,cx).tab_stop(enabled);
-        at(44.,y,140.,10.).id(id).role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
+        at(20.,y,198.,10.).id(id).role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
             if !enabled { return; }
             focus.focus(window,cx);
             view.preferences_toggle_detection(flag,checked,window,cx);
@@ -1297,7 +1303,7 @@ impl NativeUriField {
         use objc2::runtime::AnyObject;
         use objc2_foundation::{NSPoint,NSRect,NSSize,NSString};
         unsafe {
-            let frame = NSRect::new(NSPoint::new(0.,0.),NSSize::new(dialog_font::native_length(416.5),dialog_font::native_length(52.5)));
+            let frame = NSRect::new(NSPoint::new(0.,0.),NSSize::new(dialog_font::native_length(714.),dialog_font::native_length(122.5)));
             let scroll: Allocated<AnyObject> = msg_send![class!(NSScrollView), alloc];
             if Allocated::as_ptr(&scroll).is_null() { return Err(io::Error::other("macOS could not allocate the URI scroll view")); }
             let scroll: Option<Retained<AnyObject>> = msg_send![scroll, initWithFrame: frame];
@@ -1313,12 +1319,12 @@ impl NativeUriField {
             let _: () = msg_send![&*text, setAutomaticSpellingCorrectionEnabled: false];
             let _: () = msg_send![&*text, setHorizontallyResizable: false];
             let _: () = msg_send![&*text, setVerticallyResizable: true];
-            let _: () = msg_send![&*text, setMinSize: NSSize::new(0.,dialog_font::native_length(52.5))];
-            let _: () = msg_send![&*text, setMaxSize: NSSize::new(dialog_font::native_length(416.5),f64::MAX)];
+            let _: () = msg_send![&*text, setMinSize: NSSize::new(0.,dialog_font::native_length(122.5))];
+            let _: () = msg_send![&*text, setMaxSize: NSSize::new(dialog_font::native_length(714.),f64::MAX)];
             let _: () = msg_send![&*text, setTextContainerInset: NSSize::new(dialog_font::native_length(3.),dialog_font::native_length(2.))];
             let container: *mut AnyObject = msg_send![&*text, textContainer];
             let _: () = msg_send![container, setWidthTracksTextView: true];
-            let _: () = msg_send![container, setContainerSize: NSSize::new(dialog_font::native_length(416.5),f64::MAX)];
+            let _: () = msg_send![container, setContainerSize: NSSize::new(dialog_font::native_length(714.),f64::MAX)];
             let font = dialog_font::native_font();
             let _: () = msg_send![&*text, setFont: &*font];
             let _: () = msg_send![&*text, setAccessibilityLabel: &*NSString::from_str("自定义 URI 格式")];

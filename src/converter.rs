@@ -3,7 +3,6 @@ use crate::input::LineEnding;
 // d3837f3e0d18d10436401499c6fb3b89b19cd08b, source/PluginDefinition.cpp.
 // Upstream Copyright (C)2022 Don HO <don.h@free.fr>.
 // SPDX-License-Identifier: GPL-3.0-or-later
-// GPL terms are retained in assets/notepad-plus-plus/LICENSE; no DLL is linked.
 
 use std::{fmt, fs, io, io::Write, path::{Path, PathBuf}};
 

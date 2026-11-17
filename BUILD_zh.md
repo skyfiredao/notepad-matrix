@@ -141,7 +141,7 @@ dist/macos-arm64/notepad-matrix.dmg
 1. 检查输入为 ARM64 Mach-O。
 2. 通过 `cargo metadata --locked --offline` 读取依赖，要求依赖已经下载。
 3. 使用 Swift 和系统类型标识生成文档类型声明。
-4. 复制可执行文件、图标、主题和依赖许可证，生成 `Info.plist`。
+4. 核对选中依赖的名称、版本和许可声明与 `THIRD_PARTY_NOTICES.md` 一致，复制可执行文件、图标、主题及两份共用法律文件（`LICENSE` 和 `THIRD_PARTY_NOTICES.md`），生成 `Info.plist`。
 5. 剥离符号，执行 ad-hoc 签名，生成含 Applications 链接的压缩 DMG。
 
 检查签名并启动应用：
@@ -215,4 +215,4 @@ open "$HOME/Applications/notepad-matrix.app"
 
 日常构建直接使用仓库内的 `assets/`，不需要先运行资源导入脚本。Cargo 的 `build.rs` 会在构建输出目录生成语言 API 数据并无损压缩 Mermaid 脚本，压缩后会核对还原字节。
 
-`scripts/` 中的语言、字符和 Unicode catalog 脚本用于维护资源，不是首次构建依赖。资源修改时保留相关来源和许可文件。完整职责与取舍见 [DESIGN_zh.md](DESIGN_zh.md#7-按需解析资源不以删除功能换体积)。
+`scripts/` 中的语言、字符和 Unicode catalog 脚本用于维护资源，不是首次构建依赖。资源修改时保留相关来源和许可声明。依赖版本、许可条款或内嵌资源变化时，同步更新 `THIRD_PARTY_NOTICES.md`。共同条款只放一份，各组件的版权和必要附加声明保留。打包脚本会拒绝缺失或过期的依赖记录。完整职责与取舍见 [DESIGN_zh.md](DESIGN_zh.md#7-按需解析资源不以删除功能换体积)。

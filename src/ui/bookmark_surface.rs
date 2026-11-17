@@ -331,7 +331,7 @@ impl MatrixWindow {
         self.editor_changed(result, window, cx);
     }
 
-    pub(super) fn render_bookmark_gutter(&self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_bookmark_gutter(&self, lines: impl IntoIterator<Item = (usize, bool)>, cx: &mut Context<Self>) -> AnyElement {
         let dark = self.dark;
         let pane = self.pane;
         let folds = self.udl_fold_ranges();
@@ -344,7 +344,6 @@ impl MatrixWindow {
         let fold_margin_highlight = self.style_colour("Fold margin", "fgColor", 0xffffff);
         let owner = self.workspace.active().id();
         let text = self.editor().display_snapshot();
-        let capacity = self.editor_visible_capacity();
         let row_height = self.editor_line_height();
         let line_number_width = self.editor_line_number_width();
         let (line_number_family, line_number_size) = self.editor_line_number_font();
@@ -359,21 +358,6 @@ impl MatrixWindow {
             .max_by_key(|(header, _)| *header)
             .copied();
         let active_fold_color = self.style_colour("Fold active", "fgColor", 0xff0000);
-        let mut lines = self.editor_visible_gutter_rows();
-        if lines.is_empty() {
-            lines = crate::editor::visible_rows(
-                self.editor_logical_line_for_visual_row(self.editor_top_line),
-                capacity,
-                if self.editor_follow_caret {
-                    caret_line
-                } else {
-                    self.editor_logical_line_for_visual_row(self.editor_top_line)
-                },
-                text.len_lines(ropey::LineType::LF_CR),
-            )
-            .map(|line| (line, true))
-            .collect();
-        }
         let bookmarks: std::collections::BTreeSet<_> =
             self.editor().document().bookmarked_lines().collect();
         let rows = lines

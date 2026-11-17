@@ -193,7 +193,7 @@ impl MatrixWindow {
         true
     }
 
-    fn udl_work_pending(&self) -> bool {
+    pub(super) fn udl_work_pending(&self) -> bool {
         self.udl.busy || self.udl.pending_save || !self.udl.jobs.is_empty() || self.udl.prompting
     }
 

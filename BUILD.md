@@ -141,7 +141,7 @@ The script:
 1. Checks that the input is an ARM64 Mach-O executable.
 2. Reads dependencies with `cargo metadata --locked --offline`, so dependencies must already be downloaded.
 3. Uses Swift and system type identifiers to create document type declarations.
-4. Copies the executable, icon, themes, and dependency licenses, and writes `Info.plist`.
+4. Checks the selected dependency names, versions and declared licenses against `THIRD_PARTY_NOTICES.md`, copies the executable, icon, themes and two shared legal files (`LICENSE` and `THIRD_PARTY_NOTICES.md`), and writes `Info.plist`.
 5. Strips symbols, applies an ad-hoc signature, and creates a compressed DMG with an Applications link.
 
 Verify the signature and launch the application:
@@ -215,4 +215,4 @@ System procedure: [Apple: Safely open apps on your Mac](https://support.apple.co
 
 Normal builds use the checked-in `assets/` directly. Resource-import scripts are not prerequisites. Cargo's `build.rs` generates language API data in the build output directory and losslessly compresses the Mermaid script, checking the restored bytes after compression.
 
-The language, character, and Unicode catalog scripts in `scripts/` maintain resources. Keep source and license notices when changing those resources. See [resource trade-offs](DESIGN.md#7-parse-resources-on-demand-without-removing-features) for the design.
+The language, character, and Unicode catalog scripts in `scripts/` maintain resources. Keep source and license notices when changing those resources. Update `THIRD_PARTY_NOTICES.md` when dependency versions, license terms or bundled resources change. Keep common terms once and retain each component's copyright and additional notices. The package script rejects missing or stale dependency entries. See [resource trade-offs](DESIGN.md#7-parse-resources-on-demand-without-removing-features) for the design.

@@ -168,7 +168,7 @@ impl DialogKind {
             Self::Preferences => preferences_surface::dimensions(),
             Self::StyleConfigurator => style_config_surface::dimensions(),
             Self::ShortcutMapper => shortcut_surface::dimensions(),
-            Self::About => size(px(500.), px(280.)),
+            Self::About => about_surface::dimensions(),
             Self::Help => size(px(660.), px(440.)),
             Self::HashText(_) | Self::HashFiles(_) => hash_surface::dimensions(),
             Self::WindowManager => window_manager_surface::dimensions(),
@@ -212,7 +212,7 @@ impl DialogKind {
             Self::Preferences => owner.preferences_visible = false,
             Self::StyleConfigurator => owner.style_config.visible = false,
             Self::ShortcutMapper => owner.shortcut_mapper.visible = false,
-            Self::About => owner.about_visible = false,
+            Self::About => owner.matrix_about_closed(cx),
             Self::Help => owner.dismiss_help(cx),
             Self::HashText(algorithm) => owner.hide_hash_text(algorithm, cx),
             Self::HashFiles(algorithm) => owner.hide_hash_files(algorithm, cx),
@@ -246,6 +246,10 @@ pub(super) struct FloatingWindow {
 }
 
 impl FloatingWindow {
+    pub(super) fn is_about(&self) -> bool {
+        self.kind == DialogKind::About
+    }
+
     fn new(
         owner: gpui::Entity<MatrixWindow>,
         kind: DialogKind,
@@ -277,11 +281,17 @@ impl FloatingWindow {
         let weak = owner.downgrade();
         let activated_owner = owner.downgrade();
         cx.observe_window_activation(window, move |_: &mut Self, window, cx| {
+            if matrix_surface::locked() {
+                return;
+            }
             if matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::FindInResults | DialogKind::RunVariables) {
                 let active = window.is_window_active();
                 let active_window: gpui::AnyWindowHandle = Window::window_handle(window);
                 let owner = activated_owner.clone();
                 cx.defer(move |cx| {
+                    if matrix_surface::locked() {
+                        return;
+                    }
                     if let Err(error) = owner.update(cx, |owner, cx| {
                         if kind == DialogKind::RunVariables {
                             if !active { owner.dismiss_run_variables(cx); }
@@ -312,6 +322,9 @@ impl FloatingWindow {
         })
         .detach();
         window.on_window_should_close(cx, move |window, cx| {
+            if matrix_surface::locked() && kind != DialogKind::About {
+                return false;
+            }
             if let Err(error) =
                 weak.update(cx, |owner, cx| owner.dismiss_floating(kind, window, cx))
             {
@@ -334,6 +347,9 @@ impl FloatingWindow {
         cx: &mut Context<Self>,
         update: impl FnOnce(&mut MatrixWindow, &mut Window, &mut Context<MatrixWindow>),
     ) {
+        if matrix_surface::locked() {
+            return;
+        }
         if let Err(error) = self.owner.update(cx, |owner, cx| update(owner, window, cx)) {
             eprintln!("auxiliary window lost its document: {error}");
             window.remove_window();
@@ -343,6 +359,9 @@ impl FloatingWindow {
 
 impl Render for FloatingWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if matrix_surface::locked() && !self.is_about() {
+            return div().size_full().bg(rgb(0x000000)).into_any_element();
+        }
         let kind = self.kind;
         if kind == DialogKind::Find
             && let Some(owner) = self.owner.upgrade()
@@ -360,7 +379,7 @@ impl Render for FloatingWindow {
             DialogKind::Preferences => owner.render_preferences(window, cx),
             DialogKind::StyleConfigurator => owner.render_style_configurator(window, cx),
             DialogKind::ShortcutMapper => owner.render_shortcut_mapper(window, cx),
-            DialogKind::About => owner.render_about(cx),
+            DialogKind::About => owner.render_about(window, cx),
             DialogKind::Help => owner.render_help(cx),
             DialogKind::HashText(algorithm) => owner.render_hash_text(algorithm, window, cx),
             DialogKind::HashFiles(algorithm) => owner.render_hash_files(algorithm, window, cx),
@@ -395,8 +414,8 @@ impl Render for FloatingWindow {
             .key_context("MatrixAuxiliary")
             .tab_group()
             .size_full()
-            .when(matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator), |window| window.overflow_hidden())
-            .when(!matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator), |window| window.overflow_y_scroll())
+            .when(matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator | DialogKind::About), |window| window.overflow_hidden())
+            .when(!matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator | DialogKind::About), |window| window.overflow_y_scroll())
             .bg(rgb(0xf0f0f0))
             .text_color(rgb(0x202020))
             .font_family("Helvetica")
@@ -409,14 +428,31 @@ impl Render for FloatingWindow {
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|_, _: &DialogFocusNext, window, cx| {
+                if matrix_surface::locked() {
+                    cx.stop_propagation();
+                    return;
+                }
                 window.focus_next(cx);
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|_, _: &DialogFocusPrevious, window, cx| {
+                if matrix_surface::locked() {
+                    cx.stop_propagation();
+                    return;
+                }
                 window.focus_prev(cx);
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(move |view, _: &CloseWindow, window, cx| {
+                if matrix_surface::locked() && view.is_about() {
+                    if let Err(error) = view.owner.update(cx, |owner, cx| {
+                        owner.dismiss_floating(DialogKind::About, window, cx)
+                    }) {
+                        eprintln!("About close lost its document: {error}");
+                    }
+                    cx.stop_propagation();
+                    return;
+                }
                 view.with_owner(window, cx, move |owner, window, cx| {
                     owner.dismiss_floating(kind, window, cx)
                 });
@@ -583,6 +619,7 @@ impl Render for FloatingWindow {
                 cx.stop_propagation();
             }))
             .children(content)
+            .into_any_element()
     }
 }
 
@@ -593,13 +630,16 @@ impl MatrixWindow {
         cx: &mut Context<Self>,
         operation: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     ) -> bool {
+        if matrix_surface::locked() {
+            return true;
+        }
         if Window::window_handle(window) == self.document_window {
             return false;
         }
         let root = self.document_window;
         let owner = cx.weak_entity();
         cx.defer(move |cx| {
-            if !cx.windows().contains(&root) {
+            if matrix_surface::locked() || !cx.windows().contains(&root) {
                 return;
             }
             match root.update(cx, |_, window, cx| {
@@ -615,9 +655,12 @@ impl MatrixWindow {
     }
 
     fn dispatch_to_document<A: gpui::Action>(&self, action: A, cx: &mut Context<Self>) {
+        if matrix_surface::locked() {
+            return;
+        }
         let root = self.document_window;
         cx.defer(move |cx| {
-            if !cx.windows().contains(&root) {
+            if matrix_surface::locked() || !cx.windows().contains(&root) {
                 return;
             }
             if let Err(error) = root.update(cx, |_, window, cx| {
@@ -629,10 +672,13 @@ impl MatrixWindow {
     }
 
     pub(super) fn restore_document_focus(&self, cx: &mut Context<Self>) {
+        if matrix_surface::locked() {
+            return;
+        }
         let focus = self.editor_focus.clone();
         let root = self.document_window;
         cx.defer(move |cx| {
-            if !cx.windows().contains(&root) {
+            if matrix_surface::locked() || !cx.windows().contains(&root) {
                 return;
             }
             if let Err(error) = root.update(cx, |_, window, cx| {
@@ -650,6 +696,9 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if matrix_surface::locked() && kind != DialogKind::About {
+            return;
+        }
         if kind.confirmation() && self.file_busy {
             return;
         }
@@ -705,7 +754,7 @@ impl MatrixWindow {
             DialogKind::ShortcutMapper => {
                 if self.shortcut_mapper.visible { self.close_shortcut_mapper(window, cx); return; }
             }
-            DialogKind::About => self.about_visible = false,
+            DialogKind::About => self.matrix_about_closed(cx),
             DialogKind::Help => self.dismiss_help(cx),
             DialogKind::HashText(algorithm) => self.hide_hash_text(algorithm, cx),
             DialogKind::HashFiles(algorithm) => self.hide_hash_files(algorithm, cx),
@@ -740,6 +789,9 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if matrix_surface::locked() && kind != DialogKind::About {
+            return;
+        }
         self.sync_floating_windows(window, cx);
         if let Some(handle) = self.floating_windows.get(&kind).copied() {
             self.focus_floating(kind, handle, cx);
@@ -752,6 +804,9 @@ impl MatrixWindow {
         handle: gpui::WindowHandle<FloatingWindow>,
         cx: &mut Context<Self>,
     ) {
+        if matrix_surface::locked() && kind != DialogKind::About {
+            return;
+        }
         if matches!(kind, DialogKind::Completion | DialogKind::Calltip) {
             return;
         }
@@ -766,7 +821,7 @@ impl MatrixWindow {
         ) {
             let owner = cx.weak_entity();
             cx.defer(move |cx| {
-                if !cx.windows().contains(&handle.into()) {
+                if matrix_surface::locked() || !cx.windows().contains(&handle.into()) {
                     return;
                 }
                 match handle.update(cx, |_, window, cx| {
@@ -828,6 +883,9 @@ impl MatrixWindow {
             return;
         }
         for kind in DialogKind::ALL {
+            if matrix_surface::locked() && kind != DialogKind::About {
+                continue;
+            }
             if !kind.visible(self) {
                 self.floating_opening.remove(&kind);
                 if let Some(handle) = self.floating_windows.remove(&kind) {
@@ -918,7 +976,10 @@ impl MatrixWindow {
                 let Some(owner) = weak.upgrade() else {
                     return;
                 };
-                if !cx.windows().contains(&root) || !kind.visible(owner.read(cx)) {
+                if (matrix_surface::locked() && kind != DialogKind::About)
+                    || !cx.windows().contains(&root)
+                    || !kind.visible(owner.read(cx))
+                {
                     owner.update(cx, |view, _| {
                         view.floating_opening.remove(&kind);
                     });

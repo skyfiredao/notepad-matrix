@@ -264,6 +264,12 @@ def main():
     args = parser.parse_args()
     expected = build(args.source)
     expected_themes = build_themes(args.source)
+    heading = "GNU GENERAL PUBLIC LICENSE"
+    notice, body = frozen(args.source, "LICENSE").decode().split(heading, 1)
+    if " ".join((heading + body).split()) != " ".join((ROOT / "LICENSE").read_text().split()):
+        raise SystemExit("shared GPL text differs from frozen source")
+    if " ".join(notice.split()) not in " ".join((ROOT / "THIRD_PARTY_NOTICES.md").read_text().split()):
+        raise SystemExit("shared third-party notices omit the frozen upstream copyright and license notice")
     if args.check:
         actual = json.loads(OUTPUT.read_text())
         if actual != expected:
@@ -279,8 +285,6 @@ def main():
             profile = by_name[styler.get("name")]
             assert profile["style_attributes"] == styler.attrib
             assert profile["styles"] == [{"id": int(e.get("styleID")), "attributes": e.attrib, "keywords": e.text or ""} for e in styler]
-        if (ROOT / "assets/languages.license.txt").read_bytes() != frozen(args.source, "LICENSE"):
-            raise SystemExit("vendored language data license differs from frozen source")
         keyword_count = sum(len(p["keywords"]) for p in actual["profiles"])
         style_count = sum(len(styler) for styler in stylers)
         print(f"96/96 source models, 93/93 source stylers, {keyword_count} keyword classes, {style_count} style records")
@@ -294,7 +298,6 @@ def main():
         OUTPUT.parent.mkdir(parents=True, exist_ok=True)
         OUTPUT.write_text(json.dumps(expected, ensure_ascii=False, indent=2) + "\n")
         THEME_OUTPUT.write_text(json.dumps(expected_themes, ensure_ascii=False, indent=2) + "\n")
-        (ROOT / "assets/languages.license.txt").write_bytes(frozen(args.source, "LICENSE"))
         print(f"wrote {len(expected['profiles'])} profiles to {OUTPUT}")
 
 

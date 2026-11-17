@@ -8,6 +8,7 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        if matrix_surface::locked() || self.matrix_active() { return false; }
         match id {
             42020 | 42089 => {
                 let tab_width = 4;

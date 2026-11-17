@@ -367,7 +367,13 @@ impl ToolbarIcon {
             Self::CloseTabHoverDark => embedded_image!("tab-close-hover-dark.png"),
             Self::CloseTabOnTabDark => embedded_image!("tab-close-on-tab-dark.png"),
             Self::CloseTabPressedDark => embedded_image!("tab-close-pressed-dark.png"),
-            Self::Application => embedded_image!("app16.png"),
+            Self::Application => {
+                static IMAGE: OnceLock<Arc<Image>> = OnceLock::new();
+                IMAGE.get_or_init(|| Arc::new(Image::from_bytes(
+                    ImageFormat::Png,
+                    include_bytes!("../../assets/notepad-matrix.icns")[16..].to_vec(),
+                ))).clone()
+            }
         }
     }
 }

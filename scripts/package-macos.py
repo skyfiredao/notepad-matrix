@@ -68,37 +68,20 @@ def release_packages():
             continue
         selected.add(identifier)
         pending.extend(dependency['pkg'] for dependency in nodes[identifier]['deps']
-                       if any(kind['kind'] != 'dev' for kind in dependency['dep_kinds']))
+                       if any(kind['kind'] is None for kind in dependency['dep_kinds']))
     return [package for package in metadata['packages'] if package['id'] in selected]
 
 
 def install_licenses(resources, packages):
-    artwork = resources / 'licenses/notepad-plus-plus'
-    artwork.mkdir(parents=True)
-    for name in ['LICENSE', 'README.md']:
-        shutil.copy2(ROOT / 'assets/notepad-plus-plus' / name, artwork / name)
-    notices = ['# Third-party dependencies', '',
-               'Notepad Matrix is a separate application. Notepad++ artwork is used under its bundled license.',
-               'This development build is ad-hoc signed, not notarized.', '']
-    for package in sorted(packages, key=lambda item: (item['name'], item['version'])):
-        if package['name'] == 'notepad-matrix':
-            continue
-        key = f"{package['name']}-{package['version']}"
-        notices.extend([f'## {key}', f"License: {package.get('license') or 'See bundled files'}",
-                        f"Source: {package.get('repository') or package['source']}", ''])
-        dependency = Path(package['manifest_path']).parent
-        files = {path for path in dependency.rglob('*') if path.is_file()
-                 and path.name.upper().startswith(('LICENSE', 'COPYING', 'NOTICE', 'AUTHORS'))
-                 and path.suffix not in {'.rs', '.c', '.h', '.cpp'}
-                 and not any(part in {'target', '.git', '__pycache__'}
-                             for part in path.relative_to(dependency).parts)}
-        if package.get('license_file'):
-            files.add(dependency / package['license_file'])
-        for source in sorted(files):
-            destination = resources / 'licenses' / key / source.relative_to(dependency)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
-    (resources / 'THIRD_PARTY_NOTICES.md').write_text('\n'.join(notices), encoding='utf-8')
+    notices = (ROOT / 'THIRD_PARTY_NOTICES.md').read_text(encoding='utf-8')
+    recorded = set(re.findall(r'^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|', notices, re.M))
+    expected = {(package['name'], package['version'], package['license'])
+                for package in packages if package['name'] != 'notepad-matrix'}
+    if recorded != expected:
+        raise ValueError(f'Third-party notices do not match release dependencies: '
+                         f'missing={sorted(expected - recorded)}, stale={sorted(recorded - expected)}')
+    for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md']:
+        shutil.copy2(ROOT / name, resources / name)
 
 
 def package(binary, output):
@@ -127,14 +110,14 @@ def package(binary, output):
         executable.parent.mkdir()
         shutil.copy2(binary, executable)
         executable.chmod(0o755)
-        shutil.copy2(ROOT / 'assets/notepad-plus-plus/npp.icns', resources / 'npp.icns')
+        shutil.copy2(ROOT / 'assets/notepad-matrix.icns', resources / 'notepad-matrix.icns')
         shutil.copytree(ROOT / 'assets/themes', resources / 'themes')
         identity = {
             'CFBundleName': 'notepad-matrix',
             'CFBundleDisplayName': 'notepad-matrix',
             'CFBundleIdentifier': 'org.notepad-matrix.app',
             'CFBundleExecutable': 'notepad-matrix',
-            'CFBundleIconFile': 'npp.icns',
+            'CFBundleIconFile': 'notepad-matrix.icns',
             'CFBundlePackageType': 'APPL',
             'CFBundleShortVersionString': version,
             'CFBundleVersion': version,

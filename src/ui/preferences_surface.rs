@@ -722,6 +722,8 @@ impl MatrixWindow {
 
     pub(super) fn apply_preferences(&mut self, settings: &Value, window: &mut Window, cx: &mut Context<Self>) {
         self.preferences.settings = settings.clone();
+        self.menu_font_family.borrow_mut().take();
+        self.menu_root_reveal = None;
         self.menu_right_shortcuts_hidden |= self.pref_bool("MISC.hideMenuRightShortcuts", false);
         self.status_visible = settings["statusbar_visible"].as_bool().unwrap_or(true);
         self.mute_sounds = settings["muteSounds"].as_bool().unwrap_or(false);
@@ -843,6 +845,9 @@ impl MatrixWindow {
         let x = source_x(x, width);
         let palette = self.preferences_render_palette();
         let override_value = match path {
+            "Matrix.style" => Some(self.matrix_style().into()),
+            "MenuFont.fontName" => Some(menu_surface::font_family(self, || cx.text_system().all_font_names()).into()),
+            "MenuFont.size" => Some(menu_surface::font_size(self).into()),
             "DialogFont.fontName" => Some(options.iter().find(|(value, _)| {
                 value.as_str().zip(value_at(&self.preferences.settings, path).as_str())
                     .is_some_and(|(available, selected)| available.eq_ignore_ascii_case(selected))

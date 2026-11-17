@@ -78,6 +78,12 @@ pub(super) fn color_panel_rgb() -> Option<u32> {
     }
 }
 
+impl MatrixWindow {
+    pub(super) fn matrix_style_prompt_pending(&self) -> bool {
+        self.style_config.prompting
+    }
+}
+
 impl NativeKeywordField {
     fn new(value: &str, read_only: bool, palette: RenderPalette) -> io::Result<Self> {
         unsafe {

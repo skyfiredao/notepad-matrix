@@ -200,9 +200,11 @@ impl MatrixWindow {
     }
 
     pub(super) fn clone_to_other_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.matrix_active() || matrix_surface::locked() { return; }
         self.transfer_editor_pane(false, window, cx);
     }
     pub(super) fn move_to_other_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.matrix_active() || matrix_surface::locked() { return; }
         self.transfer_editor_pane(true, window, cx);
     }
 

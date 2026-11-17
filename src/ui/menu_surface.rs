@@ -4,9 +4,9 @@ use crate::menu::{
     DocumentCommand, DocumentControl, MenuEntry, MultiSelectionCommand, TransformationAvailability,
 };
 
-const MENU_BAR_HEIGHT: f32 = 22.;
-const MENU_FONT_SIZE: f32 = 13.;
-const MENU_ROW_HEIGHT: f32 = 22.;
+pub(super) const DEFAULT_FONT_NAME: &str = "PingFang SC";
+pub(super) const DEFAULT_FONT_SIZE: i64 = 14;
+const MENU_MIN_ROW_HEIGHT: f32 = 22.;
 const MENU_SEPARATOR_HEIGHT: f32 = 8.;
 const MENU_GUTTER_WIDTH: f32 = 24.;
 const MENU_COLUMN_GAP: f32 = 8.;
@@ -15,6 +15,47 @@ const MENU_ARROW_WIDTH: f32 = 6.;
 const MENU_BORDER: f32 = 1.;
 const MENU_MIN_WIDTH: f32 = 144.;
 const MENU_ROOT_MIN_WIDTH: f32 = 192.;
+
+pub(super) fn font_family(view: &MatrixWindow, installed: impl FnOnce() -> Vec<String>) -> String {
+    let requested = view.pref_string("MenuFont.fontName", DEFAULT_FONT_NAME).trim().to_owned();
+    if let Some((key, family)) = view.menu_font_family.borrow().as_ref()
+        && *key == requested {
+        return family.clone();
+    }
+    let mut names = installed();
+    let system = dialog_font::system_font_family();
+    names.push(system.clone());
+    let fallback = names.iter().find(|name| name.eq_ignore_ascii_case(DEFAULT_FONT_NAME)).cloned().unwrap_or(system);
+    let family = names.iter().find(|name| name.eq_ignore_ascii_case(&requested)).cloned().unwrap_or(fallback);
+    *view.menu_font_family.borrow_mut() = Some((requested, family.clone()));
+    family
+}
+
+pub(super) fn font_size(view: &MatrixWindow) -> i64 {
+    let size = view.pref_int("MenuFont.size", DEFAULT_FONT_SIZE);
+    if (8..=24).contains(&size) { size } else { DEFAULT_FONT_SIZE }
+}
+
+struct MenuMetrics {
+    family: String,
+    font: gpui::Font,
+    size: gpui::Pixels,
+    line_height: gpui::Pixels,
+    row: gpui::Pixels,
+}
+
+impl MenuMetrics {
+    fn new(view: &MatrixWindow, window: &Window) -> Self {
+        let family = font_family(view, || window.text_system().all_font_names());
+        let size = px(font_size(view) as f32);
+        let font = gpui::font(family.clone());
+        let id = window.text_system().resolve_font(&font);
+        let line_height = px((f32::from(window.text_system().ascent(id, size))
+            + f32::from(window.text_system().descent(id, size)).abs()).ceil());
+        let row = (line_height + px(6.)).max(px(MENU_MIN_ROW_HEIGHT));
+        Self { family, font, size, line_height, row }
+    }
+}
 
 fn root_label<'a>(filename: &str, selector: &str, fallback: &'a str) -> &'a str {
     let id = match selector {
@@ -676,12 +717,12 @@ fn selector(command: MenuCommand) -> String {
     .into()
 }
 
-fn row_height(entry: &MenuEntry) -> gpui::Pixels {
-    px(if matches!(entry, MenuEntry::Separator) {
-        MENU_SEPARATOR_HEIGHT
+fn row_height(entry: &MenuEntry, metrics: &MenuMetrics) -> gpui::Pixels {
+    if matches!(entry, MenuEntry::Separator) {
+        px(MENU_SEPARATOR_HEIGHT)
     } else {
-        MENU_ROW_HEIGHT
-    })
+        metrics.row
+    }
 }
 
 fn radio_mark(command: Option<MenuCommand>) -> bool {
@@ -704,29 +745,30 @@ fn submenu_radio_checked(view: &MatrixWindow, entry: &MenuEntry) -> Option<bool>
     checked
 }
 
-fn popup_max_height(anchored: bool, viewport: gpui::Size<gpui::Pixels>) -> gpui::Pixels {
-    (viewport.height - if anchored { px(0.) } else { px(32. + MENU_BAR_HEIGHT) })
-        .max(px(MENU_ROW_HEIGHT + MENU_BORDER * 2.))
+fn popup_max_height(anchored: bool, viewport: gpui::Size<gpui::Pixels>, metrics: &MenuMetrics) -> gpui::Pixels {
+    (viewport.height - if anchored { px(0.) } else { px(32.) + metrics.row })
+        .max(metrics.row + px(MENU_BORDER * 2.))
 }
 
 pub(super) fn scroll_selected(view: &mut MatrixWindow, window: &Window) {
+    let metrics = MenuMetrics::new(view, window);
     while view.menu_scroll.len() < view.menu_bar.popup_count() {
         view.menu_scroll.push(gpui::ScrollHandle::new());
     }
-    let max_height = popup_max_height(view.menu_anchor.is_some(), window.viewport_size());
+    let max_height = popup_max_height(view.menu_anchor.is_some(), window.viewport_size(), &metrics);
     for (depth, index) in view.menu_bar.selected_path().iter().enumerate() {
         let Some(entries) = view.menu_bar.popup_entries(depth) else { continue; };
         let Some(entry) = entries.get(*index) else { continue; };
-        let content_height = entries.iter().map(row_height).sum::<gpui::Pixels>();
+        let content_height = entries.iter().map(|entry| row_height(entry, &metrics)).sum::<gpui::Pixels>();
         let visible_height = content_height.min(max_height - px(MENU_BORDER * 2.));
-        let item_top = entries.iter().take(*index).map(row_height).sum::<gpui::Pixels>();
+        let item_top = entries.iter().take(*index).map(|entry| row_height(entry, &metrics)).sum::<gpui::Pixels>();
         let scroll = &view.menu_scroll[depth];
         let mut offset = scroll.offset();
         offset.y = offset.y.max(visible_height - content_height).min(px(0.));
         if item_top + offset.y < px(0.) {
             offset.y = -item_top;
-        } else if item_top + row_height(entry) + offset.y > visible_height {
-            offset.y = visible_height - item_top - row_height(entry);
+        } else if item_top + row_height(entry, &metrics) + offset.y > visible_height {
+            offset.y = visible_height - item_top - row_height(entry, &metrics);
         }
         scroll.set_offset(offset);
     }
@@ -737,6 +779,7 @@ pub(super) fn render(
     window: &Window,
     cx: &mut Context<MatrixWindow>,
 ) -> AnyElement {
+    let metrics = MenuMetrics::new(view, window);
     let mode = view.menu_bar.mode();
     let filename = view.native_locale();
     if !view.pref_bool("MenuBar.visible", true) && mode == MenuMode::Closed { return div().into_any_element(); }
@@ -778,7 +821,7 @@ pub(super) fn render(
                     button.aria_expanded(view.menu_bar.document_menu_open())
                 })
                 .w(px(24.))
-                .h(px(MENU_BAR_HEIGHT))
+                .h(metrics.row)
                 .flex_shrink_0()
                 .flex()
                 .items_center()
@@ -819,8 +862,8 @@ pub(super) fn render(
     }
     let viewport = window.viewport_size();
     let measure = |text: &str| window.text_system().shape_line(
-        text.to_owned().into(), px(MENU_FONT_SIZE), &[gpui::TextRun {
-            len: text.len(), font: gpui::font("Helvetica"), color: window.text_style().color,
+        text.to_owned().into(), metrics.size, &[gpui::TextRun {
+            len: text.len(), font: metrics.font.clone(), color: window.text_style().color,
             background_color: None, underline: None, strikethrough: None,
         }], None,
     ).width().ceil();
@@ -853,10 +896,10 @@ pub(super) fn render(
                 .text_system()
                 .shape_line(
                     label.into(),
-                    px(MENU_FONT_SIZE),
+                    metrics.size,
                     &[gpui::TextRun {
                         len: label.len(),
-                        font: gpui::font("Helvetica"),
+                        font: metrics.font.clone(),
                         color: rgb(0x6d6d6d).into(),
                         background_color: None,
                         underline: None,
@@ -869,7 +912,28 @@ pub(super) fn render(
                 + px(13.)
         })
         .collect::<Vec<_>>();
-    let root_left = root_widths.iter().take(root).copied().sum::<gpui::Pixels>();
+    let roots_width = (viewport.width - px(if view.menu_right_shortcuts_hidden { 4. } else { 76. })).max(px(1.));
+    let total_root_width = root_widths.iter().copied().sum::<gpui::Pixels>();
+    let root_prefix = root_widths.iter().take(root).copied().sum::<gpui::Pixels>();
+    let mut root_offset = view.menu_root_scroll.offset();
+    root_offset.x = root_offset.x.max((roots_width - total_root_width).min(px(0.))).min(px(0.));
+    if mode == MenuMode::Closed {
+        view.menu_root_reveal = None;
+    } else {
+        let target = (root, roots_width, total_root_width);
+        if view.menu_root_reveal != Some(target) {
+            if let Some(width) = root_widths.get(root) {
+                if root_prefix + root_offset.x < px(0.) {
+                    root_offset.x = -root_prefix;
+                } else if root_prefix + *width + root_offset.x > roots_width {
+                    root_offset.x = roots_width - root_prefix - *width;
+                }
+            }
+            view.menu_root_reveal = Some(target);
+        }
+    }
+    view.menu_root_scroll.set_offset(root_offset);
+    let root_left = (root_prefix + root_offset.x).max(px(0.));
     let left = anchor.map_or(root_left, |position| position.x)
         .min((viewport.width - widths.first().copied().unwrap_or(px(0.))).max(px(0.)))
         .max(px(0.));
@@ -884,7 +948,7 @@ pub(super) fn render(
         };
         lefts.push(at);
     }
-    let max_height = popup_max_height(anchor.is_some(), viewport);
+    let max_height = popup_max_height(anchor.is_some(), viewport, &metrics);
     let background = if view.dark { 0x2b2b2b } else { 0xf0f0f0 };
     let foreground = if view.dark { 0xeeeeee } else { 0x202020 };
     let selected_background = view.appearance_colour("DarkMode.customColorMenuHotTrack", if view.dark { 0x444444 } else { 0x91c9f7 });
@@ -892,7 +956,7 @@ pub(super) fn render(
     let mut popups = Vec::new();
     let mut desired_top = anchor.map_or(px(0.), |position| position.y);
     let mut anchor_top = px(0.);
-    let mut extent = px(MENU_BAR_HEIGHT);
+    let mut extent = metrics.row;
     for depth in first_depth..total_columns {
         let column = depth - first_depth;
         let width = widths[column];
@@ -903,7 +967,7 @@ pub(super) fn render(
         else {
             continue;
         };
-        let content_height = entries.iter().map(row_height).sum::<gpui::Pixels>();
+        let content_height = entries.iter().map(|entry| row_height(entry, &metrics)).sum::<gpui::Pixels>();
         let height = (content_height + px(MENU_BORDER * 2.)).min(max_height);
         let top = desired_top.min((max_height - height).max(px(0.))).max(px(0.));
         if column == 0 { anchor_top = top; }
@@ -941,11 +1005,11 @@ pub(super) fn render(
                 + entries
                     .iter()
                     .take(*index)
-                    .map(row_height)
+                    .map(|entry| row_height(entry, &metrics))
                     .fold(px(0.), |sum, row| sum + row)
                 + offset.y;
         }
-        extent = extent.max(px(MENU_BAR_HEIGHT) + top + height);
+        extent = extent.max(metrics.row + top + height);
         let rows = entries
             .into_iter()
             .enumerate()
@@ -1081,7 +1145,7 @@ pub(super) fn render(
                     .when(!shortcut.is_empty(), |row| {
                         row.aria_keyshortcuts(shortcut.clone())
                     })
-                    .h(px(MENU_ROW_HEIGHT))
+                    .h(metrics.row)
                     .w_full()
                     .flex_shrink_0()
                     .flex()
@@ -1223,7 +1287,7 @@ pub(super) fn render(
                 .aria_expanded(
                     open && root == index && !view.menu_bar.document_menu_open() && !symbol_popup && !configured_popup,
                 )
-                .h(px(MENU_BAR_HEIGHT))
+                .h(metrics.row)
                 .w(root_widths[index])
                 .flex_shrink_0()
                 .flex()
@@ -1262,7 +1326,7 @@ pub(super) fn render(
                 div()
                     .relative()
                     .w(widths.first().copied().unwrap_or(px(0.)))
-                    .h((extent - px(MENU_BAR_HEIGHT) - anchor_top).max(px(0.)))
+                    .h((extent - metrics.row - anchor_top).max(px(0.)))
                     .children(popups),
             )
             .into_any_element()
@@ -1322,10 +1386,11 @@ pub(super) fn render(
             }
         }))
         .relative()
-        .h(px(MENU_BAR_HEIGHT))
+        .h(metrics.row)
         .flex_shrink_0()
-        .font_family("Helvetica")
-        .text_size(px(MENU_FONT_SIZE))
+        .font_family(metrics.family)
+        .text_size(metrics.size)
+        .line_height(metrics.line_height)
         .bg(rgb(if view.dark { 0x2b2b2b } else { 0xffffff }))
         .text_color(rgb(if view.dark { 0xeeeeee } else { 0x6d6d6d }))
         .child(
@@ -1336,7 +1401,7 @@ pub(super) fn render(
                 .left(px(0.))
                 .w(viewport.width)
                 .h(if anchor.is_some() {
-                    px(MENU_BAR_HEIGHT)
+                    metrics.row
                 } else {
                     extent
                 })
@@ -1351,12 +1416,19 @@ pub(super) fn render(
                 }))
                 .child(
                     div()
-                        .h(px(MENU_BAR_HEIGHT))
+                        .h(metrics.row)
                         .w_full()
                         .flex()
                         .items_center()
-                        .children(triggers)
-                        .child(div().flex_1())
+                        .child(div()
+                            .id("menu-roots")
+                            .flex()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .overflow_x_scroll()
+                            .track_scroll(&view.menu_root_scroll)
+                            .on_scroll(cx.listener(|_, _, _, cx| cx.notify()))
+                            .children(triggers))
                         .child(
                             div()
                                 .id("menu-document-controls")
@@ -1372,7 +1444,7 @@ pub(super) fn render(
                             div()
                                 .id("menu-overlay")
                                 .absolute()
-                                .top(px(MENU_BAR_HEIGHT))
+                                .top(metrics.row)
                                 .left(px(0.))
                                 .w(viewport.width)
                                 .h(viewport.height)
@@ -1394,7 +1466,7 @@ pub(super) fn render(
             bar.child(
                 div()
                     .absolute()
-                    .top(px(MENU_BAR_HEIGHT - 2.))
+                    .top(metrics.row - px(2.))
                     .left(px(0.))
                     .right(px(0.))
                     .h(px(2.))

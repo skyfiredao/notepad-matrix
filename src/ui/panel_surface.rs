@@ -44,6 +44,9 @@ impl PanelWindow {
             cx.observe_release_in(&owner, window, |_, _, window, _| window.remove_window());
         let weak = owner.downgrade();
         window.on_window_should_close(cx, move |window, cx| {
+            if matrix_surface::locked() {
+                return false;
+            }
             if let Err(error) = weak.update(cx, |owner, cx| owner.hide_panel(id, window, cx)) {
                 eprintln!("panel close lost its document: {error}");
             }
@@ -51,6 +54,9 @@ impl PanelWindow {
         });
         let observed = owner.downgrade();
         let bounds_changed = cx.observe_window_bounds(window, move |_, window, cx| {
+            if matrix_surface::locked() {
+                return;
+            }
             let bounds = match window.window_bounds() {
                 WindowBounds::Windowed(bounds) => bounds,
                 _ => return,
@@ -92,6 +98,9 @@ impl PanelWindow {
 
 impl Render for PanelWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if matrix_surface::locked() {
+            return div().size_full().bg(rgb(0x000000)).into_any_element();
+        }
         let id = self.id;
         let content = match self
             .owner
@@ -117,14 +126,26 @@ impl Render for PanelWindow {
             .font_family("Helvetica")
             .text_size(px(12.))
             .on_action(cx.listener(|_, _: &DialogFocusNext, window, cx| {
+                if matrix_surface::locked() {
+                    cx.stop_propagation();
+                    return;
+                }
                 window.focus_next(cx);
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|_, _: &DialogFocusPrevious, window, cx| {
+                if matrix_surface::locked() {
+                    cx.stop_propagation();
+                    return;
+                }
                 window.focus_prev(cx);
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(move |_, _: &CloseWindow, window, cx| {
+                if matrix_surface::locked() {
+                    cx.stop_propagation();
+                    return;
+                }
                 if let Err(error) = owner.update(cx, |owner, cx| owner.hide_panel(id, window, cx)) {
                     eprintln!("panel shortcut lost its document: {error}");
                 }
@@ -132,6 +153,7 @@ impl Render for PanelWindow {
                 cx.stop_propagation();
             }))
             .children(content)
+            .into_any_element()
     }
 }
 
@@ -210,12 +232,18 @@ impl MatrixWindow {
     }
 
     pub(super) fn show_panel(&mut self, id: PanelId, window: &mut Window, cx: &mut Context<Self>) {
+        if matrix_surface::locked() {
+            return;
+        }
         self.panels.layout.show(id);
         self.set_panel_body_visible(id, true, window, cx);
         self.sync_panel_windows(window, cx);
         if id == PanelId::Converter && let Some(handle) = self.panels.windows.get(&id).copied() {
             let input = self.converter_panel_input();
             cx.defer(move |cx| {
+                if matrix_surface::locked() {
+                    return;
+                }
                 if let Err(error) = handle.update(cx, |_, window, cx| {
                     window.activate_window();
                     input.update(cx, |input, cx| input.focus(window, cx));
@@ -316,6 +344,9 @@ impl MatrixWindow {
     }
 
     pub(super) fn sync_panel_windows(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        if matrix_surface::locked() {
+            return;
+        }
         let mode_hidden = !self.view_panels_other_pane_visible();
         if self.panels.mode_hidden != mode_hidden {
             self.panels.mode_hidden = mode_hidden;
@@ -367,7 +398,7 @@ impl MatrixWindow {
                     return;
                 };
                 let state = owner.read(cx).panels.layout.panel(id);
-                if !state.visible || state.placement != Placement::Floating {
+                if matrix_surface::locked() || !state.visible || state.placement != Placement::Floating {
                     owner.update(cx, |owner, _| {
                         owner.panels.opening.remove(&id);
                     });
@@ -415,6 +446,9 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_panel_region(&self, side: DockSide, cx: &mut Context<Self>) -> AnyElement {
+        if matrix_surface::locked() {
+            return div().size_full().bg(rgb(0x000000)).into_any_element();
+        }
         let owner = cx.entity();
         div()
             .id(format!("panel-region-{}", side.key()))
@@ -427,6 +461,9 @@ impl MatrixWindow {
                 region.flex_col().w_full()
             })
             .child(gpui::canvas(|_, _, _| (), move |bounds, _, window, cx| {
+                if matrix_surface::locked() {
+                    return;
+                }
                 let screen = Bounds::new(bounds.origin + window.bounds().origin, bounds.size);
                 owner.update(cx, |view, _| {
                     view.panels.dock_regions.retain(|(region, _)| *region != side);
@@ -449,6 +486,9 @@ impl MatrixWindow {
         floating: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        if matrix_surface::locked() {
+            return div().size_full().bg(rgb(0x000000)).into_any_element();
+        }
         let p = self.panels.layout.panel(id);
         let dark = self.dark;
         let single_title = matches!(id, PanelId::DocumentList | PanelId::DocumentMap | PanelId::Converter);
@@ -490,7 +530,7 @@ impl MatrixWindow {
             move |_, _, window, _| {
                 let owner = resize_owner.clone();
                 window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, _, cx| {
-                    if phase != gpui::DispatchPhase::Bubble {
+                    if matrix_surface::locked() || phase != gpui::DispatchPhase::Bubble {
                         return;
                     }
                     owner.update(cx, |view, cx| {
@@ -518,7 +558,7 @@ impl MatrixWindow {
                 });
                 let owner = resize_owner.clone();
                 window.on_mouse_event(move |event: &gpui::MouseUpEvent, phase, window, cx| {
-                    if phase != gpui::DispatchPhase::Bubble { return; }
+                    if matrix_surface::locked() || phase != gpui::DispatchPhase::Bubble { return; }
                     owner.update(cx, |view, cx| {
                         if let Some((target, origin)) = view.panels.title_drag
                             && target == id
@@ -602,6 +642,10 @@ impl MatrixWindow {
                         .bg(rgb(if dark { 0x383838 } else { 0xf0f0f0 }))
                         .border_b_1().border_color(rgb(0x808080))
                         .on_mouse_down(MouseButton::Left, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| {
+                            if matrix_surface::locked() {
+                                cx.stop_propagation();
+                                return;
+                            }
                             if event.click_count == 2 {
                                 view.panels.title_drag = None;
                                 if floating {
@@ -680,6 +724,10 @@ impl MatrixWindow {
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(move |view, event: &gpui::MouseDownEvent, _, cx| {
+                                if matrix_surface::locked() {
+                                    cx.stop_propagation();
+                                    return;
+                                }
                                 view.panels.resize =
                                     Some((id, event.position, view.panels.layout.panel(id).size));
                                 cx.stop_propagation();

@@ -386,6 +386,7 @@ impl MatrixWindow {
     }
 
     fn dispatch_shortcut_action(&mut self, action: &ShortcutAction, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if matrix_surface::locked() { return false; }
         if self.file_busy || self.close_dialog || self.save_all_dialog || self.macro_playing || self.shortcut_mapper.visible { return false; }
         let Some(item) = self.shortcut_mapper.bindings.shortcuts.iter().find(|item| item.key == action.key).cloned() else { return false; };
         if let CommandKey::Scintilla { id, .. } = item.key {

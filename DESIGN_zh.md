@@ -105,6 +105,22 @@ main.rs
 
 源码：[`build.rs`](build.rs)、[`build_support/intelligence.rs`](build_support/intelligence.rs)、[`intelligence.rs`](src/intelligence.rs)、[`style_config.rs`](src/style_config.rs)、[`mermaid.rs`](src/ui/mermaid.rs)。
 
+## 8. Matrix 动画与正文分开
+
+关于显示 128×128 的图片，使用高质量、预乘透明度缩放的 128、256、768 像素 PNG，按显示尺寸和窗口倍率选择。标题和版本位于图片右侧，项目链接和说明位于下方。窗口保持 420×385；应用图标仍使用 `assets/notepad-matrix.icns`。
+
+**选择：** `matrix_surface` 通过 `active` 显示铺满当前主窗口的动画，不改动 `Workspace`。`Matrix.style` 在打开时采样，选择 `matrix`（默认及回退值）或 `terminal`。`matrix_rain` 绘制字符雨；`matrix_terminal` 使用共用输出／进度步骤，轮播 Cargo、CMake、Docker、Maven、软件包安装和素材下载场景。历史最多 128 条逻辑行，每条最多 1,024 个字符。长命令按可用宽度折行，最多 180 列；按视觉行滚动，仅对可见逻辑行缓存排版。两者使用 GPUI，不可见或应用不活跃时不续帧，不运行终端、进程或网络操作，不写正文。工具栏绿色圆圈 **i** 与 **? → 关于**复用同一受保护入口。
+
+每次打开伪终端时重新生成随机种子，用于选择起始场景和变化进度，之后按六种场景顺序轮播。Maven 模拟依赖下载、javac、测试摘要和 JAR 打包；Cargo、C/C++、Docker 和 Java 输出包含详细长命令。这些仍为简化脚本，未完整移植 genact 的生成数据池；运行不依赖 Java 或 Maven。
+
+`Matrix.lockScreen` 默认 `false`，界面入口为**首选项 → 常用 → Matrix 锁屏保护**。关闭保护时，关闭关于会清除 `active`，恢复文档界面。保护模式使用进程内共享锁态、原生辅助窗口隐藏和入口守卫；关闭关于仍保留动画。点击动画通过 `matrix_auth` 调用 macOS LocalAuthentication 系统框架，由系统选择 Touch ID 等已配置方式。认证代次拒绝过期回调；仅当前请求成功后解锁并清除 `active`，失败或取消保持锁定。
+
+受保护的关于窗口首次渲染时启动一个任务，按固定七秒单调时钟期限逐秒更新关闭按钮上的倒计时。关闭关于或结束动画会取消任务并推进代次；每次更新核对代次及锁态，到时仅关闭关于，不认证或解锁。关于窗口统一使用 420×385 尺寸并收紧左右边距。伪终端参考 [genact 的模拟活动](https://github.com/svenstaro/genact)，不运行 genact。
+
+关于对话框按原版紧凑风格排列。首选项全部页压缩分组之间的留白，平衡分组布局，不改变默认字号设置。使用方式见 [README](README_zh.md#matrix-彩蛋与锁屏保护)。
+
+源码：[`matrix_surface.rs`](src/ui/matrix_surface.rs)、[`matrix_rain.rs`](src/ui/matrix_rain.rs)、[`matrix_terminal.rs`](src/ui/matrix_terminal.rs)、[`matrix_auth.rs`](src/ui/matrix_auth.rs)。
+
 ## 分发边界
 
-当前打包脚本生成 ARM64 应用与磁盘映像，加入资源和依赖许可，并执行 ad-hoc 签名。它不提供 Intel／Universal 产物、Developer ID 签名或公证流程。具体操作见 [BUILD_zh.md](BUILD_zh.md)。
+当前打包脚本生成 ARM64 应用与磁盘映像，加入共用法律文件（`LICENSE` 和 `THIRD_PARTY_NOTICES.md`），并执行 ad-hoc 签名。相同条款合并，各组件的版权和必要附加声明分别保留。关于的许可链接打开公开发布仓库 `https://github.com/skyfiredao/notepad-matrix#license`。源码和构建脚本留在仓库，不加入应用包。脚本不提供 Intel／Universal 产物、Developer ID 签名或公证流程。具体操作见 [BUILD_zh.md](BUILD_zh.md)。

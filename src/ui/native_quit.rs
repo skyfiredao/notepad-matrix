@@ -65,6 +65,9 @@ define_class!(
     unsafe impl NSApplicationDelegate for MatrixApplicationDelegate {
         #[unsafe(method(applicationShouldTerminate:))]
         fn should_terminate(&self, _: &NSApplication) -> NSApplicationTerminateReply {
+            if super::matrix_surface::locked() {
+                return NSApplicationTerminateReply::TerminateCancel;
+            }
             let control = &self.ivars().control;
             if control.can_terminate_now() {
                 match self.restore() {
@@ -172,4 +175,3 @@ impl Drop for QuitGuard {
         }
     }
 }
-

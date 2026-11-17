@@ -45,6 +45,9 @@ impl PreviewWindow {
             cx.observe_release_in(&owner, window, |_, _, window, _| window.remove_window());
         let weak = owner.downgrade();
         window.on_window_should_close(cx, move |_, cx| {
+            if matrix_surface::locked() {
+                return false;
+            }
             if let Err(error) = weak.update(cx, |owner, cx| owner.dismiss_tab_preview(cx)) {
                 eprintln!("preview close lost its document: {error}");
             }
@@ -63,6 +66,9 @@ impl PreviewWindow {
 
 impl Render for PreviewWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if matrix_surface::locked() {
+            return div().size_full().bg(rgb(0x000000)).into_any_element();
+        }
         let content = match self
             .owner
             .update(cx, |owner, cx| owner.render_tab_preview(cx))
@@ -86,6 +92,10 @@ impl Render for PreviewWindow {
             .font_family("Helvetica")
             .text_size(px(12.))
             .on_action(cx.listener(move |_, _: &CloseWindow, window, cx| {
+                if matrix_surface::locked() {
+                    cx.stop_propagation();
+                    return;
+                }
                 if let Err(error) =
                     close_owner.update(cx, |owner, cx| owner.dismiss_tab_preview(cx))
                 {
@@ -95,6 +105,7 @@ impl Render for PreviewWindow {
                 cx.stop_propagation();
             }))
             .children(content)
+            .into_any_element()
     }
 }
 
@@ -116,6 +127,9 @@ impl MatrixWindow {
         target: Option<(crate::workspace::ViewId, crate::workspace::BufferId)>,
         cx: &mut Context<Self>,
     ) {
+        if matrix_surface::locked() {
+            return;
+        }
         let target = target.map(|(pane, id)| PreviewLocation { pane, id });
         if !self.tab_preview_enabled()
             || target.is_some_and(|target| !target.allowed(&self.workspace))
@@ -149,10 +163,24 @@ impl MatrixWindow {
     }
 
     fn sync_tab_preview_window(&mut self, cx: &mut Context<Self>) {
+        if matrix_surface::locked() {
+            return;
+        }
         if !self.tab_preview_visible() {
             self.panels.preview.opening = None;
-            if let Some(handle) = self.panels.preview.window.take() {
+            if let Some(handle) = self.panels.preview.window {
+                let owner = cx.weak_entity();
                 cx.defer(move |cx| {
+                    if matrix_surface::locked() {
+                        return;
+                    }
+                    if let Err(error) = owner.update(cx, |owner, _| {
+                        if owner.panels.preview.window == Some(handle) {
+                            owner.panels.preview.window = None;
+                        }
+                    }) {
+                        eprintln!("preview close lost its document: {error}");
+                    }
                     if cx.windows().contains(&handle.into())
                         && let Err(error) = handle.update(cx, |_, window, _| window.remove_window())
                     {
@@ -187,6 +215,10 @@ impl MatrixWindow {
                 .as_ref()
                 .is_some_and(|current| Arc::ptr_eq(current, &request));
             if !current || !owner.read(cx).tab_preview_visible() {
+                return;
+            }
+            if matrix_surface::locked() {
+                owner.update(cx, |owner, _| owner.panels.preview.opening = None);
                 return;
             }
             let bounds = document.update(cx, |_, window, _| {
@@ -246,6 +278,9 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_tab_preview(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if matrix_surface::locked() {
+            return Some(div().size_full().bg(rgb(0x000000)).into_any_element());
+        }
         let target = self
             .panels
             .preview
@@ -286,6 +321,9 @@ impl MatrixWindow {
                         "tab-preview-lines",
                         preview.line_count(),
                         cx.processor(move |view, range: std::ops::Range<usize>, _, _| {
+                            if matrix_surface::locked() {
+                                return Vec::new();
+                            }
                             let preview = DocumentPreview::capture(&view.workspace, pane, id);
                             range
                                 .filter_map(|index| {
@@ -317,4 +355,3 @@ impl MatrixWindow {
         )
     }
 }
-

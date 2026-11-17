@@ -105,6 +105,22 @@ Startup does not parse every language definition or require an upstream resource
 
 Sources: [`build.rs`](build.rs), [`build_support/intelligence.rs`](build_support/intelligence.rs), [`intelligence.rs`](src/intelligence.rs), [`style_config.rs`](src/style_config.rs), [`mermaid.rs`](src/ui/mermaid.rs).
 
+## 8. Keep Matrix animation separate from document contents
+
+About displays a 128×128 logo using high-quality, premultiplied-alpha PNG variants at 128, 256, and 768 pixels, selected for the displayed size and window scale. The title and version sit beside the logo, with the project link and notice below. The window remains 420×385; the application icon remains `assets/notepad-matrix.icns`.
+
+**Decision:** `matrix_surface` uses an `active` boolean to display an animation across the current main window without changing `Workspace`. `Matrix.style` selects `matrix` (default and fallback) or `terminal`, sampled when opened. `matrix_rain` draws character rain; `matrix_terminal` cycles through Cargo, CMake, Docker, Maven, package installation, and asset-download scenes using shared output/progress steps. History is capped at 128 logical lines, each at most 1,024 characters. Long commands soft-wrap to the available width, up to 180 columns, with scrolling based on visual rows and cached shaping for visible lines. Both renderers use GPUI, stop requesting frames when hidden or inactive, and perform no terminal, process, network, or document operations. The green circled toolbar **i** and **? → About** use the same guarded entry point.
+
+Each terminal opening uses a fresh randomized seed to select the first scene and vary progress, then follows the six-scene cycle. Maven simulates dependency retrieval, javac, test summaries, and JAR packaging. Cargo, C/C++, Docker, and Java output include verbose command lines. These are simplified scripts rather than genact's full generated datasets; Java and Maven are not runtime dependencies.
+
+`Matrix.lockScreen` defaults to `false` and is exposed as **Preferences → General → Matrix screen lock**. With protection off, closing About clears `active` and restores the document interface. Protected mode uses shared process-wide lock state, native hiding of auxiliary windows, and entry-point guards; closing About leaves the animation active. Clicking the animation calls `matrix_auth` and the macOS LocalAuthentication framework. The system selects Touch ID or another configured method. An authentication generation counter rejects stale replies. Only a successful current request unlocks the application and clears `active`; failure or cancellation keeps it locked.
+
+When protected About first renders, one task updates the close-button countdown against a fixed seven-second monotonic deadline. Closing About or ending the animation cancels it and advances its generation. Each update checks the generation and active lock; expiry closes only About and never authenticates or unlocks. About uses a shared 420×385 size and tighter side margins. Terminal output follows [genact's simulated activity](https://github.com/svenstaro/genact), without running genact.
+
+The About dialog follows the upstream compact layout. All Preferences pages reduce space between groups and balance group placement without changing default font sizes. User-facing behavior is described in the [README](README.md#matrix-easter-egg-and-screen-lock).
+
+Sources: [`matrix_surface.rs`](src/ui/matrix_surface.rs), [`matrix_rain.rs`](src/ui/matrix_rain.rs), [`matrix_terminal.rs`](src/ui/matrix_terminal.rs), [`matrix_auth.rs`](src/ui/matrix_auth.rs).
+
 ## Distribution
 
-The packaging script produces an ARM64 application and disk image, includes resource and dependency licenses, and applies an ad-hoc signature. It does not produce Intel or Universal packages, apply Developer ID signatures, or notarize builds. See [BUILD.md](BUILD.md) for the procedure.
+The packaging script produces an ARM64 application and disk image, includes shared legal files (`LICENSE` and `THIRD_PARTY_NOTICES.md`), and applies an ad-hoc signature. Identical terms are shared; component copyright and additional notices remain distinct. The About license link opens the public release repository at `https://github.com/skyfiredao/notepad-matrix#license`. Source code and build scripts remain in the repository, not the application bundle. The script does not produce Intel or Universal packages, apply Developer ID signatures, or notarize builds. See [BUILD.md](BUILD.md) for the procedure.

@@ -270,6 +270,10 @@ impl MatrixWindow {
         cx.notify();
     }
     pub(super) fn request_native_quit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if matrix_surface::locked() {
+            self.cancel_native_quit();
+            return;
+        }
         if let Some(error) = self
             .native_quit
             .as_ref()
@@ -355,6 +359,10 @@ impl MatrixWindow {
     }
 
     pub(super) fn request_close_current(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.matrix_active() || matrix_surface::locked() {
+            self.close_matrix(window, cx);
+            return;
+        }
         if self.macro_interaction_blocked() {
             return;
         }
@@ -395,6 +403,7 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if matrix_surface::locked() { return; }
         if !self.cancel_view_composition(window, cx) {
             return;
         }
@@ -669,6 +678,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn start_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if matrix_surface::locked() { return; }
         if self.macro_interaction_blocked() || self.reload_target.is_some()
             || self.file_busy || self.file_open_sequence_pending() || self.close_dialog || self.save_all_dialog || self.batch_editing_blocked() {
             return;
@@ -708,6 +718,7 @@ impl MatrixWindow {
     pub(super) fn file_open_sequence_pending(&self) -> bool { self.file_prompt.open_sequence_pending }
 
     pub(super) fn start_open_paths_with_launch(&mut self, paths: Vec<PathBuf>, launch: Option<crate::launch::LaunchOptions>, window: &mut Window, cx: &mut Context<Self>) {
+        if matrix_surface::locked() { return; }
         if paths.is_empty() || self.macro_interaction_blocked() || self.reload_target.is_some()
             || self.file_busy || self.file_prompt.open_sequence_pending || self.close_dialog || self.save_all_dialog || self.batch_editing_blocked() {
             return;
@@ -862,6 +873,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn request_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if matrix_surface::locked() { return; }
         if self.macro_interaction_blocked() {
             self.cancel_macro_repeat(window, cx);
         }
@@ -916,6 +928,10 @@ impl MatrixWindow {
     }
 
     fn finish_window_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if matrix_surface::locked() {
+            self.cancel_native_quit();
+            return;
+        }
         self.save_search_history_on_close(cx);
         if let Some(control) = &self.native_quit {
             control.approve();
@@ -1164,6 +1180,7 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if matrix_surface::locked() || self.matrix_active() { return; }
         if self.macro_interaction_blocked() {
             return;
         }

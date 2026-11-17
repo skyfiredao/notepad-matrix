@@ -60,6 +60,10 @@ mod macro_dialog_surface;
 mod macro_surface;
 mod mark_surface;
 mod markdown_surface;
+mod matrix_auth;
+mod matrix_rain;
+mod matrix_surface;
+mod matrix_terminal;
 mod menu_surface;
 mod mermaid;
 mod mime_surface;
@@ -281,6 +285,9 @@ struct MatrixWindow {
     previous_focus: Option<FocusHandle>,
     menu_bar: MenuBar,
     menu_scroll: Vec<gpui::ScrollHandle>,
+    menu_root_scroll: gpui::ScrollHandle,
+    menu_root_reveal: Option<(usize, gpui::Pixels, gpui::Pixels)>,
+    menu_font_family: RefCell<Option<(String, String)>>,
     menu_highlight_depth: usize,
     menu_anchor: Option<gpui::Point<gpui::Pixels>>,
     menu_submenu_only: bool,
@@ -289,6 +296,7 @@ struct MatrixWindow {
     alt_pressed: bool,
     alt_used: bool,
     workspace: crate::workspace::Workspace,
+    matrix: matrix_surface::State,
     pane: crate::workspace::ViewId,
     other_pane: split_view::PaneState,
     split_sync: split_view_geometry::SyncScroll,
@@ -506,6 +514,9 @@ impl MatrixWindow {
             previous_focus: None,
             menu_bar: MenuBar::default(),
             menu_scroll: Vec::new(),
+            menu_root_scroll: gpui::ScrollHandle::new(),
+            menu_root_reveal: None,
+            menu_font_family: RefCell::new(None),
             menu_highlight_depth: 0,
             menu_anchor: None,
             menu_submenu_only: false,
@@ -514,6 +525,7 @@ impl MatrixWindow {
             alt_pressed: false,
             alt_used: false,
             workspace,
+            matrix: matrix_surface::State::default(),
             pane: crate::workspace::ViewId::Primary,
             other_pane,
             split_sync: Default::default(),
@@ -684,7 +696,8 @@ impl MatrixWindow {
     }
 
     fn batch_editing_blocked(&self) -> bool {
-        self.save_all_restore.is_some()
+        matrix_surface::locked()
+            || self.save_all_restore.is_some()
             || self.reload_target.is_some()
             || self.application_quit_pending
             || self.macro_interaction_blocked()
@@ -738,6 +751,9 @@ impl MatrixWindow {
     }
 
     fn menu_input(&mut self, input: MenuEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if matrix_surface::locked() || (self.matrix_active() && !matches!(&input, MenuEvent::Dismiss)) {
+            return;
+        }
         if self.close_dialog
             || self.file_busy
             || self.save_all_dialog
@@ -1106,6 +1122,9 @@ impl MatrixWindow {
 
 impl Render for MatrixWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.matrix_active() || matrix_surface::locked() {
+            return self.render_matrix(window, cx);
+        }
         let recent_entries = self.recent_file_menu_entries();
         self.menu_bar.set_recent_file_entries(recent_entries);
         let run_commands = self.shortcut_mapper.bindings.run_commands.iter().enumerate().map(|(index, command)| {
@@ -1958,6 +1977,7 @@ impl Render for MatrixWindow {
                 .bg(rgb(toolbar)).border_1().border_color(rgb(hover_background)).cursor_pointer()
                 .on_click(cx.listener(move |view, _, window, cx| { view.execute_view_source(id, window, cx); }))
                 .child("↙")))
+            .into_any_element()
     }
 }
 

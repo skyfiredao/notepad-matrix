@@ -4,8 +4,9 @@
 `d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e`:
 <https://github.com/notepad-plus-plus/notepad-plus-plus/tree/d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e>.
 
-The upstream copyright and GPL version 3 terms are retained verbatim in
-`languages.license.txt`. The upstream notice identifies Don HO, copyright 2021.
+The upstream copyright notice is retained in
+[`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md), with shared GPL version 3 terms
+in [`LICENSE`](../LICENSE). The upstream notice identifies Don HO, copyright 2021.
 Source-file SHA-256 digests, including the license, are embedded in the JSON.
 The catalog is transformed source data, not a separately relicensed database.
 
@@ -107,7 +108,7 @@ commit. Each has 93 LexerTypes, 1,774 lexer style records, and 53 global style
 records. The original language catalog and its 96/93/422/1774 inventory remain
 unchanged. Theme source paths and SHA-256 digests, including the shared upstream
 license, are included in this separate schema-version-1 JSON. The copyright and
-license in `languages.license.txt` also cover these transformed theme data.
+license in the shared legal files also cover these transformed theme data.
 
 Every lexer/global style attribute and keyword text is retained. Global records
 are a vector because multiple source global styles have style ID 0; they are
@@ -146,7 +147,7 @@ python3 scripts/language_catalog.py --source /path/to/notepad-plus-plus --check
 Generation reads committed blobs with `git show`, not mutable working-tree
 files. Verification separately compares every source model and LexerType
 attribute and keyword/style text against the generated JSON, checks the
-LangType ordering, and checks the vendored license byte-for-byte.
+LangType ordering, and checks the shared GPL terms and upstream copyright notice.
 
 ## Preinstalled User Defined Languages
 
@@ -156,7 +157,7 @@ LangType ordering, and checks the vendored license byte-for-byte.
 delimiter alternatives, nesting masks, styles, extensions and theme flags.
 
 These definitions are from Edditoria's Markdown-plus-plus under the MIT license;
-the upstream notice is in `udls.license.txt` and at
+the upstream notice and shared MIT terms are in `THIRD_PARTY_NOTICES.md` and at
 https://github.com/Edditoria/markdown-plus-plus/blob/master/LICENSE.txt.
 
 Fresh registries include the two profiles. Existing registries, edits and
@@ -175,7 +176,7 @@ python3 scripts/udl_catalog.py /path/to/notepad-plus-plus --check
 `PowerEditor/src/WinControls/AnsiCharPanel/asciiListView.cpp`, preserving the
 control labels, HTML entity names and special decimal mappings. Run
 `python3 scripts/character_catalog.py /path/to/notepad-plus-plus --check`
-to verify it. The source GPL notice is preserved in `languages.license.txt`.
+to verify it. The source GPL notice is preserved in `THIRD_PARTY_NOTICES.md`.
 The original table implementation is Copyright (C)2021 Don HO
 <don.h@free.fr>, under GPL-3.0-or-later.
 

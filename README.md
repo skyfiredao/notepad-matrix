@@ -1,8 +1,16 @@
-# Notepad Matrix
+<p align="center">
+  <img src="assets/notebook_matrix_logo.png" alt="Notepad Matrix logo" width="192" height="192">
+</p>
 
-[中文](README_zh.md) · [Build guide](BUILD.md) · [Design decisions](DESIGN.md)
+<h1 align="center">Notepad Matrix</h1>
 
-A free text editor for macOS, built with Rust and GPUI. Notepad Matrix reimplements familiar Notepad++ workflows without running the Windows application or its editor libraries. It is an independent project, not an official Notepad++ release.
+<p align="center">
+  <a href="README_zh.md">中文</a> ·
+  <a href="BUILD.md">Build guide</a> ·
+  <a href="DESIGN.md">Design decisions</a>
+</p>
+
+A free, open-source text editor for macOS, built with Rust and GPUI.
 
 Project: [github.com/skyfiredao/notepad-matrix](https://github.com/skyfiredao/notepad-matrix)
 
@@ -20,9 +28,9 @@ To create a Finder-launchable application and disk image, follow the [packaging 
 
 For downloaded or ad-hoc-signed builds, see [macOS launch approval](BUILD.md#5-allow-a-trusted-application-to-run). Download only through the official project or a verifiable trusted publisher, and check published hashes before allowing an application to run.
 
-## Why
+## Project background
 
-The project started from a need for a free, capable editor on macOS with familiar menus and editing habits. The goal is to preserve useful workflows, not the original platform dependencies.
+The project started from a user's need for a free macOS editor and a wish to keep editing habits learned in Notepad++. The goal is to support everyday text and source-code editing on macOS. Notepad Matrix is an independent project, not an official Notepad++ release.
 
 ## Features
 
@@ -38,6 +46,16 @@ The project started from a need for a free, capable editor on macOS with familia
 - macOS file dialogs, printing, Finder integration, and native input handling.
 
 The Plugins menu contains built-in modules. It is not a DLL loader or plugin marketplace. Windows ACP defaults, the Windows updater, and Intel/Universal packaging are outside the current implementation.
+
+## Matrix Easter egg and screen lock
+
+Use the **F1** shortcut, **? → About**, or the toolbar's green circled **i** to open the Easter egg. Select **Matrix** (default) or **Simulated terminal** in **Preferences → General → Style**. The terminal does not run real commands.
+
+**In-app locking is off by default.** Enable it in **Preferences → General → Matrix screen lock**. With it off, closing About returns to the document. With it on, opening the Easter egg locks the application; About closes after a seven-second countdown, but the application stays locked. Click the animation and complete macOS system authentication to unlock.
+
+The application lock does not replace the macOS screen lock or encrypt files.
+
+See [design details](DESIGN.md#8-keep-matrix-animation-separate-from-document-contents).
 
 ## Command-line usage
 
@@ -63,6 +81,8 @@ Unsupported options return an error. Command-line compatibility does not cover e
 
 Settings and user data live in `~/.notepad-matrix/`. Use the application's settings and shortcut dialogs for routine changes.
 
+Change the menu font and size in **Settings → Preferences → General**, next to the interface language. The default is PingFang SC, size 14. Sizes 8–24 apply immediately, independently of editor and dialog fonts.
+
 | File or directory | Purpose |
 |---|---|
 | `settings.json` | Preferences and built-in module switches. |
@@ -81,4 +101,6 @@ For changes and bug reports, use the [project repository](https://github.com/sky
 
 ## License
 
-Notepad Matrix is licensed under [GNU GPL v3.0](LICENSE). Bundled resources and dependencies retain their own license notices. The packaging script includes dependency notices and license files in the application bundle.
+Notepad Matrix is licensed under [GNU GPL v3](LICENSE). [Third-party notices](THIRD_PARTY_NOTICES.md) group shared license terms and retain component copyright notices. **About → Licenses and third-party notices** opens this section in the public release repository.
+
+The application bundles both legal files. Source code and build scripts remain in this repository. Binary release downloads must identify the matching source tag or revision.
