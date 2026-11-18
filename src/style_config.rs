@@ -654,6 +654,7 @@ impl StyleConfig {
     }
 
     pub fn import(&mut self, path: &Path, store: &ConfigStore) -> io::Result<()> {
+        let _access = crate::file_access::read(path)?;
         if !path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("xml")) { return Err(invalid("Choose a Notepad++ style theme XML file")); }
         let filename = path.file_name().and_then(|name| name.to_str()).ok_or_else(|| invalid("Invalid theme filename"))?.to_owned();
         let bytes = fs::read(path)?;

@@ -24,6 +24,16 @@ enum OpenPathResult {
     Workspace,
 }
 
+struct OpenLaunchCompletion(Option<crate::launch::LaunchOptions>);
+
+impl Drop for OpenLaunchCompletion {
+    fn drop(&mut self) {
+        if let Some(options) = &self.0 && let Err(error) = options.complete(false) {
+            eprintln!("file open launch completion failed: {error}");
+        }
+    }
+}
+
 fn matches_configured_extension(path: &std::path::Path, extension: &str) -> bool {
     if extension.is_empty() { return false; }
     let configured = if extension.starts_with('.') { extension.to_owned() } else { format!(".{extension}") };
@@ -62,6 +72,7 @@ enum CloseSide {
 }
 
 pub(super) fn resolve_save_target(path: &std::path::Path) -> io::Result<PathBuf> {
+    let _access = crate::file_access::directory(path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| std::path::Path::new(".")))?;
     match std::fs::canonicalize(path) {
         Ok(path) => Ok(path),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -718,20 +729,27 @@ impl MatrixWindow {
     pub(super) fn file_open_sequence_pending(&self) -> bool { self.file_prompt.open_sequence_pending }
 
     pub(super) fn start_open_paths_with_launch(&mut self, paths: Vec<PathBuf>, launch: Option<crate::launch::LaunchOptions>, window: &mut Window, cx: &mut Context<Self>) {
-        if matrix_surface::locked() { return; }
+        let completion = OpenLaunchCompletion(launch.clone());
+        if matrix_surface::locked() { self.complete_file_preferences_startup(window, cx); return; }
         if paths.is_empty() || self.macro_interaction_blocked() || self.reload_target.is_some()
             || self.file_busy || self.file_prompt.open_sequence_pending || self.close_dialog || self.save_all_dialog || self.batch_editing_blocked() {
+            self.complete_file_preferences_startup(window, cx);
             return;
         }
         let settings = match self.file_prompt_settings() {
             Ok(settings) => settings,
             Err(error) => { self.notify_editor_error(format!("无法读取文件打开设置：{error}"), cx); self.complete_file_preferences_startup(window, cx); return; }
         };
+        if let Some(options) = &launch && let Err(error) = options.resolved_language(&self.workspace) {
+            self.notify_editor_error(error.to_string(), cx);
+            self.complete_file_preferences_startup(window, cx);
+            return;
+        }
         let session_extension = settings["sessionExt"].as_str().unwrap_or("").to_owned();
         let workspace_extension = settings["workspaceExt"].as_str().unwrap_or("").to_owned();
         let suppress_warning = settings["largeFileRestriction"]["suppress2GBWarning"].as_bool().unwrap_or(false);
         let existing_paths = self.workspace.buffers().iter().filter_map(|buffer| {
-            buffer.disk_file.as_ref().map(|file| file.path().to_path_buf())
+            buffer.disk_file.as_ref().filter(|file| !file.is_placeholder()).map(|file| file.path().to_path_buf())
         }).collect::<Vec<_>>();
         let placeholder = (self.workspace.buffers().len() == 1 && self.workspace.active().disk_file.is_none() && !self.workspace.active().is_modified() && self.workspace.active().editor.document().len_bytes() == 0)
             .then(|| (self.workspace.active_view(), self.workspace.active().id()));
@@ -740,15 +758,21 @@ impl MatrixWindow {
         let executor = cx.background_executor().clone();
         cx.notify();
         cx.spawn_in(window, async move |view, cx| {
+            let _completion = completion;
+            let requested = paths.len();
+            let mut succeeded = 0;
             let mut opened = false;
             let mut errors = Vec::new();
             for path in paths {
                 if !launch.as_ref().is_some_and(|options| options.open_session) {
                     let existing = match view.update_in(cx, |view, window, cx| {
                         let Some(id) = crate::folder_workspace::existing_buffer(&view.workspace, &path) else { return Ok(false); };
+                        if view.workspace.buffers().iter().any(|buffer| buffer.id() == id && buffer.disk_file.as_ref().is_some_and(DiskFile::is_placeholder)) {
+                            return Ok(false);
+                        }
                         if !view.cancel_view_composition(window, cx) { return Err(io::Error::other("could not cancel composition before opening a file")); }
                         view.workspace.activate(id).map_err(|error| io::Error::other(error.to_string()))?;
-                        if let Some(language) = launch.as_ref().and_then(|options| options.language) { view.workspace.active_mut().set_language(language); }
+                        if let Some(language) = launch.as_ref().map(|options| options.resolved_language(&view.workspace)).transpose()?.flatten() { view.workspace.active_mut().set_language(language); }
                         view.initialize_active_change_history();
                         Ok(true)
                     }) {
@@ -756,7 +780,7 @@ impl MatrixWindow {
                         Err(error) => { eprintln!("existing file open window unavailable: {error}"); return; }
                     };
                     match existing {
-                        Ok(true) => { opened = true; continue; },
+                        Ok(true) => { succeeded += 1; opened = true; continue; },
                         Ok(false) => {},
                         Err(error) => { errors.push(format!("{}: {error}", path.display())); continue; }
                     }
@@ -766,8 +790,9 @@ impl MatrixWindow {
                 let workspace_extension = workspace_extension.clone();
                 let existing_paths = existing_paths.clone();
                 let force_session = launch.as_ref().is_some_and(|options| options.open_session);
-                let (session, workspace, huge) = executor.spawn(async move {
+                let inspected = executor.spawn(async move {
                     let path = inspect_path;
+                    let _access = crate::file_access::read(&path)?;
                     let already_open = existing_paths.contains(&path) || std::fs::canonicalize(&path)
                         .is_ok_and(|resolved| existing_paths.contains(&resolved));
                     let session = force_session || (!already_open && path.is_file() && matches_configured_extension(&path, &session_extension));
@@ -776,8 +801,12 @@ impl MatrixWindow {
                         let size = metadata.len();
                         size.saturating_add((1_u64 << 20).min(size / 6)) > i32::MAX as u64
                     });
-                    (session, workspace, huge)
+                    Ok::<_, io::Error>((session, workspace, huge))
                 }).await;
+                let (session, workspace, huge) = match inspected {
+                    Ok(inspected) => inspected,
+                    Err(error) => { errors.push(format!("{}: {error}", path.display())); continue; }
+                };
                 if huge {
                     let message = format!("{}\n\n打开 2GB 以上的大文件可能需要几分钟。是否打开？", path.display());
                     let prompt = match view.update_in(cx, |_, window, cx| window.prompt(gpui::PromptLevel::Warning, "打开大文件警告", Some(&message), &[gpui::PromptButton::ok("是"), gpui::PromptButton::cancel("否")], cx)) {
@@ -844,11 +873,43 @@ impl MatrixWindow {
                     Err(error) => { eprintln!("open completion could not reach its window: {error}"); return; }
                 };
                 match result {
-                    Ok(text_opened) => opened |= text_opened,
+                    Ok(true) => { succeeded += 1; opened = true; },
+                    Ok(false) => {},
                     Err(error) => errors.push(format!("{}: {error}", path.display())),
                 }
                 if let Some(completion) = open_completion {
-                    if let Err(error) = executor.spawn(async move { completion.recv() }).await { errors.push(format!("{}: {error}", path.display())); }
+                    let mut completion = completion;
+                    let completed = loop {
+                        let (next, result) = executor.spawn(async move {
+                            let result = completion.recv_timeout(std::time::Duration::from_secs(120));
+                            (completion, result)
+                        }).await;
+                        completion = next;
+                        match result {
+                            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                                if let Some(options) = &launch && let Err(error) = options.complete(false) { eprintln!("file open timeout confirmation failed: {error}"); }
+                                if let Err(error) = view.update_in(cx, |_, _, _| {}) { eprintln!("pending open window unavailable: {error}"); return; }
+                            }
+                            result => break result,
+                        }
+                    };
+                    match completed {
+                        Ok(true) => {
+                            let applied = match view.update_in(cx, |view, _, _| {
+                                if let Some(language) = launch.as_ref().map(|options| options.resolved_language(&view.workspace)).transpose()?.flatten() { view.workspace.active_mut().set_language(language); }
+                                Ok::<_, io::Error>(())
+                            }) {
+                                Ok(result) => result,
+                                Err(error) => { eprintln!("workspace launch options window unavailable: {error}"); return; }
+                            };
+                            match applied {
+                                Ok(()) => { succeeded += 1; opened = true; },
+                                Err(error) => errors.push(format!("{}: {error}", path.display())),
+                            }
+                        }
+                        Ok(false) => {},
+                        Err(error) => { errors.push(format!("{}: {error}", path.display())); break; },
+                    }
                     if let Err(error) = view.update_in(cx, |view, _, cx| { view.file_busy = true; cx.notify(); }) { eprintln!("workspace open continuation unavailable: {error}"); return; }
                 }
             }
@@ -867,6 +928,9 @@ impl MatrixWindow {
                 } else { view.editor_focus.focus(window, cx); cx.notify(); }
                 view.preferences_apply_large_file_open_policy(window, cx);
                 view.complete_file_preferences_startup(window, cx);
+                if let Some(options) = &launch && let Err(error) = options.complete(succeeded == requested && errors.is_empty()) {
+                    view.notify_editor_error(format!("无法确认打开请求：{error}"), cx);
+                }
                 if !errors.is_empty() { view.notify_editor_error(format!("Open failed: {}", errors.join("; ")), cx); }
             }) { eprintln!("open completion could not reach its window: {error}"); }
         }).detach();

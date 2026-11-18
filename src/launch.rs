@@ -20,10 +20,183 @@ pub struct LaunchOptions {
     pub udl_name: Option<String>,
     pub line: Option<usize>,
     pub column: Option<usize>,
+    pub completion: Option<std::sync::Arc<LaunchCompletion>>,
 }
 
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message.into())
+}
+
+#[derive(Debug)]
+pub struct LaunchCompletion {
+    result: std::sync::Mutex<Option<LaunchCompletionTarget>>,
+}
+
+#[derive(Debug)]
+enum LaunchCompletionTarget {
+    File(std::fs::File),
+    #[cfg(unix)]
+    Socket(std::os::unix::net::UnixStream),
+}
+
+impl LaunchCompletion {
+    fn complete(&self, accepted: bool) -> io::Result<()> {
+        use std::io::{Seek, SeekFrom, Write};
+        let mut result = self.result.lock().map_err(|_| io::Error::other("launch completion is unavailable"))?;
+        match result.take() {
+            Some(LaunchCompletionTarget::File(mut file)) => {
+                file.seek(SeekFrom::Start(0))?;
+                file.write_all(if accepted { b"1" } else { b"0" })?;
+                file.sync_all()?;
+            }
+            #[cfg(unix)]
+            Some(LaunchCompletionTarget::Socket(mut stream)) => {
+                stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
+                stream.write_all(&[u8::from(accepted)])?;
+            }
+            None => {},
+        }
+        Ok(())
+    }
+}
+
+impl Drop for LaunchCompletion {
+    fn drop(&mut self) {
+        if let Err(error) = self.complete(false) { eprintln!("launch completion failed: {error}"); }
+    }
+}
+
+#[cfg(unix)]
+fn handoff_root() -> io::Result<PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+    let home = crate::file_access::home_directory()?.canonicalize()?;
+    let store = crate::config::ConfigStore::under_home(&home);
+    let path = store.document_path(Path::new("launch-handoff/root.json"))?;
+    let root = path.parent().ok_or_else(|| invalid("launch handoff directory is missing"))?.to_owned();
+    let owner = std::fs::metadata(&home)?.uid();
+    for path in [store.root(), root.as_path()] {
+        let metadata = std::fs::symlink_metadata(path)?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() || metadata.uid() != owner || metadata.mode() & 0o077 != 0 {
+            return Err(invalid("launch handoff directory is not private"));
+        }
+    }
+    Ok(root)
+}
+
+#[cfg(unix)]
+fn handoff_file(path: &Path, write: bool) -> io::Result<std::fs::File> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let expected = std::fs::symlink_metadata(path)?;
+    let owner = std::fs::metadata(handoff_root()?)?.uid();
+    if !expected.is_file() || expected.file_type().is_symlink() || expected.uid() != owner || expected.mode() & 0o077 != 0 || expected.nlink() != 1 {
+        return Err(invalid("launch handoff must be a private regular file"));
+    }
+    #[cfg(target_os = "macos")]
+    let nofollow = 0x100;
+    #[cfg(not(target_os = "macos"))]
+    let nofollow = 0x20000;
+    let file = std::fs::OpenOptions::new().read(true).write(write).custom_flags(nofollow).open(path)?;
+    let actual = file.metadata()?;
+    if expected.dev() != actual.dev() || expected.ino() != actual.ino() {
+        return Err(invalid("launch handoff file changed"));
+    }
+    Ok(file)
+}
+
+#[cfg(unix)]
+pub struct NativeHandoff {
+    directory: tempfile::TempDir,
+    result: std::fs::File,
+    _source: std::fs::File,
+    _access: crate::file_access::TransferGuard,
+}
+
+#[cfg(unix)]
+impl NativeHandoff {
+    pub fn create(options: &LaunchOptions) -> io::Result<Self> {
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let directory = tempfile::Builder::new().prefix("request-")
+            .permissions(std::fs::Permissions::from_mode(0o700)).tempdir_in(handoff_root()?)?;
+        let create = |name: &str| std::fs::OpenOptions::new().read(true).write(true).create_new(true).mode(0o600).open(directory.path().join(name));
+        let source = create("source")?;
+        source.lock()?;
+        let result = create("result")?;
+        let mut options = options.clone();
+        options.multi_instance = true;
+        options.completion = None;
+        for path in &mut options.files { *path = std::path::absolute(&*path)?; }
+        let (mut payload, access) = options.payload()?;
+        payload["version"] = 1.into();
+        payload["request"] = directory.path().file_name().and_then(|name| name.to_str()).ok_or_else(|| invalid("launch handoff identifier is invalid"))?.into();
+        payload["created"] = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(io::Error::other)?.as_secs().into();
+        let bytes = serde_json::to_vec(&payload)?;
+        if bytes.len() > 8 * 1024 * 1024 { return Err(invalid("launch handoff is too large")); }
+        let mut request = create("notepad-matrix-launch.json")?;
+        request.write_all(&bytes)?;
+        request.sync_all()?;
+        Ok(Self { directory, result, _source: source, _access: access })
+    }
+
+    pub fn path(&self) -> PathBuf { self.directory.path().join("notepad-matrix-launch.json") }
+
+    pub fn result(&mut self) -> io::Result<Option<bool>> {
+        use std::io::{Read, Seek, SeekFrom};
+        self.result.seek(SeekFrom::Start(0))?;
+        let mut byte = [0u8; 1];
+        match self.result.read(&mut byte)? {
+            0 => Ok(None),
+            _ if byte == *b"1" => Ok(Some(true)),
+            _ if byte == *b"0" => Ok(Some(false)),
+            _ => Err(invalid("invalid launch completion")),
+        }
+    }
+}
+
+#[cfg(unix)]
+pub fn take_native_handoff(path: &Path) -> io::Result<Option<LaunchOptions>> {
+    use std::io::Read;
+    use std::os::unix::fs::MetadataExt;
+    if path.file_name().is_none_or(|name| name != "notepad-matrix-launch.json") { return Ok(None); }
+    let root = handoff_root()?;
+    let relative = match path.strip_prefix(&root) {
+        Ok(relative) => relative,
+        Err(_) => return Ok(None),
+    };
+    let components = relative.components().collect::<Vec<_>>();
+    if components.len() != 2 || !components.iter().all(|component| matches!(component, std::path::Component::Normal(_))) {
+        return Err(invalid("invalid launch handoff path"));
+    }
+    let directory = path.parent().ok_or_else(|| invalid("launch handoff directory is missing"))?;
+    let identifier = directory.file_name().and_then(|name| name.to_str()).filter(|name| name.starts_with("request-") && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')).ok_or_else(|| invalid("launch handoff identifier is invalid"))?;
+    let metadata = std::fs::symlink_metadata(directory)?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() || metadata.mode() & 0o077 != 0 || metadata.uid() != std::fs::metadata(&root)?.uid() {
+        return Err(invalid("launch handoff directory is not private"));
+    }
+    let source = handoff_file(&directory.join("source"), false)?;
+    match source.try_lock() {
+        Err(std::fs::TryLockError::WouldBlock) => {},
+        Err(std::fs::TryLockError::Error(error)) => return Err(error),
+        Ok(()) => return Err(invalid("launch handoff source is no longer available")),
+    }
+    let mut request = handoff_file(path, false)?;
+    request.try_lock().map_err(|error| io::Error::other(error.to_string()))?;
+    std::fs::remove_file(path)?;
+    let completion = std::sync::Arc::new(LaunchCompletion { result: std::sync::Mutex::new(Some(LaunchCompletionTarget::File(handoff_file(&directory.join("result"), true)?))) });
+    if request.metadata()?.len() > 8 * 1024 * 1024 { return Err(invalid("launch handoff is too large")); }
+    let mut bytes = Vec::new();
+    request.by_ref().take(8 * 1024 * 1024 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > 8 * 1024 * 1024 { return Err(invalid("launch handoff is too large")); }
+    let payload: serde_json::Value = serde_json::from_slice(&bytes)?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(io::Error::other)?.as_secs();
+    let created = payload["created"].as_u64().ok_or_else(|| invalid("launch handoff creation time is missing"))?;
+    if payload["version"] != 1 || payload["request"].as_str() != Some(identifier) || created > now || now.saturating_sub(created) > 120 {
+        return Err(invalid("launch handoff is invalid or expired"));
+    }
+    let mut options = LaunchOptions::from_payload(&payload)?;
+    if !options.multi_instance { return Err(invalid("launch handoff must create a new instance")); }
+    options.completion = Some(completion);
+    Ok(Some(options))
 }
 
 fn language_name(language: Language) -> io::Result<Option<String>> {
@@ -137,12 +310,13 @@ impl LaunchOptions {
             multi_instance: true,
             open_session: false,
             language: Some(buffer.language()),
-            byte_code_page: None,
+            byte_code_page: buffer.byte_code_page(),
             udl_name: if matches!(buffer.language(), Language::UserDefined(_)) {
                 Some(workspace.udl_language_name(buffer.language()).ok_or_else(|| invalid("Current user-defined language is not in the workspace registry"))?.to_owned())
             } else { None },
             line: Some(line.saturating_add(1)),
             column: Some(column.saturating_add(1)),
+            completion: None,
         }))
     }
 
@@ -173,6 +347,9 @@ impl LaunchOptions {
     }
 
     pub fn command(&self, executable: &Path) -> io::Result<Command> {
+        if crate::file_access::sandboxed() {
+            return Err(io::Error::new(io::ErrorKind::Unsupported, "sandbox launches require the native asynchronous launcher"));
+        }
         #[cfg(target_os = "macos")]
         if let Some(bundle) = executable.parent().filter(|path| path.file_name().is_some_and(|name| name == "MacOS"))
             .and_then(Path::parent).filter(|path| path.file_name().is_some_and(|name| name == "Contents"))
@@ -187,6 +364,33 @@ impl LaunchOptions {
         if !self.multi_instance { command.arg("-multiInst"); }
         command.args(self.arguments()?);
         Ok(command)
+    }
+
+    pub fn complete(&self, accepted: bool) -> io::Result<()> {
+        if let Some(completion) = &self.completion { completion.complete(accepted)?; }
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn payload(&self) -> io::Result<(serde_json::Value, crate::file_access::TransferGuard)> {
+        use std::os::unix::ffi::OsStrExt;
+        let arguments = self.arguments()?.into_iter().map(|argument| argument.as_bytes().to_vec()).collect::<Vec<_>>();
+        let (bookmarks, access) = crate::file_access::transfer(&self.files)?;
+        Ok((serde_json::json!({"arguments":arguments,"codepage":self.byte_code_page.map(ByteFormatCodePage::value),"bookmarks":bookmarks}), access))
+    }
+
+    #[cfg(unix)]
+    fn from_payload(payload: &serde_json::Value) -> io::Result<Self> {
+        use std::os::unix::ffi::OsStringExt;
+        let arguments: Vec<Vec<u8>> = serde_json::from_value(if payload.is_array() { payload.clone() } else { payload["arguments"].clone() })?;
+        let mut options = Self::parse(arguments.into_iter().map(OsString::from_vec))?;
+        if payload.is_object() {
+            options.byte_code_page = ByteFormatCodePage::from_value(&payload["codepage"])?;
+            if crate::file_access::sandboxed() { crate::file_access::receive(&payload["bookmarks"])?; }
+        } else if crate::file_access::sandboxed() {
+            return Err(invalid("sandbox launch request has no file access bookmarks"));
+        }
+        Ok(options)
     }
 
     pub fn spawn(&self, executable: &Path) -> io::Result<Child> {
@@ -332,7 +536,6 @@ pub struct LaunchRequest {
 impl InstanceServer {
     pub fn prepare(home: &Path, options: &mut LaunchOptions, settings: &serde_json::Value) -> io::Result<InstanceStartup> {
         use std::io::{Read,Write};
-        use std::os::unix::ffi::OsStrExt;
         use std::os::unix::fs::OpenOptionsExt;
         let store = crate::config::ConfigStore::under_home(home);
         let root = store.document_path(Path::new("instance.json"))?.parent().ok_or_else(|| invalid("instance directory is missing"))?.to_owned();
@@ -362,8 +565,8 @@ impl InstanceServer {
             if mode == 2 { options.no_session = true; }
             return Ok(InstanceStartup::Secondary);
         }
-        let arguments = options.arguments()?.into_iter().map(|argument| argument.as_bytes().to_vec()).collect::<Vec<_>>();
-        let bytes = serde_json::to_vec(&serde_json::json!({"arguments":arguments,"codepage":options.byte_code_page.map(ByteFormatCodePage::value)}))?;
+        let (payload, _access) = options.payload()?;
+        let bytes = serde_json::to_vec(&payload)?;
         let mut connection = None;
         let mut last_error = None;
         for _ in 0..50 {
@@ -373,7 +576,7 @@ impl InstanceServer {
             }
         }
         let mut stream = connection.ok_or_else(|| last_error.unwrap_or_else(|| io::Error::other("running instance is unavailable")))?;
-        stream.set_read_timeout(Some(std::time::Duration::from_secs(30)))?;
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(120)))?;
         stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
         stream.write_all(&(bytes.len() as u64).to_le_bytes())?;
         stream.write_all(&bytes)?;
@@ -404,7 +607,6 @@ impl Drop for InstanceServer {
 impl PendingLaunch {
     pub fn read(mut self) -> io::Result<LaunchRequest> {
         use std::io::Read;
-        use std::os::unix::ffi::OsStringExt;
         self.stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
         let mut size = [0u8;8];
         self.stream.read_exact(&mut size)?;
@@ -413,15 +615,21 @@ impl PendingLaunch {
         let mut bytes = vec![0u8;size];
         self.stream.read_exact(&mut bytes)?;
         let payload: serde_json::Value = serde_json::from_slice(&bytes)?;
-        let arguments: Vec<Vec<u8>> = serde_json::from_value(if payload.is_array() { payload.clone() } else { payload["arguments"].clone() })?;
-        let mut options = LaunchOptions::parse(arguments.into_iter().map(OsString::from_vec))?;
-        if payload.is_object() { options.byte_code_page = ByteFormatCodePage::from_value(&payload["codepage"])?; }
+        let options = LaunchOptions::from_payload(&payload)?;
         Ok(LaunchRequest { options,stream:self.stream })
     }
 }
 
 #[cfg(unix)]
 impl LaunchRequest {
+    pub fn into_options(self) -> LaunchOptions {
+        let mut options = self.options;
+        options.completion = Some(std::sync::Arc::new(LaunchCompletion {
+            result: std::sync::Mutex::new(Some(LaunchCompletionTarget::Socket(self.stream))),
+        }));
+        options
+    }
+
     pub fn acknowledge(mut self, accepted: bool) -> io::Result<()> {
         use std::io::Write;
         self.stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;

@@ -234,6 +234,14 @@ pub fn search_files(request: FileSearchRequest, cancel: &AtomicBool) -> FileSear
 
 pub fn discover_files(request: &FileSearchRequest, cancel: &AtomicBool, progress: Option<&FileSearchProgress>) -> FileCandidates {
     let mut result = FileCandidates::default();
+    let _access = match crate::file_access::directory(&request.directory) {
+        Ok(access) => access,
+        Err(error) => {
+            result.cancelled = error.kind() == std::io::ErrorKind::Interrupted;
+            result.errors.push(format!("{}: {error}", request.directory.display()));
+            return result;
+        }
+    };
     let patterns = filter_patterns(&request.filters);
     let root = match request.directory.canonicalize() {
         Ok(root) => root,
@@ -361,6 +369,12 @@ fn search_file(
     opened: &mut [OpenSearchDocument],
     updates: &mut Vec<(usize, crate::search::RegexState)>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _access = if opened.iter().any(|document| document.paths.iter().any(|candidate| candidate == path))
+        || request.open_documents.contains_key(path) {
+        None
+    } else {
+        Some(crate::file_access::read(path)?)
+    };
     let canonical = path.canonicalize().ok();
     let identity = opened.iter().position(|doc| doc.paths.iter().any(|candidate| candidate == path
         || canonical.as_ref().is_some_and(|path| candidate == path)));

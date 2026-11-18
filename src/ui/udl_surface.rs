@@ -279,6 +279,7 @@ impl MatrixWindow {
                         .map(IoOutcome::Saved)
                 }
                 IoJob::Import(path) => {
+                    let _access = crate::file_access::read(&path)?;
                     let bytes = std::fs::read(path)?;
                     serde_json::from_slice(&bytes)
                         .map(IoOutcome::Imported)
@@ -590,6 +591,11 @@ impl MatrixWindow {
         }
         match selected {
             Ok(Some(path)) => {
+                if let Err(error) = crate::file_access::selected(&path) {
+                    self.udl.error = Some(error.to_string());
+                    cx.notify();
+                    return;
+                }
                 if snapshot.is_none()
                     && !path
                         .extension()

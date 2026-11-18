@@ -12,6 +12,11 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = 'aarch64-apple-darwin'
+SANDBOX_ENTITLEMENTS = {
+    'com.apple.security.app-sandbox': True,
+    'com.apple.security.files.user-selected.read-write': True,
+    'com.apple.security.print': True,
+}
 
 
 def document_types(output):
@@ -84,9 +89,66 @@ def install_licenses(resources, packages):
         shutil.copy2(ROOT / name, resources / name)
 
 
-def package(binary, output):
+def sandbox_entitlements(sandbox, entitlements):
+    if entitlements is not None and not sandbox:
+        raise ValueError('--entitlements requires --sandbox')
+    if not sandbox:
+        return None
+    values = dict(SANDBOX_ENTITLEMENTS)
+    if entitlements is not None:
+        with entitlements.open('rb') as stream:
+            supplied = plistlib.load(stream)
+        if not isinstance(supplied, dict):
+            raise ValueError('Entitlements must be a plist dictionary')
+        values.update(supplied)
+    if any(values.get(key) is not True for key in SANDBOX_ENTITLEMENTS):
+        raise ValueError('Sandbox, user-selected read/write and print entitlements must remain enabled')
+    return values
+
+
+def disk_image(app, image, output):
+    icon = ROOT / 'assets/notepad-matrix.icns'
+    with tempfile.TemporaryDirectory(prefix='.dmg-', dir=output) as temporary:
+        work = Path(temporary)
+        stage = work / 'stage'
+        stage.mkdir()
+        shutil.copytree(app, stage / app.name)
+        (stage / 'Applications').symlink_to('/Applications', target_is_directory=True)
+        writable = work / 'writable.dmg'
+        subprocess.run(['/usr/bin/hdiutil', 'create', '-volname', 'notepad-matrix',
+                        '-srcfolder', str(stage), '-format', 'UDRW', str(writable)], check=True)
+        mount = Path(tempfile.mkdtemp(prefix='.mount-', dir=output))
+        try:
+            subprocess.run(['/usr/bin/hdiutil', 'attach', '-nobrowse', '-mountpoint',
+                            str(mount), str(writable)], check=True)
+            shutil.copy2(icon, mount / '.VolumeIcon.icns')
+            subprocess.run(['/usr/bin/xcrun', 'SetFile', '-a', 'C', str(mount)], check=True)
+        finally:
+            if os.path.ismount(mount):
+                result = subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount)])
+                if result.returncode:
+                    subprocess.run(['/usr/bin/hdiutil', 'detach', '-force', str(mount)], check=True)
+            mount.rmdir()
+        subprocess.run(['/usr/bin/hdiutil', 'convert', str(writable), '-format', 'UDZO',
+                        '-o', str(image)], check=True)
+        script = work / 'disk-icon.swift'
+        script.write_text('''import AppKit
+let arguments = CommandLine.arguments
+guard let icon = NSImage(contentsOfFile: arguments[1]),
+      NSWorkspace.shared.setIcon(icon, forFile: arguments[2], options: []) else {
+    fputs("Cannot set disk image icon\\n", stderr)
+    exit(1)
+}
+''', encoding='utf-8')
+        subprocess.run(['/usr/bin/swift', str(script), str(icon), str(image)], check=True)
+
+
+def package(binary, output, sign_identity='-', sandbox=False, entitlements=None):
     if sys.platform != 'darwin':
         raise SystemExit('Packaging requires macOS')
+    if not sign_identity.strip():
+        raise ValueError('Signing identity must not be empty; use - for ad-hoc signing')
+    signing_entitlements = sandbox_entitlements(sandbox, entitlements)
     binary = binary.resolve(strict=True)
     output = output.resolve()
     with binary.open('rb') as stream:
@@ -130,21 +192,26 @@ def package(binary, output):
         install_licenses(resources, packages)
         subprocess.run(['/usr/bin/strip', '-S', '-x', str(executable)], check=True)
         bundle = contents.parent
-        subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(bundle)], check=True)
+        signing = ['/usr/bin/codesign', '--force', '--sign', sign_identity]
+        if signing_entitlements is not None:
+            entitlement_file = Path(temporary) / 'sandbox.entitlements'
+            entitlement_file.write_bytes(plistlib.dumps(signing_entitlements))
+            signing.extend(['--entitlements', str(entitlement_file), '--generate-entitlement-der'])
+        subprocess.run([*signing, str(bundle)], check=True)
+        subprocess.run(['/usr/bin/codesign', '--verify', '--strict', '--verbose=2', str(bundle)], check=True)
         bundle.rename(app)
     image = output / 'notepad-matrix.dmg'
-    with tempfile.TemporaryDirectory(prefix='.dmg-', dir=output) as temporary:
-        stage = Path(temporary)
-        shutil.copytree(app, stage / app.name)
-        (stage / 'Applications').symlink_to('/Applications', target_is_directory=True)
-        subprocess.run(['/usr/bin/hdiutil', 'create', '-volname', 'notepad-matrix',
-                        '-srcfolder', str(stage), '-format', 'UDZO', str(image)], check=True)
+    disk_image(app, image, output)
     print(image)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--binary', type=Path, required=True)
-    parser.add_argument('--output', type=Path, default=ROOT / 'dist')
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--sign-identity', default='-', help='codesign identity; default: ad-hoc (-)')
+    parser.add_argument('--sandbox', action='store_true', help='Create an App Sandbox development package')
+    parser.add_argument('--entitlements', type=Path, help='Explicit entitlement overrides/additions; requires --sandbox')
     args = parser.parse_args()
-    package(args.binary, args.output)
+    output = args.output if args.output is not None else ROOT / ('dist-sandbox' if args.sandbox else 'dist')
+    package(args.binary, output, args.sign_identity, args.sandbox, args.entitlements)

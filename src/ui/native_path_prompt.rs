@@ -51,7 +51,11 @@ pub(super) fn prompt_for_paths_in(
                     let directory = panel.directoryURL().and_then(|url| url.to_file_path());
                     let selection = if response == NSModalResponseOK {
                         let paths = panel.URLs().iter().filter(|url| url.isFileURL())
-                            .map(|url| url.to_file_path().ok_or_else(|| io::Error::other("文件选择返回了无效路径")))
+                            .map(|url| {
+                                let path = url.to_file_path().ok_or_else(|| io::Error::other("文件选择返回了无效路径"))?;
+                                crate::file_access::selected_url(url)?;
+                                Ok(path)
+                            })
                             .collect::<io::Result<Vec<_>>>()?;
                         if paths.is_empty() { return Err(io::Error::other("文件选择未返回路径")); }
                         Some(paths)
@@ -101,8 +105,10 @@ pub(super) fn prompt_for_new_path_in(
                 let result = (|| {
                     let directory = panel.directoryURL().and_then(|url| url.to_file_path());
                     let selection = if response == NSModalResponseOK {
-                        let path = panel.URL().filter(|url| url.isFileURL())
-                            .and_then(|url| url.to_file_path()).ok_or_else(|| io::Error::other("文件保存未返回有效路径"))?;
+                        let url = panel.URL().filter(|url| url.isFileURL())
+                            .ok_or_else(|| io::Error::other("文件保存未返回有效路径"))?;
+                        let path = url.to_file_path().ok_or_else(|| io::Error::other("文件保存未返回有效路径"))?;
+                        crate::file_access::selected_url(url)?;
                         Some(path)
                     } else if response == NSModalResponseCancel {
                         None

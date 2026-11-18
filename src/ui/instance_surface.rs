@@ -11,6 +11,7 @@ impl MatrixWindow {
     ) {
         if options.open_session && options.files.len() != 1 {
             self.notify_editor_error("-openSession requires exactly one session path".into(), cx);
+            if let Err(error) = options.complete(false) { self.notify_editor_error(error.to_string(), cx); }
             self.complete_file_preferences_startup(window, cx);
             return;
         }
@@ -18,17 +19,19 @@ impl MatrixWindow {
             self.start_open_paths_with_launch(options.files.clone(), Some(options.clone()), window, cx);
             return;
         }
+        let mut accepted = true;
         match options.resolved_language(&self.workspace) {
             Ok(Some(language)) => self.workspace.active_mut().set_language(language),
             Ok(None) => {},
-            Err(error) => self.notify_editor_error(error.to_string(), cx),
+            Err(error) => { accepted = false; self.notify_editor_error(error.to_string(), cx); },
         }
         self.workspace.refresh_udl_metadata();
-        if let Err(error) = self.apply_launch_document_position(options) { self.notify_editor_error(error.to_string(), cx); }
+        if let Err(error) = self.apply_launch_document_position(options) { accepted = false; self.notify_editor_error(error.to_string(), cx); }
         self.initialize_active_change_history();
         self.reset_active_view(window, cx);
         if options.line.is_some() || options.column.is_some() { self.editor_follow_caret = true; }
         self.complete_file_preferences_startup(window, cx);
+        if let Err(error) = options.complete(accepted) { self.notify_editor_error(error.to_string(), cx); }
     }
 
     pub(super) fn apply_launch_document_position(&mut self, options: &LaunchOptions) -> io::Result<()> {
@@ -44,7 +47,9 @@ impl MatrixWindow {
 
     pub(super) fn begin_file_preferences_startup(&mut self, settings: &serde_json::Value, launch: &LaunchOptions, window: &mut Window, cx: &mut Context<Self>) {
         self.file_prompt.startup_settings = Some(settings.clone());
+        let loaded_session_path = self.preferences.files.loaded_session_path.clone();
         self.startup_file_preferences(settings, launch, window, cx);
+        if launch.open_session { self.preferences.files.loaded_session_path = loaded_session_path; }
         for buffer in self.workspace.buffers() { self.initialize_buffer_change_history(buffer.editor.document()); }
     }
 
@@ -109,6 +114,60 @@ impl MatrixWindow {
         self.record_macro_step(crate::macros::MacroStep::Unsupported(
             "new-instance document command",
         ));
+        self.spawn_launch_options_with_move(options, moving.then_some((pane, buffer)), None, window, cx);
+    }
+
+    pub(super) fn spawn_launch_options(
+        &mut self,
+        options: LaunchOptions,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.spawn_launch_options_with_move(options, None, None, window, cx);
+    }
+
+    pub(super) fn spawn_launch_options_with_completion(
+        &mut self,
+        options: LaunchOptions,
+        completion: Option<std::sync::mpsc::Sender<bool>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.spawn_launch_options_with_move(options, None, completion, window, cx);
+    }
+
+    fn spawn_launch_options_with_move(
+        &mut self,
+        options: LaunchOptions,
+        moving: Option<(ViewId, BufferId)>,
+        completion: Option<std::sync::mpsc::Sender<bool>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if crate::file_access::sandboxed() || completion.is_some() {
+            let executor = cx.background_executor().clone();
+            self.file_busy = true;
+            cx.spawn_in(window, async move |view, cx| {
+                let result = match std::env::current_exe() {
+                    Ok(executable) => native_app_launch::launch_handoff(options, executable, executor).await,
+                    Err(error) => Err(error),
+                };
+                if let Err(error) = view.update_in(cx, |view, window, cx| {
+                    view.file_busy = false;
+                    let accepted = result.is_ok();
+                    match result {
+                        Ok(()) => if let Some((pane, buffer)) = moving { view.finish_instance_move(pane, buffer, window, cx); },
+                        Err(error) => view.notify_editor_error(format!("The new instance could not be started: {error}"), cx),
+                    }
+                    if let Some(completion) = completion
+                        && let Err(error) = completion.send(accepted) {
+                        eprintln!("session instance completion unavailable: {error}");
+                    }
+                    cx.notify();
+                }) { eprintln!("native application launch lost its document window: {error}"); }
+            }).detach();
+            return;
+        }
         let launched = std::env::current_exe().and_then(|executable| options.spawn(&executable));
         match launched {
             Ok(child) => {
@@ -123,7 +182,7 @@ impl MatrixWindow {
                     }
                 })
                 .detach();
-                if moving {
+                if let Some((pane, buffer)) = moving {
                     self.finish_instance_move(pane, buffer, window, cx);
                 }
             }
@@ -139,16 +198,13 @@ impl MatrixWindow {
                 self.file_busy = true;
                 cx.spawn_in(window, async move |view, cx| {
                     let answered = prompt.await;
-                    if let Err(error) = view.update_in(cx, |view, window, cx| {
+                    if let Err(error) = view.update_in(cx, |view, _, cx| {
                         view.file_busy = false;
                         if let Err(error) = answered {
                             view.notify_editor_error(
                                 format!("Launch error prompt disconnected: {error}"),
                                 cx,
                             );
-                        }
-                        if moving {
-                            view.finish_instance_move(pane, buffer, window, cx);
                         }
                         cx.notify();
                     }) {

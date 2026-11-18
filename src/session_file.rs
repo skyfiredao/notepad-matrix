@@ -116,6 +116,7 @@ impl SessionFile {
     }
 
     pub fn load(path: &Path) -> io::Result<Self> {
+        let _access = crate::file_access::read(path)?;
         let bytes = fs::read(path)?;
         let document = serde_json::from_slice(&bytes)
             .map_err(|error| invalid(&format!("invalid session JSON: {error}")))?;
@@ -166,6 +167,7 @@ impl SessionFile {
 
     pub fn save(&self, path: &Path, overwrite: crate::files::OverwritePolicy) -> io::Result<()> {
         self.validate()?;
+        let _access = crate::file_access::directory(path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new(".")))?;
         let previous = match fs::read(path) {
             Ok(bytes) => Some(bytes),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,

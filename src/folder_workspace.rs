@@ -40,6 +40,7 @@ impl FolderMutation {
     pub fn execute(self) -> io::Result<PathBuf> {
         match self {
             Self::CreateFile { parent, name } => {
+                let _access = crate::file_access::directory(&parent)?;
                 let path = child_path(&parent, &name)?;
                 fs::OpenOptions::new()
                     .write(true)
@@ -48,6 +49,7 @@ impl FolderMutation {
                 Ok(path)
             }
             Self::CreateDirectory { parent, name } => {
+                let _access = crate::file_access::directory(&parent)?;
                 let path = child_path(&parent, &name)?;
                 fs::create_dir(&path)?;
                 Ok(path)
@@ -59,6 +61,7 @@ impl FolderMutation {
                         "Cannot rename a filesystem root",
                     )
                 })?;
+                let _access = crate::file_access::directory(parent)?;
                 let target = child_path(parent, &name)?;
                 match fs::symlink_metadata(&target) {
                     Ok(_) => {
@@ -143,27 +146,23 @@ fn child_path(parent: &Path, name: &str) -> io::Result<PathBuf> {
     Ok(parent.join(name))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "native-ui"))]
 fn native_trash(path: &Path) -> io::Result<()> {
     let path = std::path::absolute(path)?;
+    let parent = path.parent().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Cannot trash a filesystem root"))?;
+    let _access = crate::file_access::directory(parent)?;
     fs::symlink_metadata(&path)?;
-    let output = std::process::Command::new("/usr/bin/osascript")
-        .args(["-e", "on run argv\n tell application \"Finder\" to delete (POSIX file (item 1 of argv))\nend run", "--"])
-        .arg(path).output()?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(
-            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        ))
-    }
+    let url = crate::native_app_open::file_url(&path)?;
+    objc2_foundation::NSFileManager::defaultManager()
+        .trashItemAtURL_resultingItemURL_error(&url, None)
+        .map_err(|error| io::Error::other(format!("{} ({}, {})", error.localizedDescription(), error.domain(), error.code())))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(target_os = "macos", feature = "native-ui")))]
 fn native_trash(_path: &Path) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "Finder Trash is available on macOS",
+        "Native Trash requires macOS with native-ui",
     ))
 }
 
@@ -175,36 +174,25 @@ pub enum FolderShellCommand {
 }
 
 pub fn folder_shell(path: &Path, command: FolderShellCommand) -> io::Result<()> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "native-ui"))]
     {
-        let mut process = std::process::Command::new("/usr/bin/open");
         match command {
-            FolderShellCommand::Open => {
-                process.arg("--").arg(path);
-            }
-            FolderShellCommand::Reveal => {
-                process.arg("-R").arg("--").arg(path);
-            }
+            FolderShellCommand::Open => crate::native_app_open::open_default(path),
+            FolderShellCommand::Reveal => crate::native_app_open::reveal(path),
             FolderShellCommand::Terminal => {
+                let _access = crate::file_access::read(path)?;
                 let directory = if path.is_dir() {
                     path
                 } else {
                     path.parent()
                         .ok_or_else(|| io::Error::other("Missing parent directory"))?
                 };
-                process.args(["-a", "Terminal", "--"]).arg(directory);
+                let _directory_access = crate::file_access::read(directory)?;
+                crate::native_app_open::open_in_application_detached(directory, "com.apple.Terminal")
             }
         }
-        let output = process.output()?;
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(io::Error::other(
-                String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-            ))
-        }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "native-ui")))]
     {
         let _ = (path, command);
         Err(io::Error::new(
@@ -244,6 +232,9 @@ impl FolderWatch {
             self.paused = true;
             return Ok(false);
         }
+        let _access = tree.roots()
+            .map(crate::file_access::existing)
+            .collect::<io::Result<Vec<_>>>()?;
         let mut paths = BTreeSet::new();
         for root in tree.roots() {
             paths.insert(root.to_path_buf());
@@ -259,6 +250,7 @@ impl FolderWatch {
             if cancel.load(Ordering::Relaxed) {
                 return Ok(false);
             }
+            let _directory_access = crate::file_access::existing(directory)?;
             if !tree.follow_links
                 && fs::symlink_metadata(directory)
                     .is_ok_and(|metadata| metadata.file_type().is_symlink())
@@ -320,22 +312,33 @@ impl FolderWatch {
 }
 
 pub fn existing_buffer(workspace: &Workspace, path: &Path) -> Option<BufferId> {
-    let canonical = fs::canonicalize(path).ok();
+    let canonical = crate::file_access::existing(path)
+        .and_then(|_access| fs::canonicalize(path)).ok();
     workspace.buffers().iter().find_map(|buffer| {
         let opened = buffer.disk_file.as_ref()?.path();
         (opened == path
             || canonical.as_ref().is_some_and(|target| {
-                opened == target || fs::canonicalize(opened).is_ok_and(|opened| &opened == target)
+                opened == target || crate::file_access::existing(opened)
+                    .and_then(|_access| fs::canonicalize(opened)).is_ok_and(|opened| &opened == target)
             }))
         .then_some(buffer.id())
     })
 }
 
 pub fn dropped_folder_files(paths: Vec<PathBuf>) -> io::Result<Vec<PathBuf>> {
+    let mut access = Vec::new();
+    for path in &paths {
+        let guard = crate::file_access::read(path)?;
+        if fs::metadata(path)?.is_dir() {
+            access.push(crate::file_access::directory(path)?);
+        }
+        access.push(guard);
+    }
     let mut pending = paths;
     let mut files = Vec::new();
     let mut visited = BTreeSet::new();
     while let Some(path) = pending.pop() {
+        let _access = crate::file_access::existing(&path)?;
         let metadata = fs::metadata(&path)?;
         if metadata.is_file() { files.push(path); continue; }
         if !metadata.is_dir() { continue; }
@@ -356,6 +359,7 @@ pub struct FolderFile {
 
 impl FolderFile {
     pub fn load_with_preferences(path: &Path,settings: &serde_json::Value) -> io::Result<Self> {
+        let _access = crate::file_access::read(path)?;
         let path = fs::canonicalize(path)?;
         if !fs::metadata(&path)?.is_file() { return Err(io::Error::other("Not a regular file")); }
         let (file,text) = DiskFile::load_with_preferences(&path,settings)?;
@@ -363,6 +367,7 @@ impl FolderFile {
     }
 
     pub fn load(path: &Path) -> io::Result<Self> {
+        let _access = crate::file_access::read(path)?;
         let path = fs::canonicalize(path)?;
         if !fs::metadata(&path)?.is_file() {
             return Err(io::Error::new(
@@ -633,6 +638,7 @@ impl FolderWorkspace {
     }
 
     fn select_add_root(&mut self, path: &Path) -> io::Result<()> {
+        let _access = crate::file_access::directory(path)?;
         let path = fs::canonicalize(path)?;
         if !fs::metadata(&path)?.is_dir() {
             return Err(io::Error::new(
@@ -651,7 +657,8 @@ impl FolderWorkspace {
     }
 
     pub fn remove_root(&mut self, path: &Path) -> io::Result<()> {
-        let path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        let path = crate::file_access::existing(path)
+            .and_then(|_access| fs::canonicalize(path)).unwrap_or_else(|_| path.to_path_buf());
         if self.root.as_ref() == Some(&path) {
             self.root = if self.additional_roots.is_empty() {
                 None
@@ -728,6 +735,7 @@ impl FolderWorkspace {
     }
 
     fn select_root(&mut self, path: &Path) -> io::Result<()> {
+        let _access = crate::file_access::directory(path)?;
         let root = fs::canonicalize(path)?;
         if !fs::metadata(&root)?.is_dir() {
             return Err(io::Error::new(
@@ -751,6 +759,7 @@ impl FolderWorkspace {
     }
 
     pub fn toggle_directory_expansion(&mut self, path: &Path) -> io::Result<()> {
+        let _access = crate::file_access::existing(path)?;
         if !self.entries.iter().any(|entry| {
             entry.path == path
                 && (entry.kind == EntryKind::Directory
@@ -781,6 +790,13 @@ impl FolderWorkspace {
         self.errors.clear();
         let roots: Vec<_> = self.roots().map(PathBuf::from).collect();
         for root in roots {
+            let _access = match crate::file_access::existing(&root) {
+                Ok(access) => access,
+                Err(error) => {
+                    self.errors.push(format!("{}: {error}", root.display()));
+                    continue;
+                }
+            };
             match fs::symlink_metadata(&root) {
                 Ok(metadata) if metadata.is_dir() => {
                     if !self.scan(
@@ -817,6 +833,13 @@ impl FolderWorkspace {
             if !expanded {
                 continue;
             }
+            let _access = match crate::file_access::existing(&directory) {
+                Ok(access) => access,
+                Err(error) => {
+                    self.errors.push(format!("{}: {error}", directory.display()));
+                    continue;
+                }
+            };
             match fs::symlink_metadata(&directory).and_then(|metadata| {
                 if !metadata.is_dir()
                     && !(self.follow_links

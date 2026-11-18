@@ -146,9 +146,31 @@ impl MatrixWindow {
         let values = if crate::run_commands::VARIABLE_NAMES.iter().any(|name| command.contains(&format!("$({name})"))) {
             self.run_values()
         } else { Ok(std::array::from_fn(|_| String::new())) };
-        let launched = values.map_err(io::Error::other)
-            .and_then(|values| crate::run_commands::expand(&command, &values))
-            .and_then(|command| crate::run_commands::launch_terminal(&command, std::path::Path::new(".")));
+        let expanded = values.map_err(io::Error::other)
+            .and_then(|values| crate::run_commands::expand(&command, &values));
+        if crate::file_access::sandboxed() {
+            self.run_state.launching = true;
+            cx.spawn(async move |owner, cx| {
+                let result = match expanded {
+                    Ok(expanded) => crate::run_commands::launch_terminal_sandboxed(&expanded, std::path::Path::new(".")).await,
+                    Err(error) => Err(error),
+                };
+                if let Err(error) = owner.update(cx, |view, cx| {
+                    view.run_state.launching = false;
+                    match result {
+                        Ok(()) => { view.add_run_history(command); view.dismiss_run(cx); }
+                        Err(error) => {
+                            view.run_state.history.retain(|entry| !entry.eq_ignore_ascii_case(&command));
+                            view.run_message = format!("Terminal 文件交接失败：{error}");
+                        }
+                    }
+                    cx.notify();
+                }) { eprintln!("Terminal handoff lost its owner: {error}"); }
+            }).detach();
+            cx.notify();
+            return;
+        }
+        let launched = expanded.and_then(|command| crate::run_commands::launch_terminal(&command, std::path::Path::new(".")));
         match launched {
             Ok(child) => {
                 self.run_state.launching = true;

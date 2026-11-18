@@ -306,41 +306,32 @@ impl MatrixWindow {
         self.accept_session_archive_pending(path, archive, None, window, cx);
     }
 
-    pub(super) fn accept_session_archive_with_completion(&mut self, path: PathBuf, archive: crate::recovery::SessionFile, window: &mut Window, cx: &mut Context<Self>) -> std::sync::mpsc::Receiver<()> {
+    pub(super) fn accept_session_archive_with_completion(&mut self, path: PathBuf, archive: crate::recovery::SessionFile, window: &mut Window, cx: &mut Context<Self>) -> std::sync::mpsc::Receiver<bool> {
         let (sender, receiver) = std::sync::mpsc::channel();
         self.accept_session_archive_pending(path, archive, Some(sender), window, cx);
         receiver
     }
 
-    fn finish_session_archive_open(completion: Option<std::sync::mpsc::Sender<()>>) {
-        if let Some(sender) = completion && let Err(error) = sender.send(()) { eprintln!("session open completion unavailable: {error}"); }
+    fn finish_session_archive_open(completion: Option<std::sync::mpsc::Sender<bool>>, accepted: bool) {
+        if let Some(sender) = completion && let Err(error) = sender.send(accepted) { eprintln!("session open completion unavailable: {error}"); }
     }
 
-    fn accept_session_archive_pending(&mut self, path: PathBuf, mut archive: crate::recovery::SessionFile, completion: Option<std::sync::mpsc::Sender<()>>, window: &mut Window, cx: &mut Context<Self>) {
+    fn accept_session_archive_pending(&mut self, path: PathBuf, mut archive: crate::recovery::SessionFile, completion: Option<std::sync::mpsc::Sender<bool>>, window: &mut Window, cx: &mut Context<Self>) {
         if self.file_busy || self.close_dialog || self.save_all_dialog || self.save_all_restore.is_some() || self.reload_target.is_some() || self.batch_editing_blocked() || !self.cancel_view_composition(window,cx) {
-            Self::finish_session_archive_open(completion);
+            Self::finish_session_archive_open(completion, false);
             return;
         }
         self.workspace.synchronize_udl_names(self.udl.registry.named().map(|(id,definition)| (id,definition.name.clone())));
         let empty = self.workspace.buffers().len() == 1 && self.workspace.active().disk_file.is_none() && !self.workspace.active().is_modified() && self.workspace.active().editor.document().len_bytes() == 0;
         if !empty && matches!(self.preferences.files.multi_instance,1 | 2) {
             let options = crate::launch::LaunchOptions { files:vec![path],multi_instance:true,no_session:true,open_session:true,..Default::default() };
-            match std::env::current_exe().and_then(|executable| options.spawn(&executable)) {
-                Ok(child) => {
-                    let executor = cx.background_executor().clone();
-                    cx.spawn(async move |_,_| {
-                        if let Err(error) = crate::run_commands::reap(child,|| executor.timer(std::time::Duration::from_secs(1))).await { eprintln!("session instance failed: {error}"); }
-                    }).detach();
-                }
-                Err(error) => self.notify_editor_error(format!("会话新实例无法启动: {error}"),cx),
-            }
-            Self::finish_session_archive_open(completion);
+            self.spawn_launch_options_with_completion(options, completion, window, cx);
             return;
         }
         if !self.pref_bool("largeFileRestriction.suppress2GBWarning", false) {
             let paths = match archive.paths() {
                 Ok(paths) => paths,
-                Err(error) => { self.notify_editor_error(error.to_string(), cx); Self::finish_session_archive_open(completion); return; }
+                Err(error) => { self.notify_editor_error(error.to_string(), cx); Self::finish_session_archive_open(completion, false); return; }
             };
             let paths = paths.into_iter().filter(|path| crate::folder_workspace::existing_buffer(&self.workspace, path).is_none()).collect::<Vec<_>>();
             self.file_busy = true;
@@ -355,7 +346,7 @@ impl MatrixWindow {
                     let message = format!("{}\n\n打开 2GB 以上的大文件可能需要几分钟。是否打开？", file.display());
                     let prompt = match view.update_in(cx, |_, window, cx| window.prompt(gpui::PromptLevel::Warning, "打开大文件警告", Some(&message), &[gpui::PromptButton::ok("是"), gpui::PromptButton::cancel("否")], cx)) {
                         Ok(prompt) => prompt,
-                        Err(error) => { eprintln!("session large file prompt unavailable: {error}"); Self::finish_session_archive_open(completion); return; }
+                        Err(error) => { eprintln!("session large file prompt unavailable: {error}"); Self::finish_session_archive_open(completion, false); return; }
                     };
                     match prompt.await {
                         Ok(0) => {},
@@ -368,22 +359,26 @@ impl MatrixWindow {
                 }
                 if let Err(error) = view.update_in(cx, |view, window, cx| {
                     view.file_busy = false;
-                    match archive.exclude_paths(&excluded) {
-                        Ok(()) => view.restore_accepted_session_archive(path, archive, window, cx),
-                        Err(error) => view.notify_editor_error(error.to_string(), cx),
-                    }
-                    Self::finish_session_archive_open(completion);
+                    let accepted = match archive.exclude_paths(&excluded) {
+                        Ok(()) => view.restore_accepted_session_archive(path, archive, window, cx) && excluded.is_empty(),
+                        Err(error) => { view.notify_editor_error(error.to_string(), cx); false },
+                    };
+                    Self::finish_session_archive_open(completion, accepted);
                 }) { eprintln!("session confirmed open unavailable: {error}"); }
             }).detach();
             cx.notify();
             return;
         }
-        self.restore_accepted_session_archive(path, archive, window, cx);
-        Self::finish_session_archive_open(completion);
+        let accepted = self.restore_accepted_session_archive(path, archive, window, cx);
+        Self::finish_session_archive_open(completion, accepted);
     }
 
-    fn restore_accepted_session_archive(&mut self, path: PathBuf, archive: crate::recovery::SessionFile, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.cancel_view_composition(window, cx) { return; }
+    fn restore_accepted_session_archive(&mut self, path: PathBuf, archive: crate::recovery::SessionFile, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if !self.cancel_view_composition(window, cx) { return false; }
+        let paths = match archive.paths() {
+            Ok(paths) => paths,
+            Err(error) => { self.notify_editor_error(error.to_string(), cx); return false; },
+        };
         match archive.restore_into(&mut self.workspace) {
             Ok(warnings) => {
                 for buffer in self.workspace.buffers() { self.initialize_buffer_change_history(buffer.editor.document()); }
@@ -393,9 +388,15 @@ impl MatrixWindow {
                 self.confirm_absent_session_files(true,window,cx);
                 self.reset_active_view(window,cx);
                 self.preferences_apply_large_file_open_policy(window,cx);
+                let accepted = warnings.is_empty() && paths.iter().all(|path| {
+                    crate::folder_workspace::existing_buffer(&self.workspace, path).is_some_and(|id| {
+                        self.workspace.buffers().iter().any(|buffer| buffer.id() == id && buffer.disk_file.as_ref().is_some_and(|file| !file.is_placeholder()))
+                    })
+                });
                 if !warnings.is_empty() { self.notify_editor_error(warnings.join("\n"),cx); }
+                accepted
             }
-            Err(error) => self.notify_editor_error(format!("会话无法恢复: {error}"),cx),
+            Err(error) => { self.notify_editor_error(format!("会话无法恢复: {error}"),cx); false },
         }
     }
 

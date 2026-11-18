@@ -895,6 +895,7 @@ impl RecoverySession {
                             loaded_bytes,
                         ));
                     }
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => return Err(error),
                     Err(error) => {
                         warnings.push(format!("{}: session file could not be opened: {error}",path.display()));
                         if workspace.keep_absent_session_files() {
@@ -1561,9 +1562,13 @@ impl RecoverySnapshot {
         };
         let loaded_bytes = if let Some(path) = document["disk"].get("path") {
             let path: PathBuf = serde_json::from_value(path.clone())?;
-            match fs::metadata(path) {
-                Ok(metadata) => metadata.len(),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => backup_bytes,
+            match crate::file_access::existing(&path) {
+                Ok(_access) => match fs::metadata(path) {
+                    Ok(metadata) => metadata.len(),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => backup_bytes,
+                    Err(error) => return Err(error),
+                },
+                Err(error) if matches!(error.kind(), io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied | io::ErrorKind::Interrupted) => backup_bytes,
                 Err(error) => return Err(error),
             }
         } else {
@@ -1614,6 +1619,11 @@ impl RecoverySnapshot {
                 let mut state = state.clone();
                 if state.get("bytes").is_none() {
                     let path: PathBuf = serde_json::from_value(state["path"].clone())?;
+                    let _access = match crate::file_access::read(&path) {
+                        Ok(access) => Some(access),
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+                        Err(error) => return Err(error),
+                    };
                     match fs::read(&path) {
                         Ok(bytes) => {
                             state["bytes"] = serde_json::to_value(bytes)?;

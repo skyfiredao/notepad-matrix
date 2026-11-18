@@ -31,11 +31,13 @@ fn choose_search_directory(initial: &std::path::Path) -> io::Result<Option<PathB
     if response != NSModalResponseOK {
         return Err(io::Error::other("目录选择窗口未能完成"));
     }
-    panel
+    let path = panel
         .URL()
         .and_then(|url| url.path())
-        .map(|path| Some(PathBuf::from(path.to_string())))
-        .ok_or_else(|| io::Error::other("目录选择未返回有效路径"))
+        .map(|path| PathBuf::from(path.to_string()))
+        .ok_or_else(|| io::Error::other("目录选择未返回有效路径"))?;
+    crate::file_access::selected(&path)?;
+    Ok(Some(path))
 }
 
 #[derive(Clone, Copy)]

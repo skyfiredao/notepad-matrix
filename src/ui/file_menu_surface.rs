@@ -27,6 +27,8 @@ fn move_file(
     to: &std::path::Path,
     expected: Option<&std::fs::Metadata>,
 ) -> io::Result<()> {
+    let _source_access = crate::file_access::directory(from.parent().unwrap_or_else(|| std::path::Path::new(".")))?;
+    let _target_access = crate::file_access::directory(to.parent().unwrap_or_else(|| std::path::Path::new(".")))?;
     let manager = NSFileManager::defaultManager();
     let source = file_url(from)?;
     let target = file_url(to)?;
@@ -242,8 +244,9 @@ impl MatrixWindow {
                     };
                     let file = executor
                         .spawn(async move {
+                            let access = crate::file_access::directory(target.parent().unwrap_or_else(|| std::path::Path::new(".")))?;
                             move_file(&source, &target, expected.as_ref())?;
-                            file.after_move(&target)
+                            file.after_move(&target, access)
                         })
                         .await?;
                     Ok(Some(Renamed::File { from, to, file }))

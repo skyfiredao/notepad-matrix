@@ -152,11 +152,11 @@ pub fn expand(command: &str, values: &[String; 11]) -> io::Result<String> {
 }
 
 #[cfg(unix)]
-fn launch_terminal_using(
+fn launch_terminal_using<T>(
     command: &str,
     directory: &Path,
-    launcher: impl FnOnce(&Path) -> io::Result<Child>,
-) -> io::Result<Child> {
+    launcher: impl FnOnce(&Path) -> io::Result<T>,
+) -> io::Result<T> {
     use std::io::Write;
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::PermissionsExt;
@@ -201,6 +201,26 @@ fn launch_terminal_using(
             Err(error)
         }
     }
+}
+
+#[cfg(all(target_os = "macos", feature = "native-ui"))]
+pub async fn launch_terminal_sandboxed(command: &str, directory: &Path) -> io::Result<()> {
+    let (opened, path) = launch_terminal_using(command, directory, |script| {
+        crate::native_app_open::open_in_application(script, "com.apple.Terminal")
+            .map(|opened| (opened, script.to_path_buf()))
+    })?;
+    let result = opened.await
+        .map_err(|error| io::Error::other(format!("Terminal handoff disconnected: {error}")))
+        .and_then(|result| result);
+    if let Err(error) = result {
+        if let Err(cleanup) = std::fs::remove_file(&path)
+            && cleanup.kind() != io::ErrorKind::NotFound
+        {
+            return Err(io::Error::other(format!("{error}; private Run script cleanup failed: {cleanup}")));
+        }
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[cfg(unix)]

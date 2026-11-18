@@ -288,6 +288,7 @@ pub enum OverwritePolicy {
 #[derive(Clone)]
 pub struct DiskFile {
     path: PathBuf,
+    _access: Option<Arc<crate::file_access::AccessGuard>>,
     bytes: Arc<[u8]>,
     format: UnicodeFormat,
     read_only: bool,
@@ -303,6 +304,7 @@ impl DiskFile {
         if !path.is_absolute() { return Err(io::Error::other("placeholder path must be absolute")); }
         Ok(Self {
             path: path.to_path_buf(),
+            _access: None,
             bytes: Arc::from([]),
             format: UnicodeFormat::Utf8(Utf8Format::Plain),
             read_only: true,
@@ -349,9 +351,10 @@ impl DiskFile {
         self.path = path;
     }
 
-    pub(crate) fn after_move(&self, path: &Path) -> io::Result<Self> {
+    pub(crate) fn after_move(&self, path: &Path, access: crate::file_access::AccessGuard) -> io::Result<Self> {
         let metadata = fs::metadata(path)?;
         let mut file = self.clone();
+        file._access = Some(Arc::new(access));
         file.path = fs::canonicalize(path)?;
         file.read_only = metadata.permissions().readonly();
         file.original_modified = Some(metadata.modified()?);
@@ -369,6 +372,7 @@ impl DiskFile {
     #[cfg(unix)]
     pub fn toggle_read_only_attribute(&mut self) -> io::Result<()> {
         use std::os::unix::fs::PermissionsExt;
+        let _access = crate::file_access::directory(self.path.parent().unwrap_or_else(|| Path::new(".")))?;
         let file = fs::File::open(&self.path)?;
         let metadata = file.metadata()?;
         if (metadata.dev(), metadata.ino()) != self.identity {
@@ -399,6 +403,7 @@ impl DiskFile {
     }
 
     pub(crate) fn observe_original_timestamp(&mut self) -> io::Result<Option<bool>> {
+        let _access = crate::file_access::existing(&self.path)?;
         match self.original_modified {
             Some(original) => {
                 let observed = fs::metadata(&self.path)?.modified()?;
@@ -432,6 +437,11 @@ impl DiskFile {
         if !path.is_absolute() {
             return Err(invalid());
         }
+        let access = match crate::file_access::read(&path) {
+            Ok(access) => Some(Arc::new(access)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
         let bytes: Vec<u8> =
             serde_json::from_value(state.get("bytes").ok_or_else(invalid)?.clone())?;
         let read_only = state
@@ -441,6 +451,7 @@ impl DiskFile {
         let format = UnicodeFormat::detect(&bytes);
         let file = Self {
             path,
+            _access: access,
             bytes: bytes.into(),
             format,
             read_only,
@@ -484,6 +495,7 @@ impl DiskFile {
         format: UnicodeFormat,
         overwrite: OverwritePolicy,
     ) -> io::Result<Self> {
+        let _access = crate::file_access::directory(path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new(".")))?;
         match fs::symlink_metadata(path) {
             Ok(_) if overwrite == OverwritePolicy::Refuse => Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
@@ -498,6 +510,7 @@ impl DiskFile {
     }
 
     pub fn save_as_with_byte_format(path: &Path,snapshot: &SaveSnapshot,format: UnicodeFormat,codepage: Option<ByteFormatCodePage>,overwrite: OverwritePolicy) -> io::Result<Self> {
+        let _access = crate::file_access::directory(path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new(".")))?;
         match fs::symlink_metadata(path) {
             Ok(_) if overwrite == OverwritePolicy::Refuse => Err(io::Error::new(io::ErrorKind::AlreadyExists,"overwrite requires explicit confirmation")),
             Ok(_) => Self::capture(path)?.save_with_byte_format(snapshot,format,codepage),
@@ -522,6 +535,7 @@ impl DiskFile {
     }
 
     fn create_encoded(path: &Path,bytes: Vec<u8>,format: UnicodeFormat,codepage: Option<ByteFormatCodePage>) -> io::Result<Self> {
+        let _access = crate::file_access::directory(path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new(".")))?;
         let name = path.file_name().ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -545,6 +559,7 @@ impl DiskFile {
         let saved = file.metadata()?;
         Ok(Self {
             path,
+            _access: Some(Arc::new(_access)),
             bytes: bytes.into(),
             format,
             read_only: saved.permissions().readonly(),
@@ -657,6 +672,7 @@ impl DiskFile {
     }
 
     fn capture(path: &Path) -> io::Result<Self> {
+        let _access = crate::file_access::read(path)?;
         let path = fs::canonicalize(path)?;
         if !fs::metadata(&path)?.is_file() {
             return Err(io::Error::new(
@@ -679,6 +695,7 @@ impl DiskFile {
         let format = UnicodeFormat::detect(&bytes);
         Ok(Self {
             path,
+            _access: Some(Arc::new(_access)),
             bytes: bytes.into(),
             format,
             read_only: after.permissions().readonly(),
@@ -775,18 +792,19 @@ impl DiskFile {
         format: UnicodeFormat,
         encode: impl FnOnce() -> io::Result<Vec<u8>>,
     ) -> io::Result<Self> {
+        let access = Arc::new(crate::file_access::directory(self.path.parent().unwrap_or_else(|| Path::new(".")))?);
         if self.externally_deleted {
             let bytes = encode()?;
             let mut output = fs::OpenOptions::new().write(true).create_new(true).open(&self.path)?;
             output.write_all(&bytes)?;
             output.sync_all()?;
-            return self.saved_baseline(bytes,format,output.metadata()?);
+            return self.saved_baseline(bytes,format,output.metadata()?,access);
         }
         let metadata = self.check_current()?;
         let bytes = encode()?;
         #[cfg(unix)]
         if metadata.nlink() > 1 {
-            return self.save_linked(bytes, format);
+            return self.save_linked(bytes, format, access);
         }
         let parent = self.path.parent().ok_or_else(|| {
             io::Error::new(
@@ -803,15 +821,15 @@ impl DiskFile {
         let current = self.check_current()?;
         #[cfg(unix)]
         if current.nlink() > 1 {
-            return self.save_linked(bytes, format);
+            return self.save_linked(bytes, format, access);
         }
         let file = output.persist(&self.path).map_err(|error| error.error)?;
         let saved = file.metadata()?;
-        self.saved_baseline(bytes, format, saved)
+        self.saved_baseline(bytes, format, saved, access)
     }
 
     #[cfg(unix)]
-    fn save_linked(&self, bytes: Vec<u8>, format: UnicodeFormat) -> io::Result<Self> {
+    fn save_linked(&self, bytes: Vec<u8>, format: UnicodeFormat, access: Arc<crate::file_access::AccessGuard>) -> io::Result<Self> {
         use std::io::{Seek, SeekFrom};
         let mut output = fs::OpenOptions::new()
             .read(true)
@@ -833,7 +851,7 @@ impl DiskFile {
         output.set_len(0)?;
         output.write_all(&bytes)?;
         output.sync_all()?;
-        self.saved_baseline(bytes, format, output.metadata()?)
+        self.saved_baseline(bytes, format, output.metadata()?, access)
     }
 
     fn saved_baseline(
@@ -841,9 +859,11 @@ impl DiskFile {
         bytes: Vec<u8>,
         format: UnicodeFormat,
         saved: fs::Metadata,
+        access: Arc<crate::file_access::AccessGuard>,
     ) -> io::Result<Self> {
         Ok(Self {
             path: self.path.clone(),
+            _access: Some(access),
             bytes: bytes.into(),
             format,
             read_only: saved.permissions().readonly(),

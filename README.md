@@ -26,11 +26,11 @@ cargo build --locked --release --target aarch64-apple-darwin
 
 To create a Finder-launchable application and disk image, follow the [packaging instructions](BUILD.md#4-package-the-application).
 
-For downloaded or ad-hoc-signed builds, see [macOS launch approval](BUILD.md#5-allow-a-trusted-application-to-run). Download only through the official project or a verifiable trusted publisher, and check published hashes before allowing an application to run.
+For downloaded or ad-hoc-signed builds, see [macOS launch approval](BUILD.md#5-allow-a-trusted-application-to-run).
 
 ## Project background
 
-The project started from a user's need for a free macOS editor and a wish to keep editing habits learned in Notepad++. The goal is to support everyday text and source-code editing on macOS. Notepad Matrix is an independent project, not an official Notepad++ release.
+Notepad Matrix brings Notepad++ editing habits to macOS. It is an independent project, not an official Notepad++ release.
 
 ## Features
 
@@ -45,7 +45,7 @@ The project started from a user's need for a free macOS editor and a wish to kee
 - Read-only Markdown preview, including Mermaid diagrams.
 - macOS file dialogs, printing, Finder integration, and native input handling.
 
-The Plugins menu contains built-in modules. It is not a DLL loader or plugin marketplace. Windows ACP defaults, the Windows updater, and Intel/Universal packaging are outside the current implementation.
+The Plugins menu contains built-in modules. See [platform boundaries](DESIGN.md#goals-and-boundaries).
 
 ## Matrix Easter egg and screen lock
 
@@ -75,13 +75,9 @@ See [design details](DESIGN.md#8-keep-matrix-animation-separate-from-document-co
 | `-n<line>` / `-c<column>` | Set the initial position, starting at 1. |
 | `--` | Treat all following arguments as file paths. |
 
-Unsupported options return an error. Command-line compatibility does not cover every Notepad++ option.
-
 ## Configuration
 
-Settings and user data live in `~/.notepad-matrix/`. Use the application's settings and shortcut dialogs for routine changes.
-
-Change the menu font and size in **Settings → Preferences → General**, next to the interface language. The default is PingFang SC, size 14. Sizes 8–24 apply immediately, independently of editor and dialog fonts.
+Settings and user data live in `~/.notepad-matrix/`.
 
 | File or directory | Purpose |
 |---|---|
@@ -91,16 +87,12 @@ Change the menu font and size in **Settings → Preferences → General**, next 
 | `converter.ini` | Converter formatting options. |
 | `backup/` | Automatic session metadata and independent document backup files. |
 
-Close the application before editing configuration files manually. A recovery backup is not a formal save and does not replace a separate backup of important files. Run commands can start external programs; review commands before running them.
+Close the application before editing configuration files manually. Run commands can start external programs. See [recovery behavior](DESIGN.md#4-separate-document-backups-from-session-metadata).
 
 ## Development
 
-[BUILD.md](BUILD.md) covers the macOS toolchain, local execution, packaging, and build failures. [DESIGN.md](DESIGN.md) describes the byte-oriented editor model, platform boundaries, recovery format, and resource trade-offs.
-
-For changes and bug reports, use the [project repository](https://github.com/skyfiredao/notepad-matrix). Include the macOS version, chip architecture, build revision, and steps to reproduce. Do not attach private documents or configuration secrets.
+Report issues in the [project repository](https://github.com/skyfiredao/notepad-matrix) with the macOS version, chip architecture, build revision, and steps to reproduce.
 
 ## License
 
-Notepad Matrix is licensed under [GNU GPL v3](LICENSE). [Third-party notices](THIRD_PARTY_NOTICES.md) group shared license terms and retain component copyright notices. **About → Licenses and third-party notices** opens this section in the public release repository.
-
-The application bundles both legal files. Source code and build scripts remain in this repository. Binary release downloads must identify the matching source tag or revision.
+Notepad Matrix is licensed under [GNU GPL v3](LICENSE). [Third-party notices](THIRD_PARTY_NOTICES.md) group shared license terms and retain component copyright notices.

@@ -113,6 +113,10 @@ impl MatrixWindow {
                     .and_then(|file| file.path().parent())
                     .map_or(candidate.clone(), |parent| parent.join(&candidate))
             };
+            let _access = match crate::file_access::read(&path) {
+                Ok(access) => access,
+                Err(error) => { self.notify_editor_error(format!("无法访问所选路径: {error}"), cx); return; }
+            };
             if (id == 42073 && !path.is_file()) || (id == 42074 && !path.exists()) {
                 let response = window.prompt(gpui::PromptLevel::Info, "打开文件",
                     Some("您尝试打开的文件并不存在。"), &[gpui::PromptButton::ok("确定")], cx);

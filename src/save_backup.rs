@@ -48,6 +48,7 @@ impl SaveBackupOptions {
         if self.mode == SaveBackupMode::None {
             return Ok(None);
         }
+        let _source_access = crate::file_access::read(original)?;
         let name = original.file_name().ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidInput, "backup source has no filename")
         })?;
@@ -59,6 +60,7 @@ impl SaveBackupOptions {
                 parent.to_owned()
             }
         });
+        let _directory_access = crate::file_access::directory(&directory)?;
         std::fs::create_dir_all(&directory)?;
         let mut filename = name.to_os_string();
         if self.mode == SaveBackupMode::Verbose {

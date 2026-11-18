@@ -2,9 +2,9 @@ use super::*;
 use objc2::rc::Retained;
 use objc2_app_kit::{
     NSApplication, NSApplicationPresentationOptions, NSFloatingWindowLevel, NSNormalWindowLevel,
-    NSWindow, NSWindowStyleMask, NSWindowWillCloseNotification, NSWorkspace,
+    NSWindow, NSWindowStyleMask, NSWindowWillCloseNotification,
 };
-use objc2_foundation::{NSNotificationCenter, NSRect, NSString};
+use objc2_foundation::{NSNotificationCenter, NSRect};
 
 #[derive(Default)]
 struct ApplicationPresentation {
@@ -209,8 +209,20 @@ impl MatrixWindow {
             44051..=44058 => self.set_editor_folds(Some((id - 44051) as usize), true, window, cx),
             44061..=44068 => self.set_editor_folds(Some((id - 44061) as usize), false, window, cx),
             44100..=44102 => {
-                if let Err(error) = self.view_current_file_in_browser(id) {
-                    self.notify_editor_error(error.to_string(), cx);
+                match self.view_current_file_in_browser(id) {
+                    Ok(opened) => {
+                        cx.spawn(async move |owner, cx| {
+                            let result = opened.await
+                                .map_err(|error| io::Error::other(format!("Browser handoff disconnected: {error}")))
+                                .and_then(|result| result);
+                            if let Err(error) = result {
+                                if let Err(error) = owner.update(cx, |view, cx| view.notify_editor_error(error.to_string(), cx)) {
+                                    eprintln!("Browser handoff lost its owner: {error}");
+                                }
+                            }
+                        }).detach();
+                    }
+                    Err(error) => self.notify_editor_error(error.to_string(), cx),
                 }
             }
             _ => return false,
@@ -301,33 +313,18 @@ impl MatrixWindow {
         Ok(())
     }
 
-    fn view_current_file_in_browser(&self, id: u32) -> io::Result<()> {
-        let (bundle, name) = match id {
-            44100 => ("org.mozilla.firefox", "Firefox"),
-            44101 => ("com.google.Chrome", "Google Chrome"),
-            44102 => ("com.microsoft.edgemac", "Microsoft Edge"),
+    fn view_current_file_in_browser(&self, id: u32) -> io::Result<futures::channel::oneshot::Receiver<io::Result<()>>> {
+        let bundle = match id {
+            44100 => "org.mozilla.firefox",
+            44101 => "com.google.Chrome",
+            44102 => "com.microsoft.edgemac",
             _ => return Err(io::Error::other("Unknown browser command")),
         };
         MainThreadMarker::new()
             .ok_or_else(|| io::Error::other("Browser lookup requires the main thread"))?;
-        let app = NSWorkspace::sharedWorkspace()
-            .URLForApplicationWithBundleIdentifier(&NSString::from_str(bundle))
-            .and_then(|url| url.path())
-            .ok_or_else(|| io::Error::other(format!("{name} cannot be found in your system.")))?;
         let file = self.disk_file()
             .ok_or_else(|| io::Error::other("Save the current file before viewing it in a browser"))?;
-        let result = std::process::Command::new("/usr/bin/open")
-            .arg("-a")
-            .arg(app.to_string())
-            .arg("--")
-            .arg(file.path())
-            .output()?;
-        if result.status.success() {
-            Ok(())
-        } else {
-            Err(io::Error::other(format!("Could not open the current file in {name}: {}",
-                String::from_utf8_lossy(&result.stderr).trim())))
-        }
+        crate::native_app_open::open_in_application(file.path(), bundle)
     }
 }
 

@@ -125,6 +125,7 @@ impl StreamDigest {
 }
 
 fn file_digest(path: &Path, algorithm: HashAlgorithm, cancelled: &AtomicBool) -> io::Result<String> {
+    let _access = crate::file_access::read(path)?;
     let mut file = std::fs::File::open(path)?;
     if !file.metadata()?.is_file() { return Err(io::Error::other("不是普通文件")); }
     let mut hash = StreamDigest::new(algorithm);

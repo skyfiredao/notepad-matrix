@@ -16,6 +16,7 @@ pub struct FileObservation {
 
 impl FileObservation {
     pub fn read(path: &Path) -> io::Result<Self> {
+        let _access = crate::file_access::existing(path)?;
         let metadata = std::fs::metadata(path)?;
         if !metadata.is_file() {
             return Err(io::Error::other("The file should exist to be monitored."));

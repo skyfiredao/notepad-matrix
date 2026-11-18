@@ -1594,6 +1594,12 @@ impl Workspace {
                 .is_some_and(|opened| opened.path() == file.path())
         }) {
             let id = self.buffers[index].id;
+            if self.buffers[index].disk_file.as_ref().is_some_and(DiskFile::is_placeholder) {
+                let large = self.large_file_restriction.classifies(file.loaded_len() as u64);
+                self.buffers[index].reload_selected_encoding(file, bytes)?;
+                self.buffers[index].large_file = large;
+                self.opened_large_file |= large;
+            }
             self.activate(id)?;
             return Ok(id);
         }

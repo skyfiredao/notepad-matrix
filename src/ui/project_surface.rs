@@ -8,7 +8,7 @@ use crate::projects::{
 pub(super) struct ProjectState {
     pub(super) model: ProjectPanels,
     pending_workspace_path: Option<PathBuf>,
-    workspace_completion: Option<std::sync::mpsc::Sender<()>>,
+    workspace_completion: Option<std::sync::mpsc::Sender<bool>>,
     panels: [PanelSurface; 3],
     picker_pending: bool,
 }
@@ -129,7 +129,7 @@ impl MatrixWindow {
         self.load_project_workspace_path_guarded(path,false,window,cx);
     }
 
-    pub(super) fn load_project_workspace_path_with_completion(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> io::Result<std::sync::mpsc::Receiver<()>> {
+    pub(super) fn load_project_workspace_path_with_completion(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> io::Result<std::sync::mpsc::Receiver<bool>> {
         if self.project_operations_blocked() || self.projects.workspace_completion.is_some() { return Err(io::Error::other("another project operation is pending")); }
         let (sender, receiver) = std::sync::mpsc::channel();
         self.projects.workspace_completion = Some(sender);
@@ -137,13 +137,13 @@ impl MatrixWindow {
         Ok(receiver)
     }
 
-    fn finish_project_workspace_open(&mut self) {
+    fn finish_project_workspace_open(&mut self, accepted: bool) {
         if let Some(sender) = self.projects.workspace_completion.take()
-            && let Err(error) = sender.send(()) { eprintln!("project open completion unavailable: {error}"); }
+            && let Err(error) = sender.send(accepted) { eprintln!("project open completion unavailable: {error}"); }
     }
 
     fn load_project_workspace_path_guarded(&mut self,path: PathBuf,discard: bool,window: &mut Window,cx: &mut Context<Self>) {
-        if self.project_operations_blocked() { return; }
+        if self.project_operations_blocked() { self.finish_project_workspace_open(false); return; }
         if !discard && self.projects.model.panel(0).is_ok_and(|panel| panel.dirty()) {
             self.projects.pending_workspace_path = Some(path);
             self.projects.panels[0].confirm = Some((ProjectCommand::Open,None));
@@ -160,17 +160,17 @@ impl MatrixWindow {
             }).await;
             if let Err(error) = view.update_in(cx,|view,window,cx| {
                 view.file_busy = false;
-                match result {
+                let accepted = match result {
                     Ok(mut workspace) => {
                         workspace.visible = true;
                         match view.projects.model.panel_mut(0) {
-                            Ok(panel) => { *panel = workspace; view.clear_project_transients(0); view.show_panel(crate::panel_layout::PanelId::Project1,window,cx); }
-                            Err(error) => view.notify_editor_error(error.to_string(),cx),
+                            Ok(panel) => { *panel = workspace; view.clear_project_transients(0); view.show_panel(crate::panel_layout::PanelId::Project1,window,cx); true }
+                            Err(error) => { view.notify_editor_error(error.to_string(),cx); false },
                         }
                     }
-                    Err(error) => view.notify_editor_error(format!("项目工作区无法打开: {error}"),cx),
-                }
-                view.finish_project_workspace_open();
+                    Err(error) => { view.notify_editor_error(format!("项目工作区无法打开: {error}"),cx); false },
+                };
+                view.finish_project_workspace_open(accepted);
                 cx.notify();
             }) { eprintln!("project workspace path window unavailable: {error}"); }
         }).detach();
@@ -447,7 +447,7 @@ impl MatrixWindow {
         };
         if index == 0 && let Some(path) = self.projects.pending_workspace_path.take() {
             if discard { self.load_project_workspace_path_guarded(path,true,window,cx); }
-            else { self.finish_project_workspace_open(); }
+            else { self.finish_project_workspace_open(false); }
             cx.notify();
             return;
         }
@@ -515,6 +515,7 @@ impl MatrixWindow {
                     let parent = parent.ok_or_else(|| io::Error::other("No project selected"))?;
                     let mut candidate = panel.clone();
                     for path in paths {
+                        crate::file_access::selected(&path)?;
                         if command == ProjectCommand::AddFolder {
                             candidate.add_folder(parent, &path)?;
                         } else {

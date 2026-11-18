@@ -172,6 +172,7 @@ impl ProjectWorkspace {
     }
 
     pub fn add_folder(&mut self, parent: NodeId, path: &Path) -> io::Result<NodeId> {
+        let _access = crate::file_access::directory(path)?;
         fn import(
             panel: &mut ProjectWorkspace,
             parent: NodeId,
@@ -509,6 +510,7 @@ impl ProjectWorkspace {
     }
 
     pub fn export(&self, path: &Path) -> io::Result<()> {
+        let _access = crate::file_access::directory(path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new(".")))?;
         let path = absolute(path)?;
         let base = path
             .parent()
@@ -524,6 +526,7 @@ impl ProjectWorkspace {
 
     pub fn load(&mut self, path: &Path, discard_changes: bool) -> io::Result<()> {
         self.allow_replace(discard_changes)?;
+        let _access = crate::file_access::read(path)?;
         let path = absolute(path)?;
         let input = std::fs::read(&path)?;
         if input.len() > 16 * 1024 * 1024 {

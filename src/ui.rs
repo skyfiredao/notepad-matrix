@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui::prelude::*;
@@ -70,6 +70,7 @@ mod mime_surface;
 mod monitoring_surface;
 mod native_quit;
 mod native_path_prompt;
+mod native_app_launch;
 mod panel_surface;
 mod preferences_surface;
 mod preferences_appearance_surface;
@@ -2028,10 +2029,7 @@ fn discard_host_composition(window: &Window) -> io::Result<bool> {
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut launch = crate::launch::LaunchOptions::parse(std::env::args_os().skip(1))?;
-    let home = std::env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
+    let home = crate::file_access::home_directory()?;
     let mut settings = ConfigStore::under_home(&home).load_settings()?;
     let normalize_threshold = |settings: &mut serde_json::Value| {
         let mut changed = false;
@@ -2049,11 +2047,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     if normalize_threshold(&mut settings) {
         settings = ConfigStore::under_home(&home).update_settings(|document| { normalize_threshold(document); Ok(()) })?;
     }
-    let mut instance_server = match crate::launch::InstanceServer::prepare(&home, &mut launch, &settings)? {
-        crate::launch::InstanceStartup::Forwarded => return Ok(()),
-        crate::launch::InstanceStartup::Primary(server) => Some(server),
-        crate::launch::InstanceStartup::Secondary => None,
-    };
     let dark = settings["theme"] == "dark";
     let mime_enabled = settings["features"]["mime_tools"].as_bool().unwrap_or(true);
     let converter_enabled = settings["features"]["converter"].as_bool().unwrap_or(true);
@@ -2078,19 +2071,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     crate::workspace::Workspace::new()
         .configure_recent_files(&settings)
         .map_err(|error| io::Error::other(error.to_string()))?;
-    let mut recovery_bootstrap = if recovery_options.remember_last_session {
-        Some(crate::recovery::RecoveryManager::open_with_options(
-            &home,
-            recovery_options,
-        )?)
-    } else {
-        None
-    };
-    if let Some((_, workspace)) = &mut recovery_bootstrap {
-        workspace
-            .configure_recent_files(&settings)
-            .map_err(|error| io::Error::other(error.to_string()))?;
-    }
     let failure = Rc::new(RefCell::new(None));
     let result = failure.clone();
     let quit_guard: Rc<RefCell<Option<native_quit::QuitGuard>>> = Rc::new(RefCell::new(None));
@@ -2101,21 +2081,50 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let incoming_launched = application_launched.clone();
     let application = gpui_platform::application();
     application.on_open_urls(move |urls| {
-        let mut request = launch_request_surface::NativeOpenPaths {
-            paths: Vec::new(), errors: Vec::new(),
-            during_launch: !incoming_launched.load(std::sync::atomic::Ordering::Acquire),
-        };
-        for value in urls {
-            match url::Url::parse(&value).map_err(|error| format!("打开文件 URL 无效：{error}"))
-                .and_then(|url| url.to_file_path().map_err(|_| format!("打开请求不是本地文件 URL：{value}")))
-            {
-                Ok(path) => request.paths.push(path),
-                Err(error) => request.errors.push(error),
-            }
-        }
+        let request = launch_request_surface::native_open_urls(urls,
+            !incoming_launched.load(std::sync::atomic::Ordering::Acquire));
         incoming_paths.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push_back(request);
     });
     application.run(move |cx: &mut App| {
+        if let Err(error) = launch_request_surface::take_startup_handoff(&native_paths, &mut launch) {
+            *failure.borrow_mut() = Some(error);
+            cx.quit();
+            return;
+        }
+        let preparing_home = home.clone();
+        let preparing_settings = settings.clone();
+        let preparing = cx.background_executor().spawn(async move {
+            let prepared = crate::launch::InstanceServer::prepare(&preparing_home, &mut launch, &preparing_settings);
+            (prepared, launch)
+        });
+        cx.spawn(async move |cx| {
+            let (prepared, launch) = preparing.await;
+            cx.update(|cx| {
+        let mut instance_server = match prepared {
+            Ok(crate::launch::InstanceStartup::Forwarded) => { cx.quit(); return; }
+            Ok(crate::launch::InstanceStartup::Primary(server)) => Some(server),
+            Ok(crate::launch::InstanceStartup::Secondary) => None,
+            Err(error) => { *failure.borrow_mut() = Some(error); cx.quit(); return; }
+        };
+        if launch.no_session {
+            recovery_options.remember_last_session = false;
+            recovery_options.enabled = false;
+        }
+        let recovered = if recovery_options.remember_last_session {
+            crate::recovery::RecoveryManager::open_with_options(&home, recovery_options).map(Some)
+        } else {
+            Ok(None)
+        };
+        let mut recovery_bootstrap = match recovered {
+            Ok(recovered) => recovered,
+            Err(error) => { *failure.borrow_mut() = Some(error); cx.quit(); return; }
+        };
+        if let Some((_, workspace)) = &mut recovery_bootstrap
+            && let Err(error) = workspace.configure_recent_files(&settings) {
+            *failure.borrow_mut() = Some(io::Error::other(error.to_string()));
+            cx.quit();
+            return;
+        }
         dialog_font::initialize(&settings, cx);
         let quit_control = Rc::new(native_quit::QuitControl::default());
         let root: Rc<RefCell<Option<gpui::WindowHandle<MatrixWindow>>>> =
@@ -2371,7 +2380,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     view.begin_file_preferences_startup(&settings, &launch, window, cx);
                     view.initialize_scintilla_shortcut_integration(window, cx);
-                    if launch.language.is_some() || launch.udl_name.is_some() || launch.byte_code_page.is_some()
+                    if launch.completion.is_some() || launch.language.is_some() || launch.udl_name.is_some() || launch.byte_code_page.is_some()
                         || launch.line.is_some()
                         || launch.column.is_some()
                         || launch.open_session
@@ -2409,7 +2418,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             application_launched.store(true, std::sync::atomic::Ordering::Release);
             cx.activate(true);
         }
+            });
+        }).detach();
     });
+    crate::file_access::shutdown();
     let failure = result.borrow_mut().take();
     if let Some(error) = failure {
         return Err(error.into());

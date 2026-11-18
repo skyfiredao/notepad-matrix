@@ -83,6 +83,12 @@ impl MatrixWindow {
         let routed = paths.clone();
         if self.route_to_document(window, cx, move |view, window, cx| view.preferences_drop_paths(routed, window, cx)) { return; }
         if self.folder_operations_blocked() || paths.is_empty() { return; }
+        for path in &paths {
+            if let Err(error) = crate::file_access::selected(path) {
+                self.notify_editor_error(format!("无法取得拖放项目的访问权限: {error}"), cx);
+                return;
+            }
+        }
         let folder_count = paths.iter().filter(|path| path.is_dir()).count();
         let open_all = self.preferences.files.file_options.open_dropped_folder_files;
         if !open_all && folder_count != 0 && folder_count != paths.len() {

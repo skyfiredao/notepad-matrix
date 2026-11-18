@@ -943,13 +943,7 @@ impl MatrixWindow {
     pub(super) fn open_native_file_paths(&mut self,paths: Vec<PathBuf>,during_launch: bool,window: &mut Window,cx: &mut Context<Self>) {
         if during_launch || self.preferences.files.multi_instance != 2 { self.start_open_paths(paths,window,cx); return; }
         let options = crate::launch::LaunchOptions { files:paths,multi_instance:true,no_session:true,..Default::default() };
-        match std::env::current_exe().and_then(|executable| options.spawn(&executable)) {
-            Ok(child) => {
-                let executor = cx.background_executor().clone();
-                cx.spawn(async move |_,_| { if let Err(error) = crate::run_commands::reap(child,|| executor.timer(std::time::Duration::from_secs(1))).await { eprintln!("Finder instance failed: {error}"); } }).detach();
-            }
-            Err(error) => self.notify_editor_error(format!("Finder 新实例无法启动: {error}"),cx),
-        }
+        self.spawn_launch_options(options, window, cx);
     }
 }
 

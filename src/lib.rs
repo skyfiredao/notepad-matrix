@@ -9,6 +9,7 @@ pub mod config;
 pub mod context_menu;
 pub mod converter;
 pub mod editor;
+pub mod file_access;
 pub mod files;
 pub mod find_in_files;
 pub mod finder;
@@ -26,6 +27,8 @@ pub mod mime;
 pub mod monitoring;
 #[cfg(all(target_os = "macos", feature = "native-ui"))]
 mod native_binary_clipboard;
+#[cfg(all(target_os = "macos", feature = "native-ui"))]
+mod native_app_open;
 pub mod panel_layout;
 pub mod projects;
 pub mod recovery;

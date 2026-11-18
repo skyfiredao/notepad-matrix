@@ -26,11 +26,11 @@ cargo build --locked --release --target aarch64-apple-darwin
 
 需要可从 Finder 启动的应用和磁盘映像时，按[应用打包步骤](BUILD_zh.md#4-应用打包)生成 `.app` 和 `.dmg`。
 
-下载版本或临时签名包被系统阻止时，参见 [macOS 单应用运行授权](BUILD_zh.md#5-允许运行可信应用)。只从官方项目或可核验的可信发布者下载，核对发布方提供的校验值后再决定是否允许运行。
+下载版本或临时签名包被系统阻止时，参见 [macOS 单应用运行授权](BUILD_zh.md#5-允许运行可信应用)。
 
 ## 项目缘起
 
-项目起于使用者对免费 macOS 编辑器的需求，也希望保留在 Notepad++ 中养成的编辑习惯。目标是在 macOS 上完成日常文本和源码编辑。Notepad Matrix 是独立项目，并非 Notepad++ 官方版本。
+Notepad Matrix 在 macOS 上延续 Notepad++ 的编辑习惯，是独立项目，并非 Notepad++ 官方版本。
 
 ## 功能
 
@@ -45,7 +45,7 @@ cargo build --locked --release --target aarch64-apple-darwin
 - 只读 Markdown 预览，支持 Mermaid 图表。
 - macOS 文件选择、打印、Finder 集成和原生输入处理。
 
-“插件”菜单提供固定内嵌模块，不提供 DLL 加载或插件市场。Windows 默认 ACP、Windows 更新器和 Intel／Universal 打包不在当前实现范围内。
+“插件”菜单提供固定内嵌模块。见[平台边界](DESIGN_zh.md#目标与边界)。
 
 ## Matrix 彩蛋与锁屏保护
 
@@ -75,13 +75,9 @@ cargo build --locked --release --target aarch64-apple-darwin
 | `-n<line>`／`-c<column>` | 设置初始行列，从 1 开始。 |
 | `--` | 后续参数全部按文件路径处理。 |
 
-不支持的参数会报错，命令行兼容不涵盖 Notepad++ 的全部选项。
-
 ## 配置
 
-配置和用户数据位于 `~/.notepad-matrix/`。日常修改使用应用内设置和快捷键管理窗口。
-
-菜单字体和字号在**设置 → 首选项 → 常用**的界面语言旁调整。默认“苹方-简（PingFang SC）14”，支持 8–24 号，即时生效，与编辑区及对话框字体独立。
+配置和用户数据位于 `~/.notepad-matrix/`。
 
 | 文件或目录 | 用途 |
 |---|---|
@@ -91,16 +87,12 @@ cargo build --locked --release --target aarch64-apple-darwin
 | `converter.ini` | Converter 格式选项。 |
 | `backup/` | 自动会话元数据和独立正文备份。 |
 
-手工修改配置前先退出应用。恢复备份不等于正式保存，也不能替代重要文件的独立备份。运行命令可以启动外部程序，执行前先检查命令内容。
+手工修改配置前先退出应用。运行命令可以启动外部程序。见[恢复行为](DESIGN_zh.md#4-正文备份与会话元数据分开)。
 
 ## 开发
 
-[BUILD_zh.md](BUILD_zh.md) 说明通用 macOS 环境配置、本机运行、打包和构建故障处理。[DESIGN_zh.md](DESIGN_zh.md) 说明字节编辑模型、平台边界、恢复格式和资源取舍。
-
-通过[项目仓库](https://github.com/skyfiredao/notepad-matrix)提交改动或问题。问题报告请附 macOS 版本、芯片架构、构建版本和复现步骤，不附带私人文档或配置密钥。
+在[项目仓库](https://github.com/skyfiredao/notepad-matrix)报告问题，附 macOS 版本、芯片架构、构建版本和复现步骤。
 
 ## 许可
 
-Notepad Matrix 基于 [GNU GPL v3](LICENSE) 发布。[第三方声明](THIRD_PARTY_NOTICES.md) 合并共同许可条款，保留各组件的版权声明。**关于 → 许可证与第三方声明**打开公开发布仓库的许可章节。
-
-应用包附带这两份法律文件。源码和构建脚本保留在本仓库中。二进制下载页面须注明对应源码的标签或修订版本。
+Notepad Matrix 基于 [GNU GPL v3](LICENSE) 发布。[第三方声明](THIRD_PARTY_NOTICES.md) 合并共同许可条款，保留各组件的版权声明。

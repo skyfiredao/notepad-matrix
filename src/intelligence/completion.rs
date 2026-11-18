@@ -252,6 +252,13 @@ impl IntelligenceCatalog {
         } else {
             base_directory.join(path)
         };
+        let authorization_directory = if raw.ends_with('/') {
+            resolved_path.as_path()
+        } else {
+            resolved_path.parent().unwrap_or(base_directory)
+        };
+        let _parent_access = crate::file_access::directory(authorization_directory)
+            .map_err(|error| IntelligenceError(format!("Path completion directory: {error}")))?;
         if Path::new(raw.trim_end_matches('/')).is_file() {
             return Ok(CompletionResult {
                 replace_range: range,
@@ -273,6 +280,8 @@ impl IntelligenceCatalog {
         } else {
             base_directory.join(&directory_text)
         };
+        let _access = crate::file_access::directory(&directory)
+            .map_err(|error| IntelligenceError(format!("Path completion directory: {error}")))?;
         let entries = match std::fs::read_dir(&directory) {
             Ok(entries) => entries,
             Err(_) => return Ok(CompletionResult { replace_range: range, candidates: Vec::new(), auto_insert: false }),
