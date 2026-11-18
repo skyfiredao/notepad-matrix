@@ -59,6 +59,8 @@ rustup show active-toolchain
 
 Builds use the repository's `Cargo.lock` and bundled resources.
 
+Automatic build versions require complete Git history. CI fetches it automatically. Local builds use Git HEAD; `NOTEPAD_MATRIX_BUILD_COMMIT` can supply the build commit. Missing or shallow history uses the manifest patch with a build-time warning.
+
 ## 2. Build the application
 
 The deployment target `26.0` is also written to `LSMinimumSystemVersion`. Use Xcode or Command Line Tools and an SDK that support macOS 26.
@@ -133,7 +135,7 @@ The script:
 1. Checks that the input is an ARM64 Mach-O executable.
 2. Reads dependencies with `cargo metadata --locked --offline`, so dependencies must already be downloaded.
 3. Uses Swift and system type identifiers to create document type declarations.
-4. Checks dependency records in `THIRD_PARTY_NOTICES.md`, copies the executable, icon, themes, `LICENSE`, and `THIRD_PARTY_NOTICES.md`, and writes `Info.plist`.
+4. Checks dependency records in `THIRD_PARTY_NOTICES.md`, reads the executable's `--version`, copies resources and licenses, and writes its numeric version to `Info.plist`.
 5. Strips symbols, signs with `--sign-identity` (ad-hoc `-` by default), verifies the signature, and creates a compressed DMG with an Applications link.
 
 Verify the signature and launch the application:

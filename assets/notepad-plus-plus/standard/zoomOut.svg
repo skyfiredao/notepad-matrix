@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+<defs><linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#edf5ff"/></linearGradient><linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d2eeff"/><stop offset="1" stop-color="#6495e0"/></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b8e4a0"/><stop offset="1" stop-color="#65ac4c"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff2a1"/><stop offset="1" stop-color="#e3a32f"/></linearGradient><linearGradient id="gray" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f9f9f9"/><stop offset="1" stop-color="#959c9f"/></linearGradient></defs>
+<path d="M12 13L19 22L22 20L15 12Z" fill="url(#gold)" stroke="#a17c35" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<circle cx="9" cy="8" r="6.5" fill="url(#paper)" stroke="#abcfea" stroke-width="1.2"/>
+<circle cx="9" cy="8" r="4.5" fill="#e1f3fc" stroke="#c3e3f7" stroke-width="0.7"/>
+<rect x="10" y="8.5" width="12" height="4" rx="0.3" fill="#f29d91" stroke="#a24941" stroke-width="0.7"/>
+</svg>

@@ -470,6 +470,7 @@ impl MatrixWindow {
                 view.cancel_finder_drag();
                 view.defer_intelligence_focus_loss(cx);
             }
+            cx.notify();
         })
         .detach();
         window.on_window_should_close(cx, move |window, cx| {
@@ -1158,6 +1159,21 @@ impl Render for MatrixWindow {
         let toolbar = self.appearance_colour("DarkMode.customColorMain", if self.dark { 0x2b2b2b } else { 0xffffff });
         let foreground = self.appearance_colour("DarkMode.customColorText", if self.dark { 0xeeeeee } else { 0x202020 });
         let hover_background = self.appearance_colour("DarkMode.customColorMenuHotTrack", if self.dark { 0x444444 } else { 0xdedede });
+        let caption_active = window.is_window_active();
+        let caption_background = if self.dark {
+            toolbar
+        } else if caption_active {
+            0x357ec7
+        } else {
+            0xf0f0f0
+        };
+        let caption_foreground = if self.dark {
+            0xeeeeee
+        } else if caption_active {
+            0xffffff
+        } else {
+            0x202020
+        };
         self.menu_bar.set_window_documents(self.workspace.view_buffer_ids(self.workspace.active_view()).iter().filter_map(|id| {
             self.workspace.buffers().iter().find(|buffer| buffer.id() == *id).map(|buffer|
                 (*id, format!("{}{}", buffer.name(), if buffer.is_modified() { "*" } else { "" })))
@@ -1197,7 +1213,7 @@ impl Render for MatrixWindow {
                 .items_center()
                 .justify_center()
                 .hover(move |style| style.bg(rgb(hover_background)))
-                .child(caption_icons::render(icon, icon_id, self.dark))
+                .child(caption_icons::render(icon, icon_id, if self.dark { 0xcccccc } else { caption_foreground }))
         };
         div()
             .id("matrix-window")
@@ -1837,13 +1853,20 @@ impl Render for MatrixWindow {
                 view.request_close(window, cx);
                 cx.stop_propagation();
             }))
+            .on_mouse_move(cx.listener(|view, event, _, cx| view.resize_file_results(event, cx)))
             .on_mouse_up(
                 MouseButton::Left,
-                cx.listener(|view, _, _, _| view.tab_scroll_repeat = None),
+                cx.listener(|view, _, _, _| {
+                    view.tab_scroll_repeat = None;
+                    view.cancel_file_results_resize();
+                }),
             )
             .on_mouse_up_out(
                 MouseButton::Left,
-                cx.listener(|view, _, _, _| view.tab_scroll_repeat = None),
+                cx.listener(|view, _, _, _| {
+                    view.tab_scroll_repeat = None;
+                    view.cancel_file_results_resize();
+                }),
             )
             .size_full()
             .relative()
@@ -1859,7 +1882,7 @@ impl Render for MatrixWindow {
                     .flex_shrink_0()
                     .flex()
                     .items_center()
-                    .bg(rgb(toolbar))
+                    .bg(rgb(caption_background))
                     .when(!self.dark, |caption| {
                         caption.border_b_1().border_color(rgb(0xf0f0f0))
                     })
@@ -1882,7 +1905,7 @@ impl Render for MatrixWindow {
                             .child(
                                 div()
                                     .truncate()
-                                    .text_color(rgb(if self.dark { 0xeeeeee } else { 0x999999 }))
+                                    .text_color(rgb(caption_foreground))
                                     .child(title),
                             ),
                     )
@@ -1944,26 +1967,43 @@ impl Render for MatrixWindow {
             .children(incremental_top)
             .child(
                 div()
+                    .id("editor-results-workspace")
                     .flex_1()
                     .min_h(px(0.))
                     .w_full()
                     .flex()
                     .flex_col()
-                    .children(panels_top)
+                    .relative()
+                    .child(gpui::canvas(|bounds, _, _| bounds, {
+                        let entity = cx.entity();
+                        let incremental_height = if incremental_bottom.is_some() { dialog_font::px(32.) } else { px(0.) };
+                        move |bounds, _, _, cx| {
+                            entity.update(cx, |view, cx| view.layout_file_results(bounds.size.height - incremental_height, cx));
+                        }
+                    }).absolute().size_full())
                     .child(
                         div()
-                            .flex()
                             .flex_1()
                             .min_h(px(0.))
                             .w_full()
-                            .children(panels_left)
-                            .child(editor)
-                            .children(panels_right),
+                            .flex()
+                            .flex_col()
+                            .children(panels_top)
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_1()
+                                    .min_h(px(0.))
+                                    .w_full()
+                                    .children(panels_left)
+                                    .child(editor)
+                                    .children(panels_right),
+                            )
+                            .children(panels_bottom),
                     )
-                    .children(panels_bottom),
+                    .children(incremental_bottom)
+                    .when_some(files_results, |root, results| root.child(results)),
             )
-            .children(incremental_bottom)
-            .when_some(files_results, |root, results| root.child(results))
             .when_some(status_bar, |root, status| root.child(status))
             .children(self.render_tab_preview(cx))
             .children(self.window_manager_blocks_document().then(|| div().id("window-manager-modal-shield")

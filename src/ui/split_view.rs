@@ -306,38 +306,39 @@ impl MatrixWindow {
             .filter(|pane| self.view_panels_other_pane_visible() || *pane == focused)
             .collect();
         let split = panes.len() == 2;
+        let classic_frame = !self.dark
+            && !self.tab_vertical
+            && !self.tab_multiline
+            && !self.pref_bool("TabBar.hide", false)
+            && self.view_tabs_status_visible();
+        let border = px(self.pref_int("ScintillaPrimaryView.borderWidth", 2).max(0) as f32);
+        let frame_width = if self.pref_bool("ScintillaPrimaryView.borderEdge", true) { 4 } else { 2 };
+        let frame_left = border;
+        let frame_right = (border * 2. - px(1.)).max(px(0.));
+        let frame_bottom = (border * 2. - px(3.)).max(px(0.));
+        let frame_top = px(if self.pref_bool("TabBar.reduce", true) { 24. } else { 32. });
         let mut elements = Vec::new();
         for (index, pane) in panes.into_iter().enumerate() {
             if !self.scope_editor_pane(pane) {
                 continue;
             }
             let tabs = self.render_tabs(pane == focused, cx);
-            let tabs = if !self.dark && !self.tab_vertical {
+            let editor = self.render_editor(cx);
+            let editor = if classic_frame {
                 div()
-                    .relative()
                     .flex()
                     .flex_col()
-                    .flex_shrink_0()
-                    .w_full()
-                    .child(tabs)
-                    .child(
-                        div()
-                            .absolute()
-                            .bottom(px(0.))
-                            .left(px(0.))
-                            .right(px(0.))
-                            .h(px(4.))
-                            .flex()
-                            .flex_col()
-                            .children([0xffffff, 0xe3e3e3, 0xa0a0a0, 0x696969].map(|color| {
-                                div().w_full().h(px(1.)).flex_shrink_0().bg(rgb(color))
-                            })),
-                    )
+                    .flex_1()
+                    .min_w(px(0.))
+                    .min_h(px(0.))
+                    .ml(frame_left + px(frame_width as f32))
+                    .mr(frame_right + px(frame_width as f32))
+                    .mb(frame_bottom + px(frame_width as f32))
+                    .child(editor)
                     .into_any_element()
             } else {
-                tabs
+                editor
             };
-            let editor = self.render_editor(cx);
             elements.push(
                 div()
                     .id(if pane == ViewId::Primary {
@@ -352,12 +353,50 @@ impl MatrixWindow {
                             "editor-pane-secondary".into()
                         }
                     })
+                    .relative()
                     .flex()
                     .when(!self.tab_vertical, |pane| pane.flex_col())
                     .flex_shrink_1()
                     .h_full()
                     .min_w(px(0.))
                     .min_h(px(0.))
+                    .when(!classic_frame && !self.pref_bool("TabBar.hide", false), |pane| {
+                        let border = px(self.pref_int("ScintillaPrimaryView.borderWidth", 2) as f32);
+                        pane.ml(border).mr(border * 2.).mt(border).mb(border * 2.)
+                    })
+                    .when(
+                        !classic_frame && self.pref_bool("ScintillaPrimaryView.borderEdge", true),
+                        |pane| {
+                            pane.border_1().border_color(rgb(
+                                self.appearance_colour("DarkMode.customColorEdge", 0x808080)
+                            ))
+                        },
+                    )
+                    .when(classic_frame, |pane| {
+                        pane.bg(rgb(self.appearance_colour("DarkMode.customColorMain", 0xf0f0f0)))
+                            .child(gpui::canvas(
+                                |bounds, _, _| bounds,
+                                move |bounds, _, window, _| {
+                                    let left = bounds.left() + frame_left;
+                                    let right = bounds.right() - frame_right;
+                                    let top = bounds.top() + frame_top;
+                                    let bottom = bounds.bottom() - frame_bottom;
+                                    for index in 0..frame_width {
+                                        let inset = px(index as f32);
+                                        let light = [0xffffff, 0xe3e3e3, 0xa0a0a0, 0x696969][index];
+                                        let shade = [0x696969, 0xa0a0a0, 0xffffff, 0xe3e3e3][index];
+                                        for (origin, extent, color) in [
+                                            (gpui::point(left + inset, top + inset), size(right - left - inset * 2., px(1.)), light),
+                                            (gpui::point(left + inset, top + inset), size(px(1.), bottom - top - inset * 2.), light),
+                                            (gpui::point(right - inset - px(1.), top + inset), size(px(1.), bottom - top - inset * 2.), shade),
+                                            (gpui::point(left + inset, bottom - inset - px(1.)), size(right - left - inset * 2., px(1.)), shade),
+                                        ] {
+                                            window.paint_quad(gpui::fill(Bounds::new(origin, extent), rgb(color)));
+                                        }
+                                    }
+                                },
+                            ).absolute().size_full())
+                    })
                     .when(split, |el| {
                         el.w(gpui::relative(if index == 0 {
                             self.split_ratio

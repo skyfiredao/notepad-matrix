@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+<defs><linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#edf5ff"/></linearGradient><linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d2eeff"/><stop offset="1" stop-color="#6495e0"/></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b8e4a0"/><stop offset="1" stop-color="#65ac4c"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff2a1"/><stop offset="1" stop-color="#e3a32f"/></linearGradient><linearGradient id="gray" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f9f9f9"/><stop offset="1" stop-color="#959c9f"/></linearGradient><linearGradient id="disk5" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#a7d2ff"/><stop offset="1" stop-color="#5383cf"/></linearGradient><linearGradient id="disk6" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#a7d2ff"/><stop offset="1" stop-color="#5383cf"/></linearGradient></defs>
+<g transform="translate(1 1) scale(0.77)">
+<path d="M0 0H15L18 3V20H0Z" fill="url(#disk5)" stroke="#527fc3" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<rect x="3" y="0.5" width="10" height="7" rx="0" fill="#ffffff" stroke="#d2e8ff" stroke-width="0.8"/>
+<path d="M5 2V5" fill="none" stroke="#527fc3" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<rect x="3" y="12" width="12" height="6.5" rx="0" fill="#eeeeee" stroke="#ffffff" stroke-width="0.7"/>
+<rect x="4.5" y="14" width="9" height="2" rx="0" fill="#88c65c" stroke="none" stroke-width="1.5"/>
+<path d="M1 1V19H17" fill="none" stroke="#ffffff" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round" />
+</g>
+<g transform="translate(7 6) scale(0.77)">
+<path d="M0 0H15L18 3V20H0Z" fill="url(#disk6)" stroke="#527fc3" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<rect x="3" y="0.5" width="10" height="7" rx="0" fill="#ffffff" stroke="#d2e8ff" stroke-width="0.8"/>
+<path d="M5 2V5" fill="none" stroke="#527fc3" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<rect x="3" y="12" width="12" height="6.5" rx="0" fill="#eeeeee" stroke="#ffffff" stroke-width="0.7"/>
+<rect x="4.5" y="14" width="9" height="2" rx="0" fill="#88c65c" stroke="none" stroke-width="1.5"/>
+<path d="M1 1V19H17" fill="none" stroke="#ffffff" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round" />
+</g>
+</svg>

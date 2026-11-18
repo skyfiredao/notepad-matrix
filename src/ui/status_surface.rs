@@ -49,6 +49,8 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_status(&self, cx: &mut Context<Self>) -> AnyElement {
+        let locale = self.native_locale();
+        let localized = |id, fallback| crate::localization::localized_string(&locale, id).unwrap_or(fallback);
         let count = |value: usize| {
             let digits = value.to_string();
             let mut result = String::new();
@@ -65,24 +67,24 @@ impl MatrixWindow {
             match self.editor().source_selections().and_then(|selections| crate::status::measure_bytes(&snapshot, selections.primary().selection, 4)) {
                 Ok(status) => {
                     let selection = if status.selected_chars == 0 {
-                        format!("位置: {}", count(status.position))
+                        format!("{}{}", localized("statusbar-Pos", "Pos: "), count(status.position))
                     } else {
                         format!(
-                            "选中: {} | {}",
+                            "{}{} | {}",
+                            localized("statusbar-Sel", "Sel: "),
                             count(status.selected_chars),
                             count(status.selected_lines)
                         )
                     };
                     (
+                        localized("statusbar-length-lines", "length: $STR_REPLACE1$    lines: $STR_REPLACE2$")
+                            .replace("$STR_REPLACE1$", &count(status.bytes))
+                            .replace("$STR_REPLACE2$", &count(status.lines)),
                         format!(
-                            "长度: {}    行数: {}",
-                            count(status.bytes),
-                            count(status.lines)
-                        ),
-                        format!(
-                            "行: {}    列: {}    {}",
-                            count(status.line),
-                            count(status.column),
+                            "{}    {}",
+                            localized("statusbar-Ln-Col", "Ln: $STR_REPLACE1$    Col: $STR_REPLACE2$")
+                                .replace("$STR_REPLACE1$", &count(status.line))
+                                .replace("$STR_REPLACE2$", &count(status.column)),
                             selection
                         ),
                     )
@@ -237,4 +239,3 @@ impl MatrixWindow {
             .into_any_element()
     }
 }
-

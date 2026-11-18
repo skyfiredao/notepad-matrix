@@ -91,6 +91,8 @@ The build generates embedded API data split by language for on-demand parsing. R
 
 Release builds use speed optimization, ThinLTO, one codegen unit, and symbol stripping.
 
+Build versions use `<major>.<minor>.<count>+<SHA7>`. Major/minor come from `Cargo.toml`; the count includes only subsequent commits affecting this project after the current series was introduced. A new series resets the count. The version is embedded at build time and shared by `--version`, About and debug information. Packaging reads the supplied executable's version, not the current source checkout. Both bundle version fields use its numeric part, as required by macOS.
+
 Sources: [`build.rs`](build.rs), [`build_support/intelligence.rs`](build_support/intelligence.rs), [`intelligence.rs`](src/intelligence.rs), [`style_config.rs`](src/style_config.rs), [`mermaid.rs`](src/ui/mermaid.rs).
 
 ## 8. Keep Matrix animation separate from document contents

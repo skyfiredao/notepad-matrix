@@ -115,8 +115,8 @@ def disk_image(app, image, output):
         shutil.copytree(app, stage / app.name)
         (stage / 'Applications').symlink_to('/Applications', target_is_directory=True)
         writable = work / 'writable.dmg'
-        subprocess.run(['/usr/bin/hdiutil', 'create', '-volname', 'notepad-matrix',
-                        '-srcfolder', str(stage), '-format', 'UDRW', str(writable)], check=True)
+        subprocess.run(['/usr/sbin/diskutil', 'image', 'create', 'from', '--volumeName',
+                        'notepad-matrix', '--format', 'RAW', str(stage), str(writable)], check=True)
         mount = Path(tempfile.mkdtemp(prefix='.mount-', dir=output))
         try:
             subprocess.run(['/usr/bin/hdiutil', 'attach', '-nobrowse', '-mountpoint',
@@ -162,7 +162,11 @@ def package(binary, output, sign_identity='-', sandbox=False, entitlements=None)
         raise ValueError('Refusing to overwrite existing package artifacts')
     packages = release_packages()
     types = document_types(output)
-    version = next(item['version'] for item in packages if item['name'] == 'notepad-matrix')
+    reported = subprocess.check_output([str(binary), '--version'], text=True).strip()
+    version = re.fullmatch(r'notepad-matrix (\d+\.\d+\.\d+)\+(?:[0-9a-f]{7}|unknown)', reported)
+    if version is None:
+        raise ValueError(f'Unexpected executable version: {reported}')
+    version = version[1]
     app = output / 'notepad-matrix.app'
     with tempfile.TemporaryDirectory(prefix='.package-', dir=output) as temporary:
         contents = Path(temporary) / app.name / 'Contents'

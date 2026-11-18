@@ -482,6 +482,12 @@ impl MatrixWindow {
         );
         let vertical = self.tab_vertical;
         let multiline = self.tab_multiline;
+        let classic_frame = !dark && !vertical && !multiline;
+        let strip_height = if classic_frame {
+            if self.pref_bool("ScintillaPrimaryView.borderEdge", true) { 28. } else { 26. }
+        } else {
+            27.
+        } + tab_extra_height;
         let draggable = !self.file_busy
             && self.pref_bool("TabBar.dragAndDrop", true)
             && !self.close_dialog
@@ -551,7 +557,7 @@ impl MatrixWindow {
             .when(!vertical && !multiline, |tabs| {
                 tabs.flex_1()
                     .min_w(px(0.))
-                    .h(px(27. + tab_extra_height))
+                    .h(px(strip_height))
                     .overflow_x_scroll()
                     .restrict_scroll_to_axis()
             })
@@ -562,8 +568,8 @@ impl MatrixWindow {
             .on_scroll(cx.listener(move |view, event, window, cx| {
                 view.tab_wheel(pane, draggable, event, inner_offset.get(), window, cx);
             }))
-            .px(px(2.))
-            .bg(rgb(background))
+            .px(px(if classic_frame { 4. } else { 2. }))
+            .when(!classic_frame, |tabs| tabs.bg(rgb(background)))
             .text_size(tab_text_size)
             .on_drop(cx.listener(move |view, drag: &TabDrag, window, cx| {
                 view.drop_document_tab(drag, pane, None, false, window, cx);
@@ -601,7 +607,11 @@ impl MatrixWindow {
                 };
                 let tab_height: f32 = (if vertical {
                     27.
-                } else if pinned || id == active {
+                } else if classic_frame {
+                    if id == active { 26. } else { 22. }
+                } else if id == active {
+                    25.
+                } else if pinned {
                     24.
                 } else {
                     20.
@@ -725,12 +735,15 @@ impl MatrixWindow {
                     .h(px(tab_height))
                     .mt(px(if vertical {
                         0.
+                    } else if classic_frame {
+                        if id == active { 0. } else { 2. }
                     } else if pinned || id == active {
                         2.
                     } else {
                         4.
                     }))
                     .when(vertical, |tab| tab.w_full())
+                    .when(classic_frame && id == active, |tab| tab.ml(px(-2.)))
                     .flex_shrink_0()
                     .flex()
                     .items_center()
@@ -741,7 +754,8 @@ impl MatrixWindow {
                         3.
                     }))
                     .border_1()
-                    .border_color(rgb(if dark { 0x646464 } else { 0x808080 }))
+                    .when(!vertical && (classic_frame || id == active), |tab| tab.border_b_0())
+                    .border_color(if classic_frame { gpui::rgba(0) } else { rgb(if dark { 0x646464 } else { 0x808080 }) })
                     .text_color(rgb(if id == active {
                         active_text
                     } else {
@@ -810,8 +824,8 @@ impl MatrixWindow {
                     .child(
                         div()
                             .absolute()
-                            .top(px(0.))
-                            .left(px(0.))
+                            .top(px(if classic_frame { -1. } else { 0. }))
+                            .left(px(if classic_frame { -1. } else { 0. }))
                             .bottom(px(0.))
                             .w(px(1.))
                             .bg(rgb(if dark { 0x646464 } else { 0xffffff })),
@@ -819,19 +833,49 @@ impl MatrixWindow {
                     .child(
                         div()
                             .absolute()
-                            .top(px(0.))
-                            .left(px(0.))
-                            .right(px(0.))
+                            .top(px(if classic_frame { -1. } else { 0. }))
+                            .left(px(if classic_frame { -1. } else { 0. }))
+                            .right(px(if classic_frame { -1. } else { 0. }))
                             .h(px(1.))
                             .bg(rgb(if dark { 0x646464 } else { 0xffffff })),
                     )
+                    .when(classic_frame, |tab| {
+                        tab.child(gpui::canvas(
+                            |bounds, _, _| bounds,
+                            move |bounds, _, window, _| {
+                                let left = bounds.left();
+                                let top = bounds.top();
+                                let right = bounds.right();
+                                let side_height = bounds.size.height - px(if id == active { 3. } else { 2. });
+                                for (origin, extent, color) in [
+                                    (gpui::point(left, top), size(bounds.size.width, px(2.)), background),
+                                    (gpui::point(left + px(2.), top), size(bounds.size.width - px(4.), px(1.)), 0xffffff),
+                                    (gpui::point(left + px(1.), top + px(1.)), size(bounds.size.width - px(2.), px(1.)), 0xffffff),
+                                    (gpui::point(left + px(2.), top + px(1.)), size(bounds.size.width - px(4.), px(1.)), 0xe3e3e3),
+                                    (gpui::point(right - px(2.), top + px(1.)), size(px(1.), px(1.)), 0x696969),
+                                    (gpui::point(left, top + px(2.)), size(px(1.), side_height), 0xffffff),
+                                    (gpui::point(left + px(1.), top + px(2.)), size(px(1.), side_height), 0xe3e3e3),
+                                    (gpui::point(right - px(2.), top + px(2.)), size(px(1.), side_height), 0xa0a0a0),
+                                    (gpui::point(right - px(1.), top + px(2.)), size(px(1.), side_height), 0x696969),
+                                ] {
+                                    window.paint_quad(gpui::fill(Bounds::new(origin, extent), rgb(color)));
+                                }
+                                if id == active {
+                                    window.paint_quad(gpui::fill(
+                                        Bounds::new(gpui::point(left, bounds.bottom() - px(1.)), size(bounds.size.width, px(1.))),
+                                        rgb(selected),
+                                    ));
+                                }
+                            },
+                        ).absolute().top(px(-1.)).left(px(-1.)).right(px(-1.)).bottom(px(0.)))
+                    })
                     .when(id == active && draw_top, |tab| {
                         tab.child(
                             div()
                                 .absolute()
-                                .top(px(0.))
-                                .left(px(0.))
-                                .right(px(0.))
+                                .top(px(if classic_frame { 1. } else { 0. }))
+                                .left(px(if classic_frame { 1. } else { 0. }))
+                                .right(px(if classic_frame { 1. } else { 0. }))
                                 .h(px(4.))
                                 .bg(rgb(color.map_or(indicator, |colour| {
                                     tab_colour(colour, dark, focused, false)
@@ -1052,10 +1096,10 @@ impl MatrixWindow {
             .when(vertical, |tabs| tabs.flex_col().w(px(160.)))
             .when(!vertical && multiline, |tabs| tabs.w_full().flex_wrap())
             .when(!vertical && !multiline, |tabs| {
-                tabs.h(px(27. + tab_extra_height))
+                tabs.h(px(strip_height))
             })
-            .when(!pinned_tabs.is_empty(), |tabs| tabs.px(px(2.)))
-            .bg(rgb(background))
+            .when(!pinned_tabs.is_empty(), |tabs| tabs.px(px(if classic_frame { 4. } else { 2. })))
+            .when(!classic_frame, |tabs| tabs.bg(rgb(background)))
             .text_size(tab_text_size)
             .children(pinned_tabs);
         let tabs = tabs.children(scrollable_tabs).into_any_element();
@@ -1239,7 +1283,7 @@ impl MatrixWindow {
         row.flex()
             .relative()
             .w_full()
-            .h(px(27.))
+            .h(px(strip_height))
             .flex_shrink_0()
             .overflow_hidden()
             .child(pinned_tabs)

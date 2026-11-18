@@ -67,6 +67,7 @@ Notepad Matrix 在 macOS 上延续 Notepad++ 的编辑习惯，是独立项目�
 
 | 参数 | 用途 |
 |---|---|
+| `--version` | 显示构建版本并退出，不打开窗口。 |
 | `-multiInst` | 启动独立实例。 |
 | `-nosession` | 本次启动不恢复或保存自动会话。 |
 | `-openSession session.json` | 打开一份已保存的会话文件。 |
@@ -74,6 +75,8 @@ Notepad Matrix 在 macOS 上延续 Notepad++ 的编辑习惯，是独立项目�
 | `-udl=<name>` | 选择已安装的自定义语言，名称含空格时加引号。 |
 | `-n<line>`／`-c<column>` | 设置初始行列，从 1 开始。 |
 | `--` | 后续参数全部按文件路径处理。 |
+
+构建版本为 `0.3.N+<SHA 前 7 位>`。`N` 为引入当前主、次版本后影响 `notepad-matrix/` 的提交数。同一提交重复构建不递增。
 
 ## 配置
 

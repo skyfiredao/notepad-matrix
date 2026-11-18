@@ -1534,20 +1534,17 @@ impl MatrixWindow {
             .and_then(|layout| layout.rows.rows().get(row))
             .map_or(px(0.), |row| px(row.indent))
     }
-    pub(super) fn editor_font_size(&self) -> Pixels {
-        let mut base = crate::syntax::StyleAppearance::plain(self.dark);
-        base.font_size = self.editor_chrome.display.font_size().round().max(1.) as u32;
-        px(self
-            .style_config
-            .appearance(None, 32, self.dark, &base, self.editor_zoom_delta())
-            .font_size as f32)
-    }
-    pub(super) fn editor_font_family(&self) -> String {
+    pub(super) fn editor_default_style(&self) -> crate::syntax::StyleAppearance {
         let mut base = crate::syntax::StyleAppearance::plain(self.dark);
         base.font_family = chrome::DEFAULT_EDITOR_FONT_FAMILY.into();
-        self.style_config
-            .appearance(None, 32, self.dark, &base, self.editor_zoom_delta())
-            .font_family
+        base.font_size = chrome::EditorDisplay::default().font_size() as u32;
+        self.style_config.appearance(None, 32, self.dark, &base, 0)
+    }
+    pub(super) fn editor_font_size(&self) -> Pixels {
+        px((self.editor_default_style().font_size as i32 + self.editor_zoom_delta()).max(1) as f32)
+    }
+    pub(super) fn editor_font_family(&self) -> String {
+        self.editor_default_style().font_family
     }
     pub(super) fn editor_text_system(&self) -> Option<&gpui::WindowTextSystem> {
         self.editor_chrome.text_system.as_deref()
@@ -1816,7 +1813,7 @@ impl MatrixWindow {
         }
     }
     pub(super) fn editor_indent_guides_shown(&self) -> bool {
-        self.editor_chrome.display.indent_guides
+        self.pref_bool("ScintillaPrimaryView.indentGuideLine", true)
     }
     fn editor_display_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.split_sync_source = Some(self.pane);
@@ -1856,9 +1853,9 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        self.editor_chrome.display.indent_guides = !self.editor_chrome.display.indent_guides;
-        self.editor_display_changed(window, cx);
-        self.editor_chrome.display.indent_guides
+        let shown = !self.editor_indent_guides_shown();
+        self.set_preference("ScintillaPrimaryView.indentGuideLine", shown.into(), window, cx);
+        self.editor_indent_guides_shown()
     }
     fn editor_scrollbars(&self) -> Option<EditorScrollbars> {
         let bounds = self.editor_bounds?;
@@ -3361,18 +3358,6 @@ impl MatrixWindow {
             .key_context("MatrixEditor")
             .flex_1()
             .relative()
-            .when(!self.pref_bool("TabBar.hide", false), |editor| {
-                let border = px(self.pref_int("ScintillaPrimaryView.borderWidth", 2) as f32);
-                editor.ml(border).mr(border * 2.).mt(border).mb(border * 2.)
-            })
-            .when(
-                self.pref_bool("ScintillaPrimaryView.borderEdge", true),
-                |editor| {
-                    editor.border_1().border_color(rgb(
-                        self.appearance_colour("DarkMode.customColorEdge", 0x808080)
-                    ))
-                },
-            )
             .min_h(px(0.))
             .min_w(px(0.))
             .w_full()

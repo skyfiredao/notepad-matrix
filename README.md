@@ -67,6 +67,7 @@ See [design details](DESIGN.md#8-keep-matrix-animation-separate-from-document-co
 
 | Option | Purpose |
 |---|---|
+| `--version` | Print the build version and exit without opening a window. |
 | `-multiInst` | Start an independent instance. |
 | `-nosession` | Do not restore or save the automatic session for this launch. |
 | `-openSession session.json` | Open one saved session file. |
@@ -74,6 +75,8 @@ See [design details](DESIGN.md#8-keep-matrix-animation-separate-from-document-co
 | `-udl=<name>` | Select an installed user-defined language. Quote names containing spaces. |
 | `-n<line>` / `-c<column>` | Set the initial position, starting at 1. |
 | `--` | Treat all following arguments as file paths. |
+
+Build versions use `0.3.N+<SHA7>`. `N` counts commits affecting `notepad-matrix/` since the current major/minor series began. Rebuilding the same commit does not increment it.
 
 ## Configuration
 

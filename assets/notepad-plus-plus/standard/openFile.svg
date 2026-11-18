@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+<defs><linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#edf5ff"/></linearGradient><linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d2eeff"/><stop offset="1" stop-color="#6495e0"/></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b8e4a0"/><stop offset="1" stop-color="#65ac4c"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff2a1"/><stop offset="1" stop-color="#e3a32f"/></linearGradient><linearGradient id="gray" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f9f9f9"/><stop offset="1" stop-color="#959c9f"/></linearGradient></defs>
+<path d="M2 7H8L10 9H22V22H2Z" fill="url(#gold)" stroke="#c18b26" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M8 1H17L22 6V19H8Z" fill="#ffffff" stroke="#8ab5e9" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M17 1V6H22" fill="none" stroke="#8ab5e9" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M10.5 7.5H19.5M10.5 9.5H19.5M10.5 11.5H19.5M10.5 13.5H19.5" fill="none" stroke="#a7bdd3" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M2 10.5H22L19 22H1Z" fill="url(#gold)" stroke="#dda62f" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M4 12.5H19" fill="none" stroke="#fff7ca" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

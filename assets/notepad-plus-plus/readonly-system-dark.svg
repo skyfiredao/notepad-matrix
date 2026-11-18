@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+<defs></defs>
+<path d="M7 10V7A5 5 0 0 1 17 7V10" fill="none" stroke="#dedede" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M4 10H20V22H4ZM8.375 20Q8.375 20.2589 8.5581 20.4419Q8.7411 20.625 9 20.625Q9.2589 20.625 9.4419 20.4419Q9.625 20.2589 9.625 20V17.625H11.7411L14.5581 20.4419Q14.7411 20.625 15 20.625Q15.2589 20.625 15.4419 20.4419Q15.625 20.2589 15.625 20Q15.625 19.7411 15.4419 19.5581L13.3881 17.5043Q15.625 17.062 15.625 15Q15.625 12.375 12 12.375H9Q8.7411 12.375 8.5581 12.5581Q8.375 12.7411 8.375 13ZM9.625 16.375V13.625H12Q14.375 13.625 14.375 14.9998Q14.375 16.3745 12.0016 16.375H9.625Z" fill="#dedede" stroke="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

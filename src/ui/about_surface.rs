@@ -90,7 +90,7 @@ impl MatrixWindow {
                 )
                 .child(source_rect(90., 25., 138., 11.).child("Notepad Matrix"))
                 .child(source_rect(90., 38., 138., 11.)
-                    .child(format!("Version {}", env!("CARGO_PKG_VERSION"))))
+                    .child(format!("Version {}", crate::BUILD_VERSION)))
                 .child(
                     source_rect(12., 85., 216., 12.)
                         .id("about-project")

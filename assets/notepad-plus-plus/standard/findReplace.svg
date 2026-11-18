@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+<defs><linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#edf5ff"/></linearGradient><linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d2eeff"/><stop offset="1" stop-color="#6495e0"/></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b8e4a0"/><stop offset="1" stop-color="#65ac4c"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff2a1"/><stop offset="1" stop-color="#e3a32f"/></linearGradient><linearGradient id="gray" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f9f9f9"/><stop offset="1" stop-color="#959c9f"/></linearGradient></defs>
+<path d="M1 1H3V5Q4 4 5.5 4Q8 4 8 7.5Q8 11 5.5 11Q4 11 3 10V11H1ZM3 7.5Q3 9.2 4.8 9.2Q6 9.2 6 7.5Q6 5.8 4.8 5.8Q3 5.8 3 7.5Z" fill="#6798d4" stroke="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M10 23 15 10H18L23 23H19.7L18.6 20H14.1L13 23ZM15 17.5H17.8L16.4 13.6Z" fill="#527fc3" stroke="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M10.8 22L15.5 10.8H17.4" fill="none" stroke="#96c8ef" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round" />
+<path d="M9.5 8.3L11.8 10.6L12.9 9.5L13.2 13.2L9.5 12.9L10.6 11.8L8.3 9.5Z" fill="url(#green)" stroke="#61a56c" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

@@ -137,6 +137,9 @@ pub(super) struct FileSearchState {
     pub visible: bool,
     focus: FocusHandle,
     results_visible: bool,
+    results_height: gpui::Pixels,
+    results_max_height: gpui::Pixels,
+    results_resize: Option<(gpui::Pixels, gpui::Pixels)>,
     created: bool,
     directory: gpui::Entity<text_field::TextField>,
     filters: gpui::Entity<text_field::TextField>,
@@ -177,6 +180,9 @@ impl FileSearchState {
             visible: false,
             focus: cx.focus_handle(),
             results_visible: false,
+            results_height: px(156.),
+            results_max_height: px(156.),
+            results_resize: None,
             created: false,
             directory: cx.new(|cx| text_field::TextField::compact("目录", "files-directory", cx).with_tab_index(4)),
             filters: cx.new(|cx| text_field::TextField::compact("文件类型", "files-filters", cx).with_tab_index(3)),
@@ -258,6 +264,32 @@ impl MatrixWindow {
 
     pub(super) fn cancel_finder_drag(&mut self) {
         self.files_search.dragging_text = false;
+    }
+
+    pub(super) fn layout_file_results(&mut self, height: gpui::Pixels, cx: &mut Context<Self>) {
+        self.files_search.results_max_height = (height - px(4.)).max(px(26.));
+        if self.files_search.results_height > self.files_search.results_max_height {
+            self.files_search.results_height = self.files_search.results_max_height;
+            cx.notify();
+        }
+    }
+
+    pub(super) fn cancel_file_results_resize(&mut self) {
+        self.files_search.results_resize = None;
+    }
+
+    pub(super) fn resize_file_results(&mut self, event: &gpui::MouseMoveEvent, cx: &mut Context<Self>) {
+        if event.pressed_button != Some(MouseButton::Left) || !self.files_search.results_visible {
+            self.cancel_file_results_resize();
+            return;
+        }
+        if let Some((y, height)) = self.files_search.results_resize {
+            self.files_search.results_height = (height + y - event.position.y)
+                .clamp(px(26.), self.files_search.results_max_height);
+            self.files_search.results_resize = Some((event.position.y, self.files_search.results_height));
+            cx.notify();
+            cx.stop_propagation();
+        }
     }
 
     pub(super) fn search_results_created(&self) -> bool {
@@ -481,7 +513,7 @@ impl MatrixWindow {
     }
 
     fn finder_style(&self, id: u16) -> crate::syntax::StyleAppearance {
-        let base = self.style_config.appearance(None, 32, self.dark, &crate::syntax::StyleAppearance::plain(self.dark), 0);
+        let base = self.editor_default_style();
         if id == 0 { return base; }
         let language = crate::languages::catalog().ok().and_then(|catalog| catalog.profiles().iter().find(|language| language.name == "searchResult"));
         self.style_config.appearance(language, id, self.dark, &base, 0)
@@ -500,7 +532,7 @@ impl MatrixWindow {
             (gpui::TextRun {
                 len: 2, font, color: rgb(style.foreground).into(), background_color: None,
                 underline: None, strikethrough: None,
-            }, px(style.font_size as f32 * 96. / 72.))
+            }, px(style.font_size as f32))
         }).collect()
     }
 
@@ -546,7 +578,7 @@ impl MatrixWindow {
             (gpui::TextRun {
                 len: pair[1] - pair[0], font, color: rgb(foreground).into(), background_color: background.map(|colour| rgb(colour).into()),
                 underline: style.underline.then_some(gpui::UnderlineStyle { color: Some(rgb(foreground).into()), thickness: px(1.), wavy: false }), strikethrough: None,
-            }, px(style.font_size as f32 * 96. / 72.))
+            }, px(style.font_size as f32))
         }).collect()
     }
 
@@ -2514,12 +2546,10 @@ impl MatrixWindow {
                     cx.listener(|view, _, _, _| view.cancel_finder_drag()),
                 )
                 .key_context("MatrixFindResults")
-                .h(px(156.))
+                .h(self.files_search.results_height)
                 .flex_shrink_0()
                 .flex()
                 .flex_col()
-                .border_t_1()
-                .border_color(rgb(0x808080))
                 .bg(rgb(if self.dark { 0x202020 } else { 0xffffff }))
                 .text_color(rgb(if self.dark { 0xe0e0e0 } else { 0x000000 }))
                 .on_action(cx.listener(|view, _: &EditorSelectAll, window, cx| {
@@ -2589,7 +2619,24 @@ impl MatrixWindow {
                 }))
                 .child(
                     div()
+                        .id("files-results-splitter")
+                        .debug_selector(|| "files-results-splitter".into())
+                        .aria_label("Resize search results")
+                        .h(px(4.))
+                        .w_full()
+                        .flex_shrink_0()
+                        .bg(rgb(if self.dark { 0x606060 } else { 0xc0c0c0 }))
+                        .cursor(gpui::CursorStyle::ResizeUpDown)
+                        .on_mouse_down(MouseButton::Left, cx.listener(|view, event: &gpui::MouseDownEvent, _, cx| {
+                            view.cancel_finder_drag();
+                            view.files_search.results_resize = Some((event.position.y, view.files_search.results_height));
+                            cx.stop_propagation();
+                        })),
+                )
+                .child(
+                    div()
                         .h(px(22.))
+                        .flex_shrink_0()
                         .flex()
                         .justify_between()
                         .px(px(4.))
@@ -2680,7 +2727,7 @@ impl MatrixWindow {
         use crate::finder::Row;
         let row = self.files_search.results.rows[index];
         let appearance = self.finder_row_style(row);
-        let font_size = px(appearance.font_size as f32 * 96. / 72.);
+        let font_size = px(appearance.font_size as f32);
         let line_height = self.finder_line_height(window);
         let caption = self
             .files_search

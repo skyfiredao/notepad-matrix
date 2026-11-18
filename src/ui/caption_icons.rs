@@ -8,7 +8,7 @@ pub(super) enum Icon {
     Close,
 }
 
-pub(super) fn render(icon: Icon, id: &'static str, dark: bool) -> AnyElement {
+pub(super) fn render(icon: Icon, id: &'static str, foreground: u32) -> AnyElement {
     div()
         .id(id)
         .debug_selector(move || id.into())
@@ -25,7 +25,7 @@ pub(super) fn render(icon: Icon, id: &'static str, dark: bool) -> AnyElement {
                         px(f32::from(bounds.origin.x).round()),
                         px(f32::from(bounds.origin.y).round()),
                     );
-                    let colour = rgb(if dark { 0xcccccc } else { 0x999999 });
+                    let colour = rgb(foreground);
                     let rectangle = |x, y, extent| {
                         Bounds::new(
                             origin + gpui::point(px(x), px(y)),

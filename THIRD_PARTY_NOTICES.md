@@ -16,7 +16,7 @@ Corresponding source and build scripts: https://github.com/skyfiredao/notepad-ma
 | Markdown user-defined languages | [Source](https://github.com/Edditoria/markdown-plus-plus) | [mit](#mit) | [notice-24](#notice-24) |
 | Mermaid 12.3.0 | [Source](https://github.com/mermaid-js/mermaid/tree/mermaid%4012.3.0) | [mit](#mit) | [notice-29](#notice-29) |
 | Mermaid bundled dependencies | [Source](https://github.com/mermaid-js/mermaid/tree/mermaid%4012.3.0) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-195](#notice-195) |
-| Notepad++ data, artwork and Rust adaptations | [Source](https://github.com/notepad-plus-plus/notepad-plus-plus/tree/d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e) | [gpl-3.0](#gpl-3.0) | [notice-16](#notice-16), [notice-186](#notice-186) |
+| Notepad++ data and Rust adaptations | [Source](https://github.com/notepad-plus-plus/notepad-plus-plus/tree/d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e) | [gpl-3.0](#gpl-3.0) | [notice-16](#notice-16), [notice-186](#notice-186) |
 | OEM encoding mapping data | [Source](https://github.com/unicode-org/icu-data/tree/6eac2f4d349d9f4a0825103bb41845d8e5ab7add) | [unicode-3.0](#unicode-3.0) | [notice-17](#notice-17) |
 | Scintilla and Lexilla Rust adaptations | [Source](https://github.com/notepad-plus-plus/notepad-plus-plus/tree/d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e) | [scintilla](#scintilla) | [notice-162](#notice-162), [notice-184](#notice-184) |
 | Unicode conversion Rust adaptations | [Source](https://github.com/notepad-plus-plus/notepad-plus-plus/tree/d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e) | — | [notice-18](#notice-18) |

@@ -91,6 +91,8 @@ Run 执行外部命令，与内嵌模块分开。见[配置文件](README_zh.md#
 
 发布配置使用速度优化、ThinLTO、单 codegen unit 和符号剥离。
 
+构建版本为 `<主版本>.<次版本>.<提交数>+<SHA 前 7 位>`。主、次版本取自 `Cargo.toml`，提交数只统计引入当前版本系列后影响本项目的提交；新系列归零。版本在编译时嵌入，由 `--version`、关于和调试信息共用。打包读取所选二进制的版本，不读取当前源码版本。两个 bundle 版本字段按 macOS 要求只保存数字部分。
+
 源码：[`build.rs`](build.rs)、[`build_support/intelligence.rs`](build_support/intelligence.rs)、[`intelligence.rs`](src/intelligence.rs)、[`style_config.rs`](src/style_config.rs)、[`mermaid.rs`](src/ui/mermaid.rs)。
 
 ## 8. Matrix 动画与正文分开

@@ -37,6 +37,18 @@ fn fold_art(
             let y = bounds.center().y.floor();
             let ink = rgb(background);
             let tree = matches!(style.as_str(), "circle" | "box");
+            let dimension = (f32::from(bounds.size.width)
+                .min(f32::from(bounds.size.height) - 2.)
+                .floor()
+                - 1.) as i32;
+            let dimension = if dimension % 2 == 0 { dimension - 1 } else { dimension };
+            if tree && dimension <= 0 {
+                return;
+            }
+            let half = (dimension as f32 / 2.).round();
+            let symbol_origin = point(x - px(half), y - px(half));
+            let x = if tree { symbol_origin.x + px((dimension / 2) as f32) } else { x };
+            let y = if tree { symbol_origin.y + px((dimension / 2) as f32) } else { y };
             if tree {
                 if above {
                     window.paint_quad(fill(
@@ -83,23 +95,10 @@ fn fold_art(
             }
             if let Some(collapsed) = marker {
                 if tree {
-                    let dimension = (f32::from(bounds.size.width)
-                        .min(f32::from(bounds.size.height) - 2.)
-                        .floor()
-                        - 1.) as i32;
-                    if dimension <= 0 {
-                        return;
-                    }
-                    let dimension = if dimension % 2 == 0 {
-                        dimension - 1
-                    } else {
-                        dimension
-                    };
-                    let half = (dimension as f32 / 2.).round();
                     window.paint_quad(
                         fill(
                             Bounds::new(
-                                point(x - px(half), y - px(half)),
+                                symbol_origin,
                                 size(px(dimension as f32), px(dimension as f32)),
                             ),
                             rgb(foreground),
@@ -130,13 +129,15 @@ fn fold_art(
                         window.paint_quad(fill(rectangle, ink));
                     }
                 } else {
+                    let arm = if tree { (dimension - 4).max(1) } else { 5 };
+                    let half_arm = px((arm / 2) as f32);
                     window.paint_quad(fill(
-                        Bounds::new(point(x - px(2.), y), size(px(5.), px(1.))),
+                        Bounds::new(point(x - half_arm, y), size(px(arm as f32), px(1.))),
                         ink,
                     ));
                     if collapsed {
                         window.paint_quad(fill(
-                            Bounds::new(point(x, y - px(2.)), size(px(1.), px(5.))),
+                            Bounds::new(point(x, y - half_arm), size(px(1.), px(arm as f32))),
                             ink,
                         ));
                     }
@@ -153,8 +154,8 @@ fn bookmark_image() -> Arc<gpui::Image> {
     IMAGE
         .get_or_init(|| {
             Arc::new(gpui::Image::from_bytes(
-                gpui::ImageFormat::Png,
-                include_bytes!("../../assets/notepad-plus-plus/bookmark14.png").to_vec(),
+                gpui::ImageFormat::Svg,
+                include_bytes!("../../assets/notepad-plus-plus/bookmark14.svg").to_vec(),
             ))
         })
         .clone()

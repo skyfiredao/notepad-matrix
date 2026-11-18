@@ -5,7 +5,11 @@ use std::path::Path;
 #[path = "build_support/intelligence.rs"]
 mod intelligence;
 
+#[path = "build_support/version.rs"]
+mod version;
+
 fn main() -> Result<(), Box<dyn Error>> {
+    version::generate();
     let manifest = std::env::var_os("CARGO_MANIFEST_DIR").ok_or("Missing Cargo manifest directory")?;
     let out = std::env::var_os("OUT_DIR").ok_or("Missing Cargo output directory")?;
     let manifest = Path::new(&manifest);

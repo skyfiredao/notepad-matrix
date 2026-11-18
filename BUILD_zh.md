@@ -59,6 +59,8 @@ rustup show active-toolchain
 
 构建使用仓库中的 `Cargo.lock` 和内嵌资源。
 
+自动版本需要完整 Git 历史，CI 会自动拉取。本机构建使用 Git HEAD，也可由 `NOTEPAD_MATRIX_BUILD_COMMIT` 提供构建提交。历史缺失或不完整时使用清单中的第三位，并在构建时告警。
+
 ## 2. 构建应用
 
 部署目标 `26.0` 也会写入 `LSMinimumSystemVersion`。使用支持 macOS 26 的 Xcode／Command Line Tools 和 SDK。
@@ -133,7 +135,7 @@ dist/macos-arm64/notepad-matrix.dmg
 1. 检查输入为 ARM64 Mach-O。
 2. 通过 `cargo metadata --locked --offline` 读取依赖，要求依赖已经下载。
 3. 使用 Swift 和系统类型标识生成文档类型声明。
-4. 核对 `THIRD_PARTY_NOTICES.md` 中的依赖记录，复制可执行文件、图标、主题、`LICENSE` 和 `THIRD_PARTY_NOTICES.md`，生成 `Info.plist`。
+4. 核对 `THIRD_PARTY_NOTICES.md` 中的依赖记录，读取二进制的 `--version`，复制资源与许可证，将数字版本写入 `Info.plist`。
 5. 剥离符号，使用 `--sign-identity` 签名（默认 ad-hoc `-`），检查签名，生成含 Applications 链接的压缩 DMG。
 
 检查签名并启动应用：

@@ -69,7 +69,7 @@ macro_rules! embedded_image {
         IMAGE
             .get_or_init(|| {
                 Arc::new(Image::from_bytes(
-                    ImageFormat::Png,
+                    ImageFormat::Svg,
                     include_bytes!(concat!("../../assets/notepad-plus-plus/", $path)).to_vec(),
                 ))
             })
@@ -85,8 +85,8 @@ impl ToolbarIcon {
         macro_rules! alternative {
             ($name:literal) => {{
                 static IMAGE: OnceLock<Arc<Image>> = OnceLock::new();
-                IMAGE.get_or_init(|| Arc::new(Image::from_bytes(ImageFormat::Ico,
-                    include_bytes!(concat!("../../assets/notepad-plus-plus/icons/standard/tabbar/", $name, "_alt.ico")).to_vec()))).clone()
+                IMAGE.get_or_init(|| Arc::new(Image::from_bytes(ImageFormat::Svg,
+                    include_bytes!(concat!("../../assets/notepad-plus-plus/icons/standard/tabbar/", $name, "_alt.svg")).to_vec()))).clone()
             }};
         }
         match self {
@@ -138,12 +138,12 @@ impl ToolbarIcon {
             ($name:literal) => { fluent!($name, "off") };
             ($name:literal, $state:literal) => {{
                 let bytes: &[u8] = match (view.dark, matches!(set.as_str(), "small2" | "large2")) {
-                    (false, false) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/light/toolbar/regular/", $name, "_", $state, ".ico")),
-                    (false, true) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/light/toolbar/filled/", $name, "_", $state, ".ico")),
-                    (true, false) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/dark/toolbar/regular/", $name, "_", $state, ".ico")),
-                    (true, true) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/dark/toolbar/filled/", $name, "_", $state, ".ico")),
+                    (false, false) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/light/toolbar/regular/", $name, "_", $state, ".svg")),
+                    (false, true) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/light/toolbar/filled/", $name, "_", $state, ".svg")),
+                    (true, false) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/dark/toolbar/regular/", $name, "_", $state, ".svg")),
+                    (true, true) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/dark/toolbar/filled/", $name, "_", $state, ".svg")),
                 };
-                source_icon(bytes, if matches!(set.as_str(), "large" | "large2") { 32 } else { 16 })
+                Arc::new(Image::from_bytes(ImageFormat::Svg, bytes.to_vec()))
             }};
         }
         if !enabled && self.has_disabled_fluent() {
@@ -301,39 +301,39 @@ impl ToolbarIcon {
 
     pub(super) fn image(self) -> Arc<Image> {
         match self {
-            Self::StatusInfo => embedded_image!("standard/moreOnTooltip.png"),
-            Self::New => embedded_image!("standard/newFile.png"),
-            Self::Open => embedded_image!("standard/openFile.png"),
-            Self::Save => embedded_image!("standard/saveFile.png"),
-            Self::SaveAll => embedded_image!("standard/saveAll.png"),
-            Self::Close => embedded_image!("standard/closeFile.png"),
-            Self::CloseAll => embedded_image!("standard/closeAll.png"),
-            Self::Print => embedded_image!("standard/print.png"),
-            Self::Cut => embedded_image!("standard/cut.png"),
-            Self::Copy => embedded_image!("standard/copy.png"),
-            Self::Paste => embedded_image!("standard/paste.png"),
-            Self::Undo => embedded_image!("standard/undo.png"),
-            Self::Redo => embedded_image!("standard/redo.png"),
-            Self::Find => embedded_image!("standard/find.png"),
-            Self::Replace => embedded_image!("standard/findReplace.png"),
-            Self::DocumentList => embedded_image!("standard/docList.png"),
-            Self::ZoomIn => embedded_image!("standard/zoomIn.png"),
-            Self::ZoomOut => embedded_image!("standard/zoomOut.png"),
-            Self::WordWrap => embedded_image!("standard/wrap.png"),
-            Self::SyncVertical => embedded_image!("standard/syncV.png"),
-            Self::SyncHorizontal => embedded_image!("standard/syncH.png"),
-            Self::DefineUserLanguage => embedded_image!("standard/udl.png"),
-            Self::AllCharacters => embedded_image!("standard/allChars.png"),
-            Self::IndentGuides => embedded_image!("standard/indentGuide.png"),
-            Self::DocumentMap => embedded_image!("standard/docMap.png"),
-            Self::FolderWorkspace => embedded_image!("standard/fileBrowser.png"),
-            Self::FunctionList => embedded_image!("standard/funcList.png"),
-            Self::Monitoring => embedded_image!("standard/monitoring.png"),
-            Self::StartRecording => embedded_image!("standard/startRecord.png"),
-            Self::StopRecording => embedded_image!("standard/stopRecord.png"),
-            Self::Playback => embedded_image!("standard/playRecord.png"),
-            Self::RunMacroMultiple => embedded_image!("standard/playRecord_m.png"),
-            Self::SaveMacro => embedded_image!("standard/saveRecord.png"),
+            Self::StatusInfo => embedded_image!("standard/moreOnTooltip.svg"),
+            Self::New => embedded_image!("standard/newFile.svg"),
+            Self::Open => embedded_image!("standard/openFile.svg"),
+            Self::Save => embedded_image!("standard/saveFile.svg"),
+            Self::SaveAll => embedded_image!("standard/saveAll.svg"),
+            Self::Close => embedded_image!("standard/closeFile.svg"),
+            Self::CloseAll => embedded_image!("standard/closeAll.svg"),
+            Self::Print => embedded_image!("standard/print.svg"),
+            Self::Cut => embedded_image!("standard/cut.svg"),
+            Self::Copy => embedded_image!("standard/copy.svg"),
+            Self::Paste => embedded_image!("standard/paste.svg"),
+            Self::Undo => embedded_image!("standard/undo.svg"),
+            Self::Redo => embedded_image!("standard/redo.svg"),
+            Self::Find => embedded_image!("standard/find.svg"),
+            Self::Replace => embedded_image!("standard/findReplace.svg"),
+            Self::DocumentList => embedded_image!("standard/docList.svg"),
+            Self::ZoomIn => embedded_image!("standard/zoomIn.svg"),
+            Self::ZoomOut => embedded_image!("standard/zoomOut.svg"),
+            Self::WordWrap => embedded_image!("standard/wrap.svg"),
+            Self::SyncVertical => embedded_image!("standard/syncV.svg"),
+            Self::SyncHorizontal => embedded_image!("standard/syncH.svg"),
+            Self::DefineUserLanguage => embedded_image!("standard/udl.svg"),
+            Self::AllCharacters => embedded_image!("standard/allChars.svg"),
+            Self::IndentGuides => embedded_image!("standard/indentGuide.svg"),
+            Self::DocumentMap => embedded_image!("standard/docMap.svg"),
+            Self::FolderWorkspace => embedded_image!("standard/fileBrowser.svg"),
+            Self::FunctionList => embedded_image!("standard/funcList.svg"),
+            Self::Monitoring => embedded_image!("standard/monitoring.svg"),
+            Self::StartRecording => embedded_image!("standard/startRecord.svg"),
+            Self::StopRecording => embedded_image!("standard/stopRecord.svg"),
+            Self::Playback => embedded_image!("standard/playRecord.svg"),
+            Self::RunMacroMultiple => embedded_image!("standard/playRecord_m.svg"),
+            Self::SaveMacro => embedded_image!("standard/saveRecord.svg"),
             Self::MarkdownPreview => {
                 static IMAGE: OnceLock<Arc<Image>> = OnceLock::new();
                 IMAGE
@@ -345,28 +345,28 @@ impl ToolbarIcon {
                     })
                     .clone()
             }
-            Self::SavedDocument => embedded_image!("saved.png"),
-            Self::ModifiedDocument => embedded_image!("unsaved.png"),
-            Self::SavedDocumentDark => embedded_image!("saved-dark.png"),
-            Self::ModifiedDocumentDark => embedded_image!("unsaved-dark.png"),
-            Self::ReadOnlyDocument => embedded_image!("readonly.png"),
-            Self::ReadOnlyDocumentDark => embedded_image!("readonly-dark.png"),
-            Self::SystemReadOnlyDocument => embedded_image!("readonly-system.png"),
-            Self::SystemReadOnlyDocumentDark => embedded_image!("readonly-system-dark.png"),
-            Self::MonitoringDocument => embedded_image!("monitoring-tab.png"),
-            Self::MonitoringDocumentDark => embedded_image!("monitoring-tab-dark.png"),
-            Self::PinTab => embedded_image!("tab-pin.png"),
-            Self::PinnedTab => embedded_image!("tab-pinned.png"),
-            Self::PinTabDark => embedded_image!("tab-pin-dark.png"),
-            Self::PinnedTabDark => embedded_image!("tab-pinned-dark.png"),
-            Self::CloseTab => embedded_image!("tab-close.png"),
-            Self::CloseTabHover => embedded_image!("tab-close-hover.png"),
-            Self::CloseTabOnTab => embedded_image!("tab-close-on-tab.png"),
-            Self::CloseTabPressed => embedded_image!("tab-close-pressed.png"),
-            Self::CloseTabDark => embedded_image!("tab-close-dark.png"),
-            Self::CloseTabHoverDark => embedded_image!("tab-close-hover-dark.png"),
-            Self::CloseTabOnTabDark => embedded_image!("tab-close-on-tab-dark.png"),
-            Self::CloseTabPressedDark => embedded_image!("tab-close-pressed-dark.png"),
+            Self::SavedDocument => embedded_image!("saved.svg"),
+            Self::ModifiedDocument => embedded_image!("unsaved.svg"),
+            Self::SavedDocumentDark => embedded_image!("saved-dark.svg"),
+            Self::ModifiedDocumentDark => embedded_image!("unsaved-dark.svg"),
+            Self::ReadOnlyDocument => embedded_image!("readonly.svg"),
+            Self::ReadOnlyDocumentDark => embedded_image!("readonly-dark.svg"),
+            Self::SystemReadOnlyDocument => embedded_image!("readonly-system.svg"),
+            Self::SystemReadOnlyDocumentDark => embedded_image!("readonly-system-dark.svg"),
+            Self::MonitoringDocument => embedded_image!("monitoring-tab.svg"),
+            Self::MonitoringDocumentDark => embedded_image!("monitoring-tab-dark.svg"),
+            Self::PinTab => embedded_image!("tab-pin.svg"),
+            Self::PinnedTab => embedded_image!("tab-pinned.svg"),
+            Self::PinTabDark => embedded_image!("tab-pin-dark.svg"),
+            Self::PinnedTabDark => embedded_image!("tab-pinned-dark.svg"),
+            Self::CloseTab => embedded_image!("tab-close.svg"),
+            Self::CloseTabHover => embedded_image!("tab-close-hover.svg"),
+            Self::CloseTabOnTab => embedded_image!("tab-close-on-tab.svg"),
+            Self::CloseTabPressed => embedded_image!("tab-close-pressed.svg"),
+            Self::CloseTabDark => embedded_image!("tab-close-dark.svg"),
+            Self::CloseTabHoverDark => embedded_image!("tab-close-hover-dark.svg"),
+            Self::CloseTabOnTabDark => embedded_image!("tab-close-on-tab-dark.svg"),
+            Self::CloseTabPressedDark => embedded_image!("tab-close-pressed-dark.svg"),
             Self::Application => {
                 static IMAGE: OnceLock<Arc<Image>> = OnceLock::new();
                 IMAGE.get_or_init(|| Arc::new(Image::from_bytes(
@@ -396,29 +396,6 @@ fn system_accent_color() -> u32 {
             | ((green.clamp(0., 1.) * 255.).round() as u32) << 8
             | (blue.clamp(0., 1.) * 255.).round() as u32
     }
-}
-
-fn source_icon(bytes: &[u8], width: u8) -> Arc<Image> {
-    if let Some(header) = bytes.get(..6) {
-        let count = usize::from(u16::from_le_bytes([header[4], header[5]]));
-        for index in 0..count {
-            let offset = 6 + index * 16;
-            if let Some(entry) = bytes.get(offset..offset + 16)
-                && entry[0] == width
-            {
-                let length =
-                    u32::from_le_bytes([entry[8], entry[9], entry[10], entry[11]]) as usize;
-                let start =
-                    u32::from_le_bytes([entry[12], entry[13], entry[14], entry[15]]) as usize;
-                if let Some(png) = bytes.get(start..start.saturating_add(length))
-                    && png.starts_with(b"\x89PNG\r\n\x1a\n")
-                {
-                    return Arc::new(Image::from_bytes(ImageFormat::Png, png.to_vec()));
-                }
-            }
-        }
-    }
-    Arc::new(Image::from_bytes(ImageFormat::Ico, bytes.to_vec()))
 }
 
 thread_local! {

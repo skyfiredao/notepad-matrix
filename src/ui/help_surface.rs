@@ -116,15 +116,18 @@ impl MatrixWindow {
             version.to_string()
         };
         let executable = std::env::current_exe().map(|path| path.display().to_string()).unwrap_or_else(|error| error.to_string());
-        let config = self.settings_store.as_ref().map(|store| store.root().display().to_string()).unwrap_or_else(|| "未配置".into());
+        let config = self.settings_store.as_ref().map(|store| store.root().display().to_string()).unwrap_or_else(|| "Not configured".into());
         let arguments = std::env::args_os().skip(1).map(|arg| format!("{:?}", arg)).collect::<Vec<_>>().join(" ");
         let modules = [(self.converter_enabled, "Converter"), (self.mime_enabled, "MIME Tools"), (self.html_export_enabled, "NppExport")]
             .into_iter().filter_map(|(enabled, name)| enabled.then_some(name)).collect::<Vec<_>>().join(", ");
-        format!("Notepad Matrix v{}\n架构: {}\n系统: {}\n构建: {}\n可执行文件: {}\n配置目录: {}\n命令行: {}\n渲染: GPUI / macOS\n固定模块: {}\nDLL 插件: 不支持\n", env!("CARGO_PKG_VERSION"), std::env::consts::ARCH, os, if cfg!(debug_assertions) { "Debug" } else { "Release" }, executable, config, arguments, modules)
+        format!("Notepad Matrix v{}\nArchitecture: {}\nOS: {}\nBuild: {}\nPath: {}\nConfig directory: {}\nCommand Line: {}\nRenderer: GPUI / macOS\nBuilt-in modules: {}\nDLL plugins: Not supported\n", crate::BUILD_VERSION, std::env::consts::ARCH, os, if cfg!(debug_assertions) { "Debug" } else { "Release" }, executable, config, arguments, modules)
     }
 
     pub(super) fn help_title(&self) -> &'static str {
-        match self.help_state.topic { Some(Topic::CommandLine) => "命令行参数", _ => "调试信息" }
+        match self.help_state.topic {
+            Some(Topic::CommandLine) => "命令行参数",
+            _ => crate::localization::dialog_title(&self.native_locale(), "DebugInfo").unwrap_or("Debug Info"),
+        }
     }
 
     pub(super) fn dismiss_help(&mut self, cx: &mut Context<Self>) {
@@ -134,18 +137,27 @@ impl MatrixWindow {
 
     pub(super) fn render_help(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let field = self.help_state.field.as_ref()?;
+        let locale = self.native_locale();
+        let copy_label = if self.help_state.topic == Some(Topic::CommandLine) {
+            "复制到剪贴板".to_owned()
+        } else {
+            crate::localization::display_label(
+                crate::localization::dialog_control(&locale, "DebugInfo", 1752).unwrap_or("Copy debug info to clipboard"))
+        };
+        let close_label = crate::localization::display_label(
+            crate::localization::dialog_control(&locale, "DebugInfo", 1).unwrap_or("OK"));
         Some(div().id("help-dialog").debug_selector(|| "help-dialog".into()).role(Role::Dialog)
             .aria_label(self.help_title()).size_full().p(px(10.)).flex().flex_col().gap(px(10.))
             .child(div().flex_1().min_h_0().border_1().border_color(rgb(0x999999)).child(field.element()))
             .child(div().flex().justify_end().gap(px(8.))
-                .child(div().id("help-copy").role(Role::Button).aria_label("复制到剪贴板")
+                .child(div().id("help-copy").role(Role::Button).aria_label(copy_label.clone())
                     .px(px(12.)).py(px(4.)).border_1().border_color(rgb(0xaaaaaa)).cursor_pointer()
                     .on_click(cx.listener(|view, _, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(view.help_state.text.clone()))))
-                    .child("复制到剪贴板"))
-                .child(div().id("help-close").role(Role::Button).aria_label("确定").track_focus(&self.close_focus)
+                    .child(copy_label))
+                .child(div().id("help-close").role(Role::Button).aria_label(close_label.clone()).track_focus(&self.close_focus)
                     .px(px(20.)).py(px(4.)).border_1().border_color(rgb(0xaaaaaa)).cursor_pointer()
                     .on_click(cx.listener(|view, _, window, cx| view.dismiss_floating(floating_windows::DialogKind::Help, window, cx)))
-                    .child("确定")))
+                    .child(close_label)))
             .into_any_element())
     }
 }

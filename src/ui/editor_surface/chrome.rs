@@ -27,7 +27,6 @@ pub fn wheel_zoom_delta(control: bool, vertical: f32) -> Option<i32> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EditorDisplay {
     zoom: i32,
-    pub indent_guides: bool,
     pub word_wrap: bool,
 }
 
@@ -35,7 +34,6 @@ impl Default for EditorDisplay {
     fn default() -> Self {
         Self {
             zoom: 0,
-            indent_guides: true,
             word_wrap: false,
         }
     }
