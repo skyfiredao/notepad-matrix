@@ -250,6 +250,7 @@ impl MatrixWindow {
                             tab.bg(rgb(0x0078d4)).text_color(rgb(0xffffff))
                         })
                         .on_click(cx.listener(move |view, _, window, cx| {
+                            if view.files_search.result_batches.is_some() { cx.stop_propagation(); return; }
                             if view.activate_finder(id) {
                                 view.files_search.results_focus.focus(window, cx);
                                 cx.notify();

@@ -256,10 +256,30 @@ pub(crate) fn literal_ranges_in_bytes(bytes: &crate::byte_buffer::ByteBuffer, qu
 }
 
 pub(crate) fn literal_ranges_in_bytes_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &str, scope: Range<usize>, options: LiteralOptions, state: &mut RegexState) -> Result<Vec<Range<ByteOffset>>, SearchError> {
-    if matches!(options.mode, SearchMode::Regex { .. }) && !query.is_empty() {
-        regex_edits_bytes_with_state(bytes, query, None, scope, options, false, state)
-            .map(|edits| edits.into_iter().map(|(range, _)| range).collect())
-    } else { literal_ranges_in_bytes(bytes, query, scope, options) }
+    let mut ranges = Vec::new();
+    visit_literal_ranges_in_bytes_with_state(bytes, query, scope, options, state, |range| {
+        ranges.push(range);
+        true
+    })?;
+    Ok(ranges)
+}
+
+pub(crate) fn visit_literal_ranges_in_bytes_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &str, scope: Range<usize>, options: LiteralOptions, state: &mut RegexState, mut visit: impl FnMut(Range<ByteOffset>) -> bool) -> Result<(), SearchError> {
+    if scope.start > scope.end || scope.end > bytes.len() { return Err(SearchError::InvalidSelection); }
+    if query.is_empty() { return Ok(()); }
+    if matches!(options.mode, SearchMode::Regex { .. }) {
+        return visit_regex_ranges_with_state(bytes, query, None, scope, options,
+            RegexEmptyMode::NotAfterMatch, state, |range, _| visit(range));
+    }
+    let query = options.mode.decode(query);
+    if query.is_empty() { return Ok(()); }
+    let mut at = scope.start;
+    while let Some(found) = bytes.find_literal_bytes(query.as_bytes(), at, scope.end, options.match_case, options.whole_word, false)
+        .map_err(|_| SearchError::InvalidSelection)? {
+        at = found.end;
+        if !visit(ByteOffset(found.start)..ByteOffset(found.end)) { break; }
+    }
+    Ok(())
 }
 
 pub(crate) fn literal_ranges_in_bytes_without_empty_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &str, scope: Range<usize>, options: LiteralOptions, state: &mut RegexState) -> Result<Vec<Range<ByteOffset>>, SearchError> {
@@ -400,13 +420,21 @@ fn regex_edits_bytes_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &
 }
 
 fn regex_ranges_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &str, replacement: Option<&str>, scope: Range<usize>, options: LiteralOptions, empty_mode: RegexEmptyMode, state: &mut RegexState) -> Result<Vec<(Range<ByteOffset>, String)>, SearchError> {
+    let mut edits = Vec::new();
+    visit_regex_ranges_with_state(bytes, query, replacement, scope, options, empty_mode, state, |range, value| {
+        edits.push((range, value));
+        true
+    })?;
+    Ok(edits)
+}
+
+fn visit_regex_ranges_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &str, replacement: Option<&str>, scope: Range<usize>, options: LiteralOptions, empty_mode: RegexEmptyMode, state: &mut RegexState, mut visit: impl FnMut(Range<ByteOffset>, String) -> bool) -> Result<(), SearchError> {
     let limit = scope.end;
     if scope.start > scope.end || scope.end > bytes.len() { return Err(SearchError::InvalidSelection); }
-    if scope.is_empty() || query.split('\0').next().unwrap_or_default().is_empty() { return Ok(Vec::new()); }
+    if scope.is_empty() || query.split('\0').next().unwrap_or_default().is_empty() { return Ok(()); }
     state.direction(scope.start as i128, scope.end as i128);
     let matcher = regex_matcher(query, options)?;
     let mut at = scope.start;
-    let mut edits = Vec::new();
     while at <= scope.end {
         let allow_empty_at_start = !state.is_continuation(at as i128, false) || empty_mode == RegexEmptyMode::All && !state.last_was_empty();
         let Some(captures) = regex_forward_capture(&matcher, bytes, at..scope.end, empty_mode != RegexEmptyMode::None, allow_empty_at_start, state)? else { break; };
@@ -419,11 +447,11 @@ fn regex_ranges_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &str, 
             let units = replacement::format(template, &captures, &names);
             regex_replacement_text(&units)?
         } else { String::new() };
-        edits.push((range.clone(), value));
+        if !visit(range.clone(), value) { break; }
         if range.end.0 == scope.end { break; }
         at = if empty { next_regex_position(bytes, range.end.0)? } else { range.end.0 };
     }
-    Ok(edits)
+    Ok(())
 }
 
 fn regex_find_bytes(bytes: &crate::byte_buffer::ByteBuffer, query: &str, selection: Selection, options: LiteralOptions, backwards: bool, replacing: bool, skip_empty: bool) -> Result<Option<LiteralMatch>, SearchError> {

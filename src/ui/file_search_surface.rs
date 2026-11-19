@@ -128,7 +128,7 @@ impl FinderCommand {
 use crate::find_in_files::FileSearchRequest;
 
 enum FileOperationResult {
-    Search(crate::finder::Search, Vec<(usize, crate::search::RegexState)>),
+    Search(crate::finder::SearchCompletion, Vec<(usize, crate::search::RegexState)>),
     Replace(crate::find_in_files::FileReplaceResults),
 }
 
@@ -148,6 +148,7 @@ pub(super) struct FileSearchState {
     ignore_unsaved_changes: bool,
     cancel: Option<Arc<AtomicBool>>,
     progress: Option<Arc<crate::find_in_files::FileSearchProgress>>,
+    result_batches: Option<std::sync::mpsc::Receiver<crate::finder::SearchBatch>>,
     results: crate::finder::Results,
     results_focus: FocusHandle,
     results_scroll: gpui::UniformListScrollHandle,
@@ -191,6 +192,7 @@ impl FileSearchState {
             ignore_unsaved_changes: false,
             cancel: None,
             progress: None,
+            result_batches: None,
             results: crate::finder::Results::default(),
             results_focus: cx.focus_handle(),
             results_scroll: gpui::UniformListScrollHandle::new(),
@@ -694,42 +696,53 @@ impl MatrixWindow {
                 },
             });
         }
-        let mut updates = Vec::new();
-        let result = crate::finder::search_documents_with_state(
-            &query,
-            documents,
-            self.find_options,
-            self.files_search.results_one_per_line,
-            &mut updates,
-        );
-        self.write_search_regex_states(&identities, updates);
-        match result {
-            Ok(search) => {
-                self.set_find_status(find_surface::FindStatus::NoMessage, "");
-                self.publish_search_results(search, window, cx);
-            }
-            Err(error) => {
-                self.set_find_error(&error);
-                cx.notify();
-            }
+        if matches!(self.find_options.mode, crate::search::SearchMode::Regex { .. }) && !query.is_empty()
+            && let Err(error) = crate::search::regex_matcher(&query, self.find_options)
+        {
+            self.set_find_error(&error);
+            cx.notify();
+            return;
         }
+        self.begin_streamed_search_results(&query, cx);
+        let (sender, receiver) = std::sync::mpsc::sync_channel(2);
+        self.files_search.result_batches = Some(receiver);
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.files_search.cancel = Some(cancel.clone());
+        let progress = Arc::new(crate::find_in_files::FileSearchProgress::new(false, false));
+        self.files_search.progress = Some(progress.clone());
+        self.file_busy = true;
+        self.refresh_file_search_progress(progress, cx);
+        let options = self.find_options;
+        let one_per_line = self.files_search.results_one_per_line;
+        let search_query = query.clone();
+        let task = cx.background_executor().spawn(async move {
+            let mut emit = |batch| {
+                if sender.send(batch).is_ok() { true } else { cancel.store(true, Ordering::Relaxed); false }
+            };
+            let mut control = crate::finder::SearchControl { cancel: &cancel, emit: &mut emit, one_per_line, hits: 0 };
+            let mut updates = Vec::new();
+            let completion = crate::finder::stream_documents(&search_query, documents, options, &mut control, &mut updates);
+            (completion, updates)
+        });
+        cx.spawn_in(window, async move |view, cx| {
+            let (completion, updates) = task.await;
+            if let Err(error) = view.update_in(cx, |view, window, cx| {
+                view.files_search.cancel = None;
+                view.files_search.progress = None;
+                view.file_busy = false;
+                view.write_search_regex_states(&identities, updates);
+                view.finish_streamed_search_results(&query, options, completion, window, cx);
+            }) { eprintln!("document search completion lost its window: {error}"); }
+        }).detach();
+        cx.notify();
     }
 
-    fn publish_search_results(
-        &mut self,
-        mut search: crate::finder::Search,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn begin_streamed_search_results(&mut self, query: &str, cx: &mut Context<Self>) {
         self.files_search.created = true;
         self.set_find_status(find_surface::FindStatus::NoMessage, "");
         self.activate_main_finder(cx);
         self.cancel_finder_drag();
-        let hits = search.hits;
-        let search_error = search.search_error.take();
-        self.files_search
-            .results
-            .push(search, self.files_search.results_purge);
+        self.files_search.results.start_search(query, self.files_search.results_purge);
         self.files_search.results_selected = 0;
         self.files_search.text_anchor = None;
         self.files_search.text_head = None;
@@ -738,18 +751,38 @@ impl MatrixWindow {
         self.files_search.results_width = px(0.);
         self.files_search.results_cursor_x = None;
         self.files_search.wrapped_preferred_x = None;
-        self.files_search
-            .wrapped_scroll
-            .reset(self.files_search.results.rows.len());
+        self.files_search.wrapped_scroll.reset(self.files_search.results.rows.len());
         self.reveal_finder_row(0, gpui::ScrollStrategy::Top);
         self.files_search.results_visible = true;
-        self.files_search.message = format!(
-            "Search results - ({} {})",
-            crate::finder::commafy(hits),
-            if hits == 1 { "hit" } else { "hits" }
-        );
+        self.files_search.message = "Search results - (0 hits)".into();
+        cx.notify();
+    }
+
+    fn drain_search_batches(&mut self, limit: usize, cx: &mut Context<Self>) {
+        let batches = self.files_search.result_batches.as_ref().map(|receiver| {
+            receiver.try_iter().take(limit).collect::<Vec<_>>()
+        }).unwrap_or_default();
+        if batches.is_empty() { return; }
+        for batch in batches { self.files_search.results.append_batch(batch); }
+        self.files_search.results_width_item = None;
+        self.files_search.results_width = px(0.);
+        let top = self.files_search.wrapped_scroll.logical_scroll_top();
+        self.files_search.wrapped_scroll.reset(self.files_search.results.rows.len());
+        self.files_search.wrapped_scroll.scroll_to(top);
+        let hits = self.files_search.results.searches.first().map_or(0, |search| search.hits);
+        self.files_search.message = format!("Search results - ({} {})", crate::finder::commafy(hits), if hits == 1 { "hit" } else { "hits" });
+        cx.notify();
+    }
+
+    fn finish_streamed_search_results(&mut self, query: &str, options: crate::search::LiteralOptions,
+        completion: crate::finder::SearchCompletion, window: &mut Window, cx: &mut Context<Self>) {
+        self.drain_search_batches(usize::MAX, cx);
+        self.files_search.result_batches = None;
+        self.files_search.results.finish_search(query, options, completion);
+        let hits = self.files_search.results.searches.first().map_or(0, |search| search.hits);
+        let error = self.files_search.results.searches.first().and_then(|search| search.search_error.clone());
         if hits > 0 {
-            if search_error.is_none() && !self.files_search.always_visible {
+            if error.is_none() && !self.files_search.always_visible {
                 self.close_search_history();
                 self.find_visible = false;
                 self.files_search.visible = false;
@@ -759,7 +792,7 @@ impl MatrixWindow {
                 self.files_search.results_focus.focus(window, cx);
             }
         }
-        if let Some(error) = search_error { self.set_find_status(find_surface::FindStatus::NotFound, error); }
+        if let Some(error) = error { self.set_find_status(find_surface::FindStatus::NotFound, error); }
         cx.notify();
     }
 
@@ -1124,20 +1157,7 @@ impl MatrixWindow {
             progress.record(std::path::Path::new(""), 0, total, 0, false);
             if let Err(error) = view.update(cx, |view, cx| {
                 if !replacing {
-                    view.files_search.created = true;
-                    view.activate_main_finder(cx);
-                    view.cancel_finder_drag();
-                    view.files_search.results.begin(view.files_search.results_purge);
-                    view.files_search.text_anchor = None;
-                    view.files_search.text_head = None;
-                    view.files_search.results_width_item = None;
-                    view.files_search.results_width = px(0.);
-                    view.files_search.results_selected = 0;
-                    view.files_search.results_cursor_x = None;
-                    view.files_search.wrapped_preferred_x = None;
-                    view.files_search.wrapped_scroll.reset(view.files_search.results.rows.len());
-                    view.reveal_finder_row(0, gpui::ScrollStrategy::Top);
-                    view.files_search.results_visible = true;
+                    view.begin_streamed_search_results(&query, cx);
                 }
                 cx.notify();
             }) { eprintln!("file search could not begin in its document: {error}"); return; }
@@ -1167,13 +1187,28 @@ impl MatrixWindow {
                 FileOperationResult::Replace(results)
             } else {
                 let progress = progress.clone();
+                let (sender, receiver) = std::sync::mpsc::sync_channel(2);
+                if let Err(error) = view.update(cx, |view, _| view.files_search.result_batches = Some(receiver)) {
+                    eprintln!("file search batch receiver lost its document: {error}");
+                    return;
+                }
                 let (result, updates) = cx.background_executor().spawn(async move {
                     let mut updates = Vec::new();
-                    let mut result = crate::find_in_files::search_file_list_with_state(request, candidates.paths, &cancel, Some(&progress), &mut opened, &mut updates);
+                    let mut hits = 0;
+                    let mut emit = |batch: crate::finder::SearchBatch| {
+                        hits += batch.found.hits;
+                        progress.record(std::path::Path::new(&batch.found.name), batch.document + 1, total, hits, false);
+                        if sender.send(batch).is_ok() { true } else { cancel.store(true, Ordering::Relaxed); false }
+                    };
+                    let mut control = crate::finder::SearchControl { cancel: &cancel, emit: &mut emit, one_per_line, hits: 0 };
+                    let mut result = crate::find_in_files::stream_file_list_with_state(request, candidates.paths, Some(&progress), &mut opened, &mut updates, &mut control);
                     result.errors.extend(candidates.errors);
                     (result, updates)
                 }).await;
-                FileOperationResult::Search(crate::finder::from_file_search(&query, result, options, one_per_line), updates)
+                FileOperationResult::Search(crate::finder::SearchCompletion {
+                    searched: result.files_searched, selection_scope: false,
+                    errors: result.errors, search_error: result.search_error,
+                }, updates)
             };
             match document_window.update(cx, |_, window, cx| {
                 view.update(cx, |view, cx| {
@@ -1183,7 +1218,7 @@ impl MatrixWindow {
                     match results {
                         FileOperationResult::Search(results, updates) => {
                             view.write_search_regex_states(&identities, updates);
-                            view.publish_search_results(results, window, cx)
+                            view.finish_streamed_search_results(&query, options, results, window, cx)
                         }
                         FileOperationResult::Replace(results) => {
                             view.editor_changed(Ok(()), window, cx);
@@ -1241,6 +1276,7 @@ impl MatrixWindow {
                 executor.timer(std::time::Duration::from_millis(50)).await;
                 match view.update(cx, |view, cx| {
                     if !cx.windows().contains(&view.document_window) || !view.files_search.progress.as_ref().is_some_and(|current| Arc::ptr_eq(current, &progress)) { return false; }
+                    view.drain_search_batches(2, cx);
                     let snapshot = progress.snapshot();
                     if snapshot != previous { previous = snapshot; cx.notify(); }
                     true
@@ -1761,6 +1797,7 @@ impl MatrixWindow {
     }
 
     fn delete_finder_row(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.files_search.result_batches.is_some() { return; }
         let Some(row) = self.finder_caret().row else {
             return;
         };
@@ -2071,6 +2108,7 @@ impl MatrixWindow {
     }
 
     fn finder_command_enabled(&self, command: FinderCommand) -> bool {
+        if self.files_search.result_batches.is_some() && matches!(command, FinderCommand::ClearAll) { return false; }
         if self.files_search.views.active != 0
             && matches!(
                 command,
@@ -2092,6 +2130,7 @@ impl MatrixWindow {
         cx: &mut Context<Self>,
     ) {
         self.files_search.context = None;
+        if self.files_search.result_batches.is_some() && matches!(command, FinderCommand::ClearAll) { return; }
         match command {
             FinderCommand::FindWithin => self.show_find_in_results(window, cx),
             FinderCommand::CloseResults => self.close_active_finder(window, cx),

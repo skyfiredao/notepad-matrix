@@ -288,6 +288,17 @@ fn build(bytes: &[u8]) -> Option<Arc<Node>> {
     concat(build(&bytes[..middle]), build(&bytes[middle..]))
 }
 
+fn build_shared(bytes: &Arc<[u8]>, range: Range<usize>) -> Option<Arc<Node>> {
+    if range.is_empty() {
+        return None;
+    }
+    if range.len() <= LEAF_BYTES {
+        return Some(leaf(bytes.clone(), range));
+    }
+    let middle = range.start + range.len() / 2;
+    concat(build_shared(bytes, range.start..middle), build_shared(bytes, middle..range.end))
+}
+
 #[derive(Clone, Default)]
 pub struct ByteBuffer {
     root: Option<Arc<Node>>,
@@ -316,6 +327,11 @@ impl std::error::Error for InvalidByteRange {}
 impl ByteBuffer {
     pub fn from_bytes(bytes: &[u8]) -> Self {
         Self { root: build(bytes) }
+    }
+
+    pub(crate) fn from_shared_bytes(bytes: Arc<[u8]>, range: Range<usize>) -> Result<Self, InvalidByteRange> {
+        bytes.get(range.clone()).ok_or(InvalidByteRange)?;
+        Ok(Self { root: build_shared(&bytes, range) })
     }
 
     pub fn len(&self) -> usize {

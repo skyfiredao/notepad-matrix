@@ -66,6 +66,28 @@ pub struct Search {
     pub collapsed: bool,
 }
 
+pub(crate) struct SearchBatch {
+    pub document: usize,
+    pub first: bool,
+    pub join_previous: bool,
+    pub found: FoundDocument,
+}
+
+#[derive(Default)]
+pub(crate) struct SearchCompletion {
+    pub searched: usize,
+    pub selection_scope: bool,
+    pub errors: Vec<String>,
+    pub search_error: Option<String>,
+}
+
+pub(crate) struct SearchControl<'a> {
+    pub cancel: &'a std::sync::atomic::AtomicBool,
+    pub emit: &'a mut dyn FnMut(SearchBatch) -> bool,
+    pub one_per_line: bool,
+    pub hits: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Row {
     Search(usize),
@@ -105,6 +127,59 @@ pub struct Results {
 }
 
 impl Results {
+    pub(crate) fn start_search(&mut self, query: &str, purge: bool) {
+        self.push(Search {
+            title: format!("Search \"{}\"", query.replace(['\r', '\n'], "")),
+            documents: Vec::new(), hits: 0, searched: 0, errors: Vec::new(),
+            search_error: None, collapsed: false,
+        }, purge);
+    }
+
+    pub(crate) fn append_batch(&mut self, mut batch: SearchBatch) {
+        let Some(search) = self.searches.first_mut() else { return; };
+        let mut rows = Vec::new();
+        search.hits += batch.found.hits;
+        if batch.first {
+            search.documents.push(FoundDocument {
+                name: batch.found.name, lines: Vec::new(), hits: 0, collapsed: false,
+            });
+            if !search.collapsed { rows.push(Row::Document(0, search.documents.len() - 1)); }
+        }
+        let index = search.documents.len().saturating_sub(1);
+        let Some(document) = search.documents.last_mut() else { return; };
+        document.hits += batch.found.hits;
+        if batch.join_previous && let Some(previous) = document.lines.last_mut()
+            && batch.found.lines.first().is_some_and(|line| previous.number == line.number)
+        {
+            let first = batch.found.lines.remove(0);
+            previous.highlights.extend(first.highlights);
+            previous.ranges.extend(first.ranges);
+        }
+        let start = document.lines.len();
+        document.lines.extend(batch.found.lines);
+        if !search.collapsed && !document.collapsed {
+            rows.extend((start..document.lines.len()).map(|line| Row::Line(0, index, line)));
+        }
+        let at = self.rows.iter().rposition(|row| matches!(row,
+            Row::Search(0) | Row::Document(0, _) | Row::Line(0, _, _) | Row::Error(0, _))).map_or(0, |index| index + 1);
+        self.rows.splice(at..at, rows);
+    }
+
+    pub(crate) fn finish_search(&mut self, query: &str, options: LiteralOptions, completion: SearchCompletion) {
+        let mut errors = Vec::new();
+        if let Some(search) = self.searches.first_mut() {
+            let collapsed = search.collapsed;
+            *search = finish_search(query, std::mem::take(&mut search.documents), completion.searched,
+                completion.selection_scope, options, completion.errors);
+            search.collapsed = collapsed;
+            search.search_error = completion.search_error;
+            if !collapsed { errors.extend((0..search.errors.len()).map(|index| Row::Error(0, index))); }
+        }
+        let at = self.rows.iter().rposition(|row| matches!(row,
+            Row::Search(0) | Row::Document(0, _) | Row::Line(0, _, _) | Row::Error(0, _))).map_or(0, |index| index + 1);
+        self.rows.splice(at..at, errors);
+    }
+
     pub fn source_pathnames(&self) -> Vec<&str> {
         let mut seen = std::collections::BTreeSet::new();
         self.searches
@@ -849,6 +924,60 @@ pub(crate) fn search_documents_with_state(
     ))
 }
 
+pub(crate) fn stream_documents(
+    query: &str,
+    documents: Vec<SearchDocument>,
+    options: LiteralOptions,
+    control: &mut SearchControl<'_>,
+    updates: &mut Vec<(usize, crate::search::RegexState)>,
+) -> SearchCompletion {
+    let mut completion = SearchCompletion { searched: documents.len(), ..Default::default() };
+    completion.selection_scope = documents.iter().any(|source| source.document.selection.is_some_and(|selection| {
+        let range = selection.range();
+        range.start.0 != 0 || range.end.0 != source.document.bytes.len()
+    }));
+    for (index, mut source) in documents.into_iter().enumerate() {
+        if control.cancel.load(std::sync::atomic::Ordering::Relaxed) { break; }
+        if let Some(identity) = source.identity
+            && let Some((_, state)) = updates.iter().rev().find(|(id, _)| *id == identity)
+        {
+            source.regex_state = state.clone();
+        }
+        let result = stream_document(index, source.document, query, options, &mut source.regex_state, control);
+        if matches!(options.mode, crate::search::SearchMode::Regex { .. }) && let Some(identity) = source.identity {
+            updates.push((identity, source.regex_state));
+        }
+        if let Err(error) = result { completion.search_error = Some(error.to_string()); break; }
+    }
+    completion
+}
+
+pub(crate) fn stream_document(
+    index: usize,
+    doc: Document,
+    query: &str,
+    options: LiteralOptions,
+    state: &mut crate::search::RegexState,
+    control: &mut SearchControl<'_>,
+) -> Result<(), SearchError> {
+    let scope = crate::search::literal_scope_bytes(&doc.bytes, doc.selection.unwrap_or_default(), true, false, doc.selection.is_some())?;
+    if scope.is_empty() { return Ok(()); }
+    let mut pending = FoundLines::new(&doc.bytes, control.one_per_line);
+    let mut first = true;
+    let result = crate::search::visit_literal_ranges_in_bytes_with_state(&doc.bytes, query, scope, options, state, |range| {
+        pending.push(range);
+        control.hits += 1;
+        if pending.size > 1024 * 1024 {
+            let batch = pending.take(index, &doc.name, first);
+            first = false;
+            if !(control.emit)(batch) { return false; }
+        }
+        true
+    });
+    if pending.hits > 0 { (control.emit)(pending.take(index, &doc.name, first)); }
+    result
+}
+
 pub fn from_file_search(
     query: &str,
     result: crate::find_in_files::FileSearchResults,
@@ -897,6 +1026,7 @@ struct LinePreview {
     prefix_len: usize,
     original_length: usize,
     caption: String,
+    projection: crate::byte_projection::ByteProjection,
 }
 
 fn line_preview(bytes: &crate::byte_buffer::ByteBuffer, line: usize, digits: usize) -> LinePreview {
@@ -929,6 +1059,59 @@ fn line_preview(bytes: &crate::byte_buffer::ByteBuffer, line: usize, digits: usi
         prefix_len: prefix.len(),
         original_length,
         caption,
+        projection: crate::byte_projection::ByteProjection::from_bytes(
+            &bytes.slice(start..bytes.len().min(start.saturating_add(2048))).unwrap_or_default()),
+    }
+}
+
+struct FoundLines<'a> {
+    bytes: &'a crate::byte_buffer::ByteBuffer,
+    one_per_line: bool,
+    digits: usize,
+    lines: Vec<FoundLine>,
+    preview: Option<LinePreview>,
+    previous_line: Option<usize>,
+    join_previous: bool,
+    hits: usize,
+    size: usize,
+}
+
+impl<'a> FoundLines<'a> {
+    fn new(bytes: &'a crate::byte_buffer::ByteBuffer, one_per_line: bool) -> Self {
+        Self { bytes, one_per_line, digits: bytes.line_count().to_string().len(), lines: Vec::new(),
+            preview: None, previous_line: None, join_previous: false, hits: 0, size: 0 }
+    }
+
+    fn push(&mut self, range: Range<ByteOffset>) {
+        let line = self.bytes.line_index(range.start.0).unwrap_or(self.bytes.line_count() - 1);
+        let preview = self.preview.get_or_insert_with(|| line_preview(self.bytes, line, self.digits));
+        if preview.line != line { *preview = line_preview(self.bytes, line, self.digits); }
+        let position = |at: ByteOffset, affinity| {
+            let local = at.0 - preview.start;
+            preview.projection.display_position(ByteOffset(local), affinity).map_or(local, |at| at.0)
+        };
+        let highlight = preview.prefix_len + position(range.start, crate::byte_projection::Affinity::Before)
+            ..preview.prefix_len + position(range.end, crate::byte_projection::Affinity::After);
+        let join = self.one_per_line && self.previous_line == Some(line)
+            && (preview.original_length < 2048 || highlight.end < 2048);
+        if self.lines.is_empty() { self.join_previous = join; }
+        if join && let Some(previous) = self.lines.last_mut() {
+            previous.highlights.push(highlight);
+            previous.ranges.push(range);
+        } else {
+            if !join { self.size += preview.caption.len() + 2; }
+            self.lines.push(FoundLine { number: line + 1, caption: preview.caption.clone(),
+                highlights: vec![highlight], ranges: vec![range] });
+        }
+        self.previous_line = Some(line);
+        self.hits += 1;
+    }
+
+    fn take(&mut self, index: usize, name: &str, first: bool) -> SearchBatch {
+        self.size = 0;
+        SearchBatch { document: index, first, join_previous: self.join_previous,
+            found: FoundDocument { name: name.to_owned(), lines: std::mem::take(&mut self.lines),
+                hits: std::mem::take(&mut self.hits), collapsed: false } }
     }
 }
 
@@ -937,41 +1120,11 @@ fn found_document(
     matches: Vec<Range<ByteOffset>>,
     one_entry_per_line: bool,
 ) -> FoundDocument {
-    let digits = doc.bytes.line_count().to_string().len();
-    let projection = crate::byte_projection::ByteProjection::from_bytes(&doc.bytes);
-    let mut lines: Vec<FoundLine> = Vec::new();
-    let mut preview: Option<LinePreview> = None;
-    for range in &matches {
-        let line = doc.bytes.line_index(range.start.0).unwrap_or(doc.bytes.line_count() - 1);
-        let preview = preview.get_or_insert_with(|| line_preview(&doc.bytes, line, digits));
-        if preview.line != line {
-            *preview = line_preview(&doc.bytes, line, digits);
-        }
-        let display_start = projection.display_position(ByteOffset(preview.start), crate::byte_projection::Affinity::Before).map_or(preview.start, |at| at.0);
-        let highlight = preview.prefix_len + projection.display_position(range.start, crate::byte_projection::Affinity::Before).map_or(range.start.0, |at| at.0) - display_start
-            ..preview.prefix_len + projection.display_position(range.end, crate::byte_projection::Affinity::After).map_or(range.end.0, |at| at.0) - display_start;
-        if one_entry_per_line
-            && lines
-                .last()
-                .is_some_and(|previous| previous.number == line + 1)
-            && (preview.original_length < 2048 || highlight.end < 2048)
-        {
-            if let Some(previous) = lines.last_mut() {
-                previous.highlights.push(highlight);
-                previous.ranges.push(range.clone());
-            }
-        } else {
-            lines.push(FoundLine {
-                number: line + 1,
-                caption: preview.caption.clone(),
-                highlights: vec![highlight],
-                ranges: vec![range.clone()],
-            });
-        }
-    }
+    let mut found = FoundLines::new(&doc.bytes, one_entry_per_line);
+    for range in &matches { found.push(range.clone()); }
     FoundDocument {
         name: doc.name,
-        lines,
+        lines: found.lines,
         hits: matches.len(),
         collapsed: false,
     }

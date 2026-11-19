@@ -315,6 +315,29 @@ pub(crate) fn search_file_list_with_state(
     opened: &mut [OpenSearchDocument],
     updates: &mut Vec<(usize, crate::search::RegexState)>,
 ) -> FileSearchResults {
+    search_file_list_controlled(request, candidates, cancel, progress, opened, updates, None)
+}
+
+pub(crate) fn stream_file_list_with_state(
+    request: FileSearchRequest,
+    candidates: Vec<PathBuf>,
+    progress: Option<&FileSearchProgress>,
+    opened: &mut [OpenSearchDocument],
+    updates: &mut Vec<(usize, crate::search::RegexState)>,
+    control: &mut crate::finder::SearchControl<'_>,
+) -> FileSearchResults {
+    search_file_list_controlled(request, candidates, control.cancel, progress, opened, updates, Some(control))
+}
+
+fn search_file_list_controlled(
+    request: FileSearchRequest,
+    candidates: Vec<PathBuf>,
+    cancel: &AtomicBool,
+    progress: Option<&FileSearchProgress>,
+    opened: &mut [OpenSearchDocument],
+    updates: &mut Vec<(usize, crate::search::RegexState)>,
+    mut stream: Option<&mut crate::finder::SearchControl<'_>>,
+) -> FileSearchResults {
     let mut result = FileSearchResults {
         files_searched: candidates.len(),
         ..Default::default()
@@ -325,14 +348,21 @@ pub(crate) fn search_file_list_with_state(
             result.cancelled = true;
             break;
         }
-        if let Err(error) = search_file(&path, index, &request, &mut result, opened, updates) {
+        if let Some(progress) = progress {
+            let hits = stream.as_ref().map_or(result.matches.len(), |control| control.hits);
+            progress.record(&path, index, total, hits, false);
+        }
+        if let Err(error) = search_file(&path, index, &request, &mut result, opened, updates, stream.as_deref_mut()) {
             if let Some(error) = error.downcast_ref::<crate::search::SearchError>() {
                 result.search_error = Some(error.to_string());
                 break;
             }
             result.errors.push(format!("{}: {error}", path.display()));
         }
-        if let Some(progress) = progress { progress.record(&path, index + 1, total, result.matches.len(), false); }
+        if let Some(progress) = progress {
+            let hits = stream.as_ref().map_or(result.matches.len(), |control| control.hits);
+            progress.record(&path, index + 1, total, hits, false);
+        }
     }
     result
 }
@@ -368,6 +398,7 @@ fn search_file(
     result: &mut FileSearchResults,
     opened: &mut [OpenSearchDocument],
     updates: &mut Vec<(usize, crate::search::RegexState)>,
+    stream: Option<&mut crate::finder::SearchControl<'_>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _access = if opened.iter().any(|document| document.paths.iter().any(|candidate| candidate == path))
         || request.open_documents.contains_key(path) {
@@ -395,6 +426,17 @@ fn search_file(
         Some(identity) => &mut opened[identity].regex_state,
         None => &mut fresh,
     };
+    if let Some(control) = stream {
+        let result = crate::finder::stream_document(file_index, crate::finder::Document {
+            name: path.display().to_string(), bytes: bytes.clone(), selection: None,
+        }, &request.query, LiteralOptions {
+            mode: request.mode, match_case: request.match_case, wrap: false, whole_word: request.whole_word,
+        }, state, control);
+        if matches!(request.mode, crate::search::SearchMode::Regex { .. }) && let Some(identity) = identity {
+            updates.push((identity, state.clone()));
+        }
+        return result.map_err(Into::into);
+    }
     let matches = crate::search::literal_ranges_in_bytes_with_state(
         &bytes,
         &request.query,

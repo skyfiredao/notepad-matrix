@@ -627,14 +627,7 @@ impl DiskFile {
 
     pub fn load_byte_buffer(path: &Path) -> io::Result<(Self, crate::byte_buffer::ByteBuffer)> {
         let file = Self::capture(path)?;
-        let buffer = match file.format {
-            UnicodeFormat::Utf8(_) => {
-                crate::byte_buffer::ByteBuffer::from_bytes(&file.bytes[file.format.bom().len()..])
-            }
-            UnicodeFormat::Utf16LeBom | UnicodeFormat::Utf16BeBom => {
-                crate::byte_buffer::ByteBuffer::from_bytes(&file.decoded_bytes())
-            }
-        };
+        let buffer = file.editor_buffer()?;
         Ok((file, buffer))
     }
 
@@ -656,11 +649,15 @@ impl DiskFile {
     }
 
     fn editor_buffer(&self) -> io::Result<crate::byte_buffer::ByteBuffer> {
-        let bytes = match self.byte_code_page {
-            Some(ByteFormatCodePage::CodePage(_)) => self.decode_text()?.into_bytes(),
-            _ => self.decoded_bytes(),
+        let (bytes, start): (Arc<[u8]>, usize) = match self.byte_code_page {
+            Some(ByteFormatCodePage::CodePage(_)) => (self.decode_text()?.into_bytes().into(), 0),
+            _ if matches!(self.format, UnicodeFormat::Utf8(_)) => {
+                (self.bytes.clone(), self.format.bom().len())
+            }
+            _ => (self.decoded_bytes().into(), 0),
         };
-        Ok(crate::byte_buffer::ByteBuffer::from_bytes(&bytes))
+        let end = bytes.len();
+        crate::byte_buffer::ByteBuffer::from_shared_bytes(bytes, start..end).map_err(io::Error::other)
     }
 
     fn capture_with_preferences(path: &Path, settings: &serde_json::Value) -> io::Result<Self> {
@@ -682,7 +679,11 @@ impl DiskFile {
         }
         let mut input = fs::File::open(&path)?;
         let before = input.metadata()?;
+        let file_size = usize::try_from(before.len()).map_err(io::Error::other)?;
+        let capacity = file_size.checked_add((1 << 20).min(file_size / 6))
+            .ok_or_else(|| io::Error::other("document is too large"))?;
         let mut bytes = Vec::new();
+        bytes.try_reserve_exact(capacity).map_err(io::Error::other)?;
         input.read_to_end(&mut bytes)?;
         let after = input.metadata()?;
         if !after.is_file()
