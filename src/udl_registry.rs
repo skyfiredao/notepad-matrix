@@ -1,4 +1,4 @@
-use crate::{config::ConfigStore, udl::Definition};
+use crate::{config::ConfigStore, udl::{Definition, Style}};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, io, path::Path};
 
@@ -248,6 +248,19 @@ impl UdlRegistry {
             .ok_or_else(|| invalid("UDL revision exhausted"))?;
         Ok(())
     }
+    pub(crate) fn preview_style(&mut self, language: u64, style: Style) -> io::Result<bool> {
+        let style = Style::from_json(&style.to_json())?;
+        let entry = self.entries.get_mut(&language)
+            .ok_or_else(|| invalid("Unknown language"))?;
+        let target = entry.definition.styles.get_mut(style.id as usize)
+            .ok_or_else(|| invalid("Unknown style"))?;
+        if *target == style {
+            return Ok(false);
+        }
+        *target = style;
+        Ok(true)
+    }
+
     pub fn edit(
         &mut self,
         id: u64,

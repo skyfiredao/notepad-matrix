@@ -898,5 +898,65 @@ gan/by Aled Powell
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<matrix-find-resize-results value="Newid maint canlyniadau chwilio"/>
+			<common-ok value="Iawn"/>
+			<common-cancel value="Diddymu"/>
+			<common-name value="Enw"/>
+			<discover-file-candidates-title value="Canfod ffeiliau ymgeisiol…"/>
+			<matrix-close value="Cau"/>
+			<matrix-retry value="Ailgynnig"/>
+			<matrix-cancelled value="Wedi canslo"/>
+			<matrix-read-only value="Darllen yn unig"/>
+			<matrix-find-status-details value="Manylion statws"/>
+			<matrix-find-backward-unavailable value="Mae chwilio am yn ôl gydag ymadroddion rheolaidd wedi’i analluogi"/>
+			<matrix-hash-select-files value="Dewis ffeiliau"/>
+			<matrix-hash-calculating value="Cyfrifo crynodeb…"/>
+			<matrix-hash-selection-failed value="Methwyd dewis ffeiliau: $ERROR$"/>
+			<matrix-hash-read-failed value="Methu darllen y ffeiliau canlynol:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Cau’r gwall"/>
+			<matrix-hash-file-paths value="Llwybrau ffeiliau (darllen yn unig)"/>
+			<matrix-hash-digest-result value="Canlyniad y crynodeb (darllen yn unig)"/>
+			<matrix-hash-source-text value="Testun ffynhonnell y crynodeb"/>
+			<matrix-hash-selection-composition value="Nid yw stwnsio detholiad wrth gyfansoddi’n weithredol wedi’i weithredu eto"/>
+			<matrix-hash-selection-read-failed value="Methu darllen y detholiad: $ERROR$"/>
+			<matrix-window-activation-failed value="Methu newid i’r ffeil a ddewiswyd"/>
+			<matrix-window-selection-unavailable value="Mae’r ffeil a ddewiswyd ar gau neu ni ellir ei hactifadu"/>
+			<matrix-incremental-position value="Symud y bar chwilio cynyddrannol"/>
+			<matrix-find-progress-bar value="Bar cynnydd"/>
+			<matrix-find-previous-search value="Dangos y chwiliad blaenorol"/>
+			<matrix-find-results-summary value="Canlyniadau chwilio - ($INT_REPLACE$ trawiad)"/>
+			<matrix-udl-allow-code2-close value="Caniatáu cau cod 2"/>
+			<matrix-udl-allow-code2-middle value="Caniatáu canol cod 2"/>
+			<matrix-udl-allow-code2-open value="Caniatáu agor cod 2"/>
+			<matrix-udl-allow-comment-fold-close value="Caniatáu cau plyg sylwadau"/>
+			<matrix-udl-allow-comment-fold-middle value="Caniatáu canol plyg sylwadau"/>
+			<matrix-udl-allow-comment-fold-open value="Caniatáu agor plyg sylwadau"/>
+			<matrix-udl-choose-json value="Dewis ffeil diffiniad UDL JSON"/>
+			<matrix-udl-close value="Cau Iaith a Ddiffiniwyd gan y Defnyddiwr"/>
+			<matrix-udl-close-styler value="Cau’r ffurfweddydd arddull"/>
+			<matrix-udl-colors value="Lliwiau"/>
+			<matrix-udl-dark-mode-language value="Iaith modd tywyll"/>
+			<matrix-udl-definition-exported value="Diffiniad wedi’i allforio"/>
+			<matrix-udl-definitions-saved value="Diffiniadau wedi’u cadw"/>
+			<matrix-udl-enable-font value="Galluogi ffont"/>
+			<matrix-udl-error value="Gwall iaith a ddiffiniwyd gan y defnyddiwr: $ERROR$"/>
+			<matrix-udl-file-failed value="Methodd gweithrediad ffeil UDL: $ERROR$"/>
+			<matrix-udl-file-progress value="Gweithrediad ffeil ar waith…"/>
+			<matrix-udl-import-rejected value="Gwrthodwyd y mewnforio: $ERROR$"/>
+			<matrix-udl-imported value="Mewnforiwyd $COUNT$ iaith"/>
+			<matrix-udl-live-edits value="Iaith a Ddiffiniwyd gan y Defnyddiwr — mae golygiadau’n weithredol ar unwaith mewn dogfennau sy’n defnyddio’r iaith hon yn unig"/>
+			<matrix-udl-loading value="Llwytho diffiniadau…"/>
+			<matrix-udl-memory-only value="Mae’r diffiniadau yn y cof yn unig (dim cyfeiriadur ffurfweddu)"/>
+			<matrix-udl-missing-ids value="Dynodwyr ieithoedd a ddiffiniwyd gan y defnyddiwr ar goll: $IDS$. Cadwyd testun y dogfennau a hunaniaethau’r ieithoedd a gadwyd. Adferwch y diffiniadau neu dewiswch iaith arall yn benodol."/>
+			<matrix-udl-open-panel-disconnected value="Datgysylltwyd panel Agor UDL: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Tynnu’r diffiniad enwedig hwn? Bydd dogfennau presennol yn cadw eu testun ac yn newid i’r iaith ddienw a ddiffiniwyd gan y defnyddiwr."/>
+			<matrix-udl-retry-file value="Ailgynnig gweithrediad ffeil UDL"/>
+			<matrix-udl-save-panel-disconnected value="Datgysylltwyd panel Cadw UDL: $ERROR$"/>
+			<matrix-udl-unavailable value="Diffiniadau ddim ar gael; cywirwch udl.json ac ailgeisiwch."/>
+			<matrix-udl-use-background value="Defnyddio’r cefndir"/>
+			<matrix-udl-use-foreground value="Defnyddio’r blaendir"/>
+			<matrix-udl-working-copy value="Diffiniwyd gan y defnyddiwr (copi gweithio)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

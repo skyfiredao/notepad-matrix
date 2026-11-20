@@ -67,10 +67,10 @@ impl Drop for LaunchCompletion {
 }
 
 #[cfg(unix)]
-fn handoff_root() -> io::Result<PathBuf> {
+pub(crate) fn handoff_root() -> io::Result<PathBuf> {
     use std::os::unix::fs::MetadataExt;
     let home = crate::file_access::home_directory()?.canonicalize()?;
-    let store = crate::config::ConfigStore::under_home(&home);
+    let store = crate::config::ConfigStore::under_default_home(&home);
     let path = store.document_path(Path::new("launch-handoff/root.json"))?;
     let root = path.parent().ok_or_else(|| invalid("launch handoff directory is missing"))?.to_owned();
     let owner = std::fs::metadata(&home)?.uid();
@@ -540,7 +540,7 @@ impl InstanceServer {
         let store = crate::config::ConfigStore::under_home(home);
         let root = store.document_path(Path::new("instance.json"))?.parent().ok_or_else(|| invalid("instance directory is missing"))?.to_owned();
         for path in &mut options.files { *path = std::path::absolute(&*path)?; }
-        let path = root.join("instance.sock");
+        let path = crate::config_directory::instance_socket(home, &root)?;
         let lease = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).mode(0o600).open(root.join("instance.lock"))?;
         match lease.try_lock() {
             Ok(()) => {
@@ -575,7 +575,12 @@ impl InstanceServer {
                 Err(error) => { last_error = Some(error); std::thread::sleep(std::time::Duration::from_millis(100)); }
             }
         }
-        let mut stream = connection.ok_or_else(|| last_error.unwrap_or_else(|| io::Error::other("running instance is unavailable")))?;
+        let mut stream = connection.ok_or_else(|| {
+            let error = last_error.unwrap_or_else(|| io::Error::other("running instance is unavailable"));
+            if root != home.join(".notepad-matrix") {
+                io::Error::new(error.kind(), format!("配置目录 {} 已被其他实例占用，但无法连接通信端点 {}：{error}。若 sandbox 与非 sandbox 应用共用此目录，请先退出另一实例再启动。", root.display(), path.display()))
+            } else { error }
+        })?;
         stream.set_read_timeout(Some(std::time::Duration::from_secs(120)))?;
         stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
         stream.write_all(&(bytes.len() as u64).to_le_bytes())?;

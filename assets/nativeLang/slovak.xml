@@ -1753,6 +1753,60 @@ Pokračujte len vtedy, ak rozumiete rizikám."/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Zmeniť veľkosť výsledkov vyhľadávania"/>
+			<matrix-close value="Zavrieť"/>
+			<matrix-retry value="Skúsiť znova"/>
+			<matrix-cancelled value="Zrušené"/>
+			<matrix-read-only value="Iba na čítanie"/>
+			<matrix-find-status-details value="Podrobnosti o stave"/>
+			<matrix-find-backward-unavailable value="Spätné vyhľadávanie regulárnych výrazov je vypnuté"/>
+			<matrix-hash-select-files value="Vybrať súbory"/>
+			<matrix-hash-calculating value="Výpočet odtlačku…"/>
+			<matrix-hash-selection-failed value="Výber súborov zlyhal: $ERROR$"/>
+			<matrix-hash-read-failed value="Nasledujúce súbory sa nedajú čítať:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Zavrieť chybové hlásenie"/>
+			<matrix-hash-file-paths value="Cesty k súborom (iba na čítanie)"/>
+			<matrix-hash-digest-result value="Výsledný odtlačok (iba na čítanie)"/>
+			<matrix-hash-source-text value="Zdrojový text odtlačku"/>
+			<matrix-hash-selection-composition value="Výpočet odtlačku výberu počas aktívneho skladania textu ešte nie je implementovaný"/>
+			<matrix-hash-selection-read-failed value="Výber sa nedá čítať: $ERROR$"/>
+			<matrix-window-activation-failed value="Nedá sa prepnúť na vybraný súbor"/>
+			<matrix-window-selection-unavailable value="Vybraný súbor je zatvorený alebo sa nedá aktivovať"/>
+			<matrix-incremental-position value="Presunúť panel prírastkového vyhľadávania"/>
+			<matrix-find-progress-bar value="Ukazovateľ priebehu"/>
+			<matrix-find-previous-search value="Zobraziť predchádzajúce vyhľadávanie"/>
+			<matrix-find-results-summary value="Výsledky vyhľadávania - (Počet výskytov: $INT_REPLACE$)"/>
+			<matrix-udl-allow-code2-close value="Povoliť koniec kódu 2"/>
+			<matrix-udl-allow-code2-middle value="Povoliť stred kódu 2"/>
+			<matrix-udl-allow-code2-open value="Povoliť začiatok kódu 2"/>
+			<matrix-udl-allow-comment-fold-close value="Povoliť koniec zbalenia komentára"/>
+			<matrix-udl-allow-comment-fold-middle value="Povoliť stred zbalenia komentára"/>
+			<matrix-udl-allow-comment-fold-open value="Povoliť začiatok zbalenia komentára"/>
+			<matrix-udl-choose-json value="Vybrať súbor JSON s definíciou UDL"/>
+			<matrix-udl-close value="Zavrieť vlastný jazyk"/>
+			<matrix-udl-close-styler value="Zavrieť nastavenie štýlu"/>
+			<matrix-udl-colors value="Farby"/>
+			<matrix-udl-dark-mode-language value="Jazyk pre tmavý režim"/>
+			<matrix-udl-definition-exported value="Definícia bola exportovaná"/>
+			<matrix-udl-definitions-saved value="Definície boli uložené"/>
+			<matrix-udl-enable-font value="Povoliť písmo"/>
+			<matrix-udl-error value="Chyba vlastného jazyka: $ERROR$"/>
+			<matrix-udl-file-failed value="Operácia so súborom UDL zlyhala: $ERROR$"/>
+			<matrix-udl-file-progress value="Prebieha operácia so súborom…"/>
+			<matrix-udl-import-rejected value="Import bol odmietnutý: $ERROR$"/>
+			<matrix-udl-imported value="Počet importovaných jazykov: $COUNT$"/>
+			<matrix-udl-live-edits value="Vlastný jazyk — zmeny sa priebežne prejavia iba v dokumentoch používajúcich tento jazyk"/>
+			<matrix-udl-loading value="Načítavajú sa definície…"/>
+			<matrix-udl-memory-only value="Definície sú iba v pamäti (chýba konfiguračný priečinok)"/>
+			<matrix-udl-missing-ids value="Chýbajú ID vlastných jazykov: $IDS$. Text dokumentov a uložené identity jazykov boli zachované. Obnovte definície alebo výslovne vyberte iný jazyk."/>
+			<matrix-udl-open-panel-disconnected value="Panel na otvorenie UDL bol odpojený: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Odstrániť túto pomenovanú definíciu? Existujúce dokumenty si zachovajú text a prepnú sa na nepomenovaný vlastný jazyk."/>
+			<matrix-udl-retry-file value="Zopakovať operáciu so súborom UDL"/>
+			<matrix-udl-save-panel-disconnected value="Panel na uloženie UDL bol odpojený: $ERROR$"/>
+			<matrix-udl-unavailable value="Definície nie sú dostupné; opravte udl.json a skúste znova."/>
+			<matrix-udl-use-background value="Použiť pozadie"/>
+			<matrix-udl-use-foreground value="Použiť popredie"/>
+			<matrix-udl-working-copy value="Vlastný jazyk (pracovná kópia)"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are a place holders, don't translate these place holders -->
 			<word-chars-list-tip value="Toto nastavenie vám umožní zahrnúť dodatočný znak medzi aktuálne znaky slova pri výbere dvojklikom alebo pri vyhľadávaní so zapnutou voľbou &quot;Hľadať iba celé slová&quot;."/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 

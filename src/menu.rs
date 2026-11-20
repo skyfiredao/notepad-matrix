@@ -410,6 +410,8 @@ pub fn source_command(id: u32) -> Option<(&'static str, &'static str, &'static s
         return Some((page.label, "", page.label));
     }
     Some(match id {
+        46300 => ("Open User Defined Language folder...", "", "language-open-udl-folder"),
+        46301 => ("Notepad++ User Defined Languages Collection", "", "language-udl-collection"),
         45004 => ("使用 ANSI 编码", "", "encoding-ansi"),
         45008 => ("使用 UTF-8 编码", "", "encoding-utf8"),
         45005 => ("使用 UTF-8-BOM 编码", "", "encoding-utf8-bom"),
@@ -759,6 +761,7 @@ impl MenuCommand {
             Self::View(ViewCommand::ProjectPanel(index @ 0..=2)) => Some(44081 + index as u32),
             Self::About => Some(47000),
             Self::Run => Some(49000),
+            Self::DefineUserLanguage => Some(46250),
             Self::Macro(command) => Some(match command {
                 crate::macros::MacroCommand::StartRecording => 42018,
                 crate::macros::MacroCommand::StopRecording => 42019,
@@ -1585,8 +1588,16 @@ impl Default for MenuBar {
                             crate::syntax::Language::Json,
                         ))],
                     },
-                    MenuEntry::Action(MenuCommand::DefineUserLanguage),
-                    MenuEntry::Separator,
+                    MenuEntry::Submenu {
+                        selector: "language-user-defined-language",
+                        label: "User Defined Language",
+                        mnemonic: 'u',
+                        entries: vec![
+                            MenuEntry::Action(MenuCommand::DefineUserLanguage),
+                            MenuEntry::Action(MenuCommand::Source(46300)),
+                            MenuEntry::Action(MenuCommand::Source(46301)),
+                        ],
+                    },
                     MenuEntry::DynamicAction {
                         command: MenuCommand::Language(crate::syntax::Language::UserDefined(0)),
                         label: "User-Defined".into(),
@@ -2109,7 +2120,7 @@ impl MenuBar {
         for entry in &menu.entries {
             if matches!(
                 entry,
-                MenuEntry::Action(MenuCommand::DefineUserLanguage)
+                MenuEntry::Submenu { selector: "language-user-defined-language", .. }
                     | MenuEntry::DynamicAction {
                         command: MenuCommand::Language(crate::syntax::Language::UserDefined(_)),
                         ..
@@ -2222,12 +2233,6 @@ impl MenuBar {
         if matches!(menu.entries.last(), Some(MenuEntry::Separator)) {
             menu.entries.pop();
         }
-        menu.entries.push(MenuEntry::Separator);
-        menu.entries.push(MenuEntry::DynamicAction {
-            command: MenuCommand::Language(crate::syntax::Language::UserDefined(0)),
-            label: "User-Defined".into(),
-            shortcut: String::new(),
-        });
         menu.entries.extend(
             languages
                 .into_iter()
@@ -2238,6 +2243,11 @@ impl MenuBar {
                     shortcut: String::new(),
                 }),
         );
+        menu.entries.push(MenuEntry::DynamicAction {
+            command: MenuCommand::Language(crate::syntax::Language::UserDefined(0)),
+            label: "User-Defined".into(),
+            shortcut: String::new(),
+        });
         self.revision = self.revision.wrapping_add(1);
         self.mode = MenuMode::Closed;
         self.configured_popup = None;

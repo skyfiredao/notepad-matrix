@@ -1,6 +1,23 @@
 use super::*;
 use crate::panel_layout::{DockSide, FloatBounds, PanelId, PanelLayout, Placement};
+use objc2_app_kit::{NSWindow, NSWindowStyleMask};
+use objc2_foundation::{NSPoint, NSRect, NSSize};
 use std::collections::{BTreeMap, BTreeSet};
+
+fn has_window_caption(id: PanelId) -> bool {
+    !matches!(id, PanelId::DocumentList | PanelId::DocumentMap | PanelId::Converter)
+}
+
+fn caption_content_size(width: f32, height: f32, mtm: MainThreadMarker) -> gpui::Size<gpui::Pixels> {
+    let rect = NSWindow::contentRectForFrameRect_styleMask(
+        NSRect::new(NSPoint::new(0., 0.), NSSize::new(f64::from(width), f64::from(height))),
+        NSWindowStyleMask::Titled | NSWindowStyleMask::Closable
+            | NSWindowStyleMask::Resizable | NSWindowStyleMask::Miniaturizable
+            | NSWindowStyleMask::FullSizeContentView,
+        mtm,
+    );
+    size(px(rect.size.width as f32), px(rect.size.height as f32))
+}
 
 #[derive(Default)]
 pub(super) struct PanelState {
@@ -20,6 +37,7 @@ pub(super) struct PanelWindow {
     owner: gpui::WeakEntity<MatrixWindow>,
     id: PanelId,
     focus: FocusHandle,
+    _window_size_indicator: Option<window_size_indicator::WindowSizeIndicator>,
     _changed: gpui::Subscription,
     _released: gpui::Subscription,
     _bounds_changed: gpui::Subscription,
@@ -32,9 +50,24 @@ impl PanelWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        window.set_window_title(&owner.read(cx).panel_title(id));
+        if has_window_caption(id)
+            && let Err(error) = window_caption::hide_native_buttons(window)
+        {
+            eprintln!("panel titlebar: {error}");
+        }
+        let window_size_indicator = match window_size_indicator::WindowSizeIndicator::new(window) {
+            Ok(indicator) => Some(indicator),
+            Err(error) => {
+                eprintln!("panel size indicator: {error}");
+                None
+            }
+        };
         let changed = cx.observe_in(&owner, window, move |_, owner, window, cx| {
-            let p = owner.read(cx).panels.layout.panel(id);
+            let view = owner.read(cx);
+            let p = view.panels.layout.panel(id);
             if p.visible && p.placement == Placement::Floating {
+                window.set_window_title(&view.panel_title(id));
                 cx.notify();
             } else {
                 window.remove_window();
@@ -68,7 +101,8 @@ impl PanelWindow {
                         x: f32::from(bounds.origin.x),
                         y: f32::from(bounds.origin.y),
                         width: f32::from(bounds.size.width),
-                        height: f32::from(bounds.size.height),
+                        height: f32::from(bounds.size.height)
+                            - if has_window_caption(id) { window_caption::HEIGHT } else { 0. },
                     },
                 );
                 if let Err(error) = result {
@@ -89,6 +123,7 @@ impl PanelWindow {
             owner: owner.downgrade(),
             id,
             focus,
+            _window_size_indicator: window_size_indicator,
             _changed: changed,
             _released: released,
             _bounds_changed: bounds_changed,
@@ -102,18 +137,58 @@ impl Render for PanelWindow {
             return div().size_full().bg(rgb(0x000000)).into_any_element();
         }
         let id = self.id;
-        let content = match self
+        let (content, title) = match self
             .owner
-            .update(cx, |owner, cx| owner.render_panel_frame(id, true, cx))
+            .update(cx, |owner, cx| (owner.render_panel_frame(id, true, cx), owner.panel_title(id)))
         {
-            Ok(content) => Some(content),
+            Ok((content, title)) => (Some(content), title),
             Err(error) => {
                 eprintln!("panel render lost its document: {error}");
                 window.remove_window();
-                None
+                (None, id.title().to_owned())
             }
         };
+        window.set_window_title(&title);
         let owner = self.owner.clone();
+        let caption = has_window_caption(id).then(|| {
+            let button = |button_id: &'static str, label: &'static str, icon: caption_icons::Icon, icon_id: &'static str| {
+                div().id(button_id).role(Role::Button).aria_label(label)
+                    .w(px(45.)).h(px(30.)).flex_shrink_0()
+                    .flex().items_center().justify_center()
+                    .hover(|style| style.bg(rgb(0x4b8ed0)))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .child(caption_icons::render(icon, icon_id, window_caption::FOREGROUND))
+            };
+            window_caption::frame()
+                .child(window_caption::title(title)
+                    .id("panel-window-title")
+                    .on_mouse_down(MouseButton::Left, cx.listener(|_, _, window, cx| {
+                        cx.stop_propagation();
+                        if matrix_surface::locked() { return; }
+                        window.start_window_move();
+                    })))
+                .child(button("panel-window-minimize", "Minimize", caption_icons::Icon::Minimize, "panel-window-minimize-icon")
+                    .on_click(|_, window, cx| {
+                        cx.stop_propagation();
+                        if !matrix_surface::locked() { window.minimize_window(); }
+                    }))
+                .child(button("panel-window-maximize", if window.is_maximized() { "Restore" } else { "Maximize" },
+                    if window.is_maximized() { caption_icons::Icon::Restore } else { caption_icons::Icon::Maximize },
+                    "panel-window-maximize-icon")
+                    .on_click(|_, window, cx| {
+                        cx.stop_propagation();
+                        if !matrix_surface::locked() { window.zoom_window(); }
+                    }))
+                .child(window_caption::close_button("panel-window-close", "panel-window-close-icon", "Close")
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        cx.stop_propagation();
+                        if matrix_surface::locked() { return; }
+                        if let Err(error) = view.owner.update(cx, |owner, cx| owner.hide_panel(id, window, cx)) {
+                            eprintln!("panel caption close lost its document: {error}");
+                        }
+                    })))
+        });
         div()
             .id("matrix-panel-window")
             .key_context("MatrixAuxiliary")
@@ -152,12 +227,24 @@ impl Render for PanelWindow {
                 window.remove_window();
                 cx.stop_propagation();
             }))
-            .children(content)
+            .children(caption)
+            .child(div().flex_1().min_h(px(0.)).min_w(px(0.)).overflow_hidden().children(content))
             .into_any_element()
     }
 }
 
 impl MatrixWindow {
+    pub(super) fn panel_title(&self, id: PanelId) -> String {
+        let locale = self.native_locale();
+        match id {
+            PanelId::DocumentList => crate::localization::dialog_name(&locale, "DocList/PanelTitle")
+                .unwrap_or("Document List").to_owned(),
+            PanelId::DocumentMap => crate::localization::dialog_name(&locale, "DocumentMap/PanelTitle")
+                .unwrap_or("Document Map").to_owned(),
+            _ => id.title().to_owned(),
+        }
+    }
+
     pub(super) fn capture_panel_layout(&self) -> serde_json::Value {
         let mut layout = self.panels.layout.clone();
         for id in PanelId::ALL {
@@ -405,20 +492,37 @@ impl MatrixWindow {
                     return;
                 }
                 let b = state.bounds;
+                let native_caption = has_window_caption(id);
+                let Some(mtm) = MainThreadMarker::new() else {
+                    owner.update(cx, |owner, cx| {
+                        owner.panels.opening.remove(&id);
+                        owner.panels.layout.redock(id);
+                        owner.notify_editor_error("Panel windows require the main thread".into(), cx);
+                    });
+                    return;
+                };
                 let options = WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(Bounds {
                         origin: gpui::point(px(b.x), px(b.y)),
                         size: if id == PanelId::Converter {
                             size(px(b.width).max(dialog_font::px(488.)), px(b.height).max(dialog_font::px(238.)))
+                        } else if native_caption {
+                            caption_content_size(b.width, b.height + window_caption::HEIGHT, mtm)
                         } else { size(px(b.width), px(b.height)) },
                     })),
-                    titlebar: (!matches!(id, PanelId::DocumentList | PanelId::DocumentMap | PanelId::Converter)).then(|| TitlebarOptions {
-                        title: Some(id.title().into()),
+                    titlebar: native_caption.then(|| TitlebarOptions {
+                        title: Some(owner.read(cx).panel_title(id).into()),
+                        appears_transparent: true,
                         ..Default::default()
                     }),
                     kind: gpui::WindowKind::Floating,
                     is_movable: true,
-                    window_min_size: Some(if id == PanelId::Converter { size(super::dialog_font::px(488.), super::dialog_font::px(238.)) } else { size(px(140.), px(100.)) }),
+                    app_owns_titlebar_drag: native_caption,
+                    window_min_size: Some(if id == PanelId::Converter {
+                        size(super::dialog_font::px(488.), super::dialog_font::px(238.))
+                    } else if native_caption {
+                        size(px(140.), px(100. + window_caption::HEIGHT))
+                    } else { size(px(140.), px(100.)) }),
                     ..Default::default()
                 };
                 let observed = owner.clone();
@@ -434,7 +538,7 @@ impl MatrixWindow {
                         Err(error) => {
                             owner.panels.layout.redock(id);
                             owner.notify_editor_error(
-                                format!("Could not float {}: {error}", id.title()),
+                                format!("Could not float {}: {error}", owner.panel_title(id)),
                                 cx,
                             );
                         }
@@ -491,6 +595,14 @@ impl MatrixWindow {
         }
         let p = self.panels.layout.panel(id);
         let dark = self.dark;
+        let title = self.panel_title(id);
+        let hide_label = if matches!(id, PanelId::DocumentList | PanelId::DocumentMap) {
+            crate::localization::localized_string(&self.native_locale(), "close-panel-tip")
+                .unwrap_or("Close").to_owned()
+        } else {
+            format!("Hide {}", id.title())
+        };
+        let hide_tooltip = hide_label.clone();
         let single_title = matches!(id, PanelId::DocumentList | PanelId::DocumentMap | PanelId::Converter);
         let content = match id {
             PanelId::Characters => self.render_character_panel(cx),
@@ -631,7 +743,7 @@ impl MatrixWindow {
                 div()
                     .id(format!("{}-caption", id.key()))
                     .role(Role::GenericContainer)
-                    .aria_label(id.title())
+                    .aria_label(title.clone())
                     .h(if single_title { dialog_font::px(18.) } else { px(23.) })
                     .flex_shrink_0()
                     .flex()
@@ -639,7 +751,7 @@ impl MatrixWindow {
                     .when(single_title, |caption| caption
                         .font_family(dialog_font::font_family())
                         .text_size(dialog_font::px(12.))
-                        .bg(rgb(if dark { 0x383838 } else { 0xf0f0f0 }))
+                        .when(!floating, |caption| caption.bg(rgb(if dark { 0x383838 } else { 0xf0f0f0 })))
                         .border_b_1().border_color(rgb(0x808080))
                         .on_mouse_down(MouseButton::Left, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| {
                             if matrix_surface::locked() {
@@ -657,7 +769,10 @@ impl MatrixWindow {
                             }
                             cx.stop_propagation();
                         }))
-                        .child(div().flex_1().min_w(px(0.)).px(dialog_font::px(2.)).overflow_hidden().whitespace_nowrap().child(id.title())))
+                        .child(div().flex_1().min_w(px(0.)).px(dialog_font::px(2.)).overflow_hidden().whitespace_nowrap().child(title)))
+                    .when(floating, |caption| caption
+                        .bg(rgb(window_caption::BACKGROUND))
+                        .text_color(rgb(window_caption::FOREGROUND)))
                     .children(controls)
                     .when(!single_title, |caption| caption.child(
                         div()
@@ -680,9 +795,9 @@ impl MatrixWindow {
                             .id(format!("{}-hide", id.key()))
                             .debug_selector(move || format!("{}-hide", id.key()))
                             .role(Role::Button)
-                            .aria_label(format!("Hide {}", id.title()))
+                            .aria_label(hide_label)
                             .tooltip(move |_, cx| {
-                                icon_tooltip::view(format!("Hide {}", id.title()), dark, cx)
+                                icon_tooltip::view(hide_tooltip.clone(), dark, cx)
                             })
                             .px(px(3.))
                             .when(single_title, |button| button

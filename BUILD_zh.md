@@ -34,11 +34,39 @@ xcrun --find swift
 python3 --version
 ```
 
-通过 [rustup.rs](https://rustup.rs/) 安装 rustup，然后安装项目工具链和目标：
+### 将构建文件集中到 workspace
+
+指定 workspace 的绝对路径。每次打开用于安装、构建或打包的终端，都先执行以下环境设置，再运行 Rust 命令：
 
 ```sh
-rustup toolchain install 1.98.1 --profile minimal
-rustup target add aarch64-apple-darwin --toolchain 1.98.1
+export WORKSPACE="$HOME/workspace/notepad-matrix-build"
+export CARGO_HOME="$WORKSPACE/cargo"
+export RUSTUP_HOME="$WORKSPACE/rustup"
+export CARGO_TARGET_DIR="$WORKSPACE/target"
+export TMPDIR="$WORKSPACE/tmp"
+export PATH="$CARGO_HOME/bin:$PATH"
+mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" "$CARGO_TARGET_DIR" "$TMPDIR" \
+  "$WORKSPACE/downloads" "$WORKSPACE/src"
+```
+
+| 目录 | 内容 |
+|---|---|
+| `$WORKSPACE/cargo` | Cargo 配置、命令代理、registry 下载和 Git 依赖。 |
+| `$WORKSPACE/rustup` | Rust 工具链、已安装目标和 rustup 配置。 |
+| `$WORKSPACE/target` | 编译产物、依赖编译结果和构建脚本输出。 |
+| `$WORKSPACE/tmp` | 遵循 `TMPDIR` 的工具产生的临时文件。 |
+| `$WORKSPACE/downloads` | rustup 安装脚本。 |
+| `$WORKSPACE/src` | 源码仓库。 |
+| `$WORKSPACE/dist` | 下文命令生成的应用包和 DMG。 |
+
+这些变量仅作用于当前终端及其子进程，不会移动或删除已有的 `~/.cargo`、`~/.rustup`。Xcode、SDK 和 Apple 工具独立管理的缓存不属于该目录布局。参考 [rustup 安装路径](https://rust-lang.github.io/rustup/installation/index.html#choosing-where-to-install)和 [Cargo 环境变量](https://doc.rust-lang.org/cargo/reference/environment-variables.html)。
+
+首次使用这个 workspace 时，安装 rustup，不修改 shell 启动配置，然后安装项目工具链和目标：
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSLo "$WORKSPACE/downloads/rustup-init.sh" https://sh.rustup.rs
+sh "$WORKSPACE/downloads/rustup-init.sh" -y --no-modify-path --default-toolchain none
+rustup toolchain install 1.98.1 --profile minimal --target aarch64-apple-darwin
 ```
 
 ### 源码目录
@@ -46,7 +74,8 @@ rustup target add aarch64-apple-darwin --toolchain 1.98.1
 从[官方项目仓库](https://github.com/skyfiredao/notepad-matrix)获取源码：
 
 ```sh
-git clone https://github.com/skyfiredao/notepad-matrix.git
+git clone https://github.com/skyfiredao/notepad-matrix.git "$WORKSPACE/src/notepad-matrix"
+cd "$WORKSPACE/src/notepad-matrix"
 ```
 
 进入同时包含 `Cargo.toml`、`Cargo.lock`、`rust-toolchain.toml`、`src/` 和 `assets/` 的项目目录。下文命令均从该目录执行。
@@ -55,6 +84,8 @@ git clone https://github.com/skyfiredao/notepad-matrix.git
 rustc --version
 cargo --version
 rustup show active-toolchain
+rustup show home
+command -v cargo
 ```
 
 构建使用仓库中的 `Cargo.lock` 和内嵌资源。
@@ -71,19 +102,19 @@ cargo fetch --locked
 cargo build --locked --release --target aarch64-apple-darwin
 ```
 
-默认产物：
+使用上述 workspace 环境时，产物位于：
 
 ```text
-target/aarch64-apple-darwin/release/notepad-matrix
+$WORKSPACE/target/aarch64-apple-darwin/release/notepad-matrix
 ```
 
 检查产物架构：
 
 ```sh
-file target/aarch64-apple-darwin/release/notepad-matrix
+file "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix"
 ```
 
-应显示 ARM64 Mach-O 可执行文件。若设置了 `CARGO_TARGET_DIR`，后续所有二进制路径也应改为对应输出目录。
+应显示 ARM64 Mach-O 可执行文件。后续命令沿用同一个 `CARGO_TARGET_DIR`。
 
 调试构建：
 
@@ -91,21 +122,21 @@ file target/aarch64-apple-darwin/release/notepad-matrix
 cargo build --locked --target aarch64-apple-darwin
 ```
 
-调试产物位于 `target/aarch64-apple-darwin/debug/`。发布构建使用 `opt-level=3`，见[发布配置](DESIGN_zh.md#7-按需解析资源)。
+调试产物位于 `$CARGO_TARGET_DIR/aarch64-apple-darwin/debug/`。发布构建使用 `opt-level=3`，见[发布配置](DESIGN_zh.md#7-按需解析资源)。
 
 ## 3. 本机运行
 
 启动编辑器或打开文件：
 
 ```sh
-./target/aarch64-apple-darwin/release/notepad-matrix
-./target/aarch64-apple-darwin/release/notepad-matrix ./notes.txt
+"$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix"
+"$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" ./notes.txt
 ```
 
 需要独立实例，并跳过本次自动会话时：
 
 ```sh
-./target/aarch64-apple-darwin/release/notepad-matrix -multiInst -nosession ./notes.txt
+"$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" -multiInst -nosession ./notes.txt
 ```
 
 见[命令行用法](README_zh.md#命令行用法)。
@@ -117,8 +148,8 @@ cargo build --locked --target aarch64-apple-darwin
 ```sh
 export MACOSX_DEPLOYMENT_TARGET=26.0
 python3 scripts/package-macos.py \
-  --binary target/aarch64-apple-darwin/release/notepad-matrix \
-  --output dist/macos-arm64
+  --binary "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" \
+  --output "$WORKSPACE/dist/macos-arm64"
 ```
 
 使用新建或空的输出目录。
@@ -126,8 +157,8 @@ python3 scripts/package-macos.py \
 生成：
 
 ```text
-dist/macos-arm64/notepad-matrix.app
-dist/macos-arm64/notepad-matrix.dmg
+$WORKSPACE/dist/macos-arm64/notepad-matrix.app
+$WORKSPACE/dist/macos-arm64/notepad-matrix.dmg
 ```
 
 脚本执行这些步骤：
@@ -141,8 +172,8 @@ dist/macos-arm64/notepad-matrix.dmg
 检查签名并启动应用：
 
 ```sh
-codesign --verify --deep --strict --verbose=2 dist/macos-arm64/notepad-matrix.app
-open dist/macos-arm64/notepad-matrix.app
+codesign --verify --deep --strict --verbose=2 "$WORKSPACE/dist/macos-arm64/notepad-matrix.app"
+open "$WORKSPACE/dist/macos-arm64/notepad-matrix.app"
 ```
 
 ### 可选的 App Sandbox 开发包
@@ -151,13 +182,13 @@ open dist/macos-arm64/notepad-matrix.app
 
 ```sh
 python3 scripts/package-macos.py \
-  --binary target/aarch64-apple-darwin/release/notepad-matrix \
+  --binary "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" \
   --sandbox --sign-identity - \
-  --output dist/macos-arm64-sandbox
-codesign --display --entitlements :- dist/macos-arm64-sandbox/notepad-matrix.app
+  --output "$WORKSPACE/dist/macos-arm64-sandbox"
+codesign --display --entitlements :- "$WORKSPACE/dist/macos-arm64-sandbox/notepad-matrix.app"
 ```
 
-普通包默认输出到 `dist/`，沙盒包默认输出到 `dist-sandbox/`。`--sign-identity 'Apple Development: …'` 选择已安装的签名身份。
+不指定 `--output` 时，脚本默认写入项目目录中的 `dist/` 或 `dist-sandbox/`。上述示例显式指定 `--output`，将包留在 workspace 内。`--sign-identity 'Apple Development: …'` 选择已安装的签名身份。
 
 沙盒默认启用 `com.apple.security.app-sandbox`、`com.apple.security.files.user-selected.read-write` 和 `com.apple.security.print`。`--entitlements /absolute/path/custom.plist` 配合 `--sandbox` 合并自定义条目；三个基础项保持 `true`。
 
@@ -207,6 +238,7 @@ open "$HOME/Applications/notepad-matrix.app"
 | 问题 | 检查与处理 |
 |---|---|
 | Rust 版本不符 | 确认位于项目目录，检查 `rustup show active-toolchain`，安装 `rust-toolchain.toml` 指定版本。 |
+| Rust 文件出现在 workspace 外 | 在安装、下载、编译或打包的同一终端重新执行 workspace 环境设置。检查 `rustup show home` 是否为 `$RUSTUP_HOME`，`command -v cargo` 是否为 `$CARGO_HOME/bin/cargo`。 |
 | 找不到 SDK、Clang 或 Swift | 检查 `xcode-select -p` 与上述 `xcrun` 命令，完成 Apple 开发工具安装和初始化。 |
 | Cargo 下载失败 | 检查网络和 Cargo registry 配置，先完成 `cargo fetch --locked` 再使用 `--offline`。 |
 | 非 macOS 环境运行失败 | 在 Mac 上构建和运行图形应用。 |

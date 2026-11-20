@@ -1467,6 +1467,61 @@ The comments are here for explanation, it's not necessary to translate them.
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Змяніць памер вынікаў пошуку"/>
+			<discover-file-candidates-title value="Пошук магчымых файлаў…"/>
+			<matrix-close value="Закрыць"/>
+			<matrix-retry value="Паўтарыць"/>
+			<matrix-cancelled value="Скасавана"/>
+			<matrix-read-only value="Толькі для чытання"/>
+			<matrix-find-status-details value="Звесткі пра стан"/>
+			<matrix-find-backward-unavailable value="Пошук рэгулярных выразаў у адваротным напрамку адключаны"/>
+			<matrix-hash-select-files value="Выбраць файлы"/>
+			<matrix-hash-calculating value="Вылічэнне хэша…"/>
+			<matrix-hash-selection-failed value="Не ўдалося выбраць файлы: $ERROR$"/>
+			<matrix-hash-read-failed value="Немагчыма прачытаць наступныя файлы:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Закрыць паведамленне пра памылку"/>
+			<matrix-hash-file-paths value="Шляхі да файлаў (толькі для чытання)"/>
+			<matrix-hash-digest-result value="Выніковы хэш (толькі для чытання)"/>
+			<matrix-hash-source-text value="Зыходны тэкст для хэшавання"/>
+			<matrix-hash-selection-composition value="Хэшаванне выбранага тэксту падчас актыўнага складання тэксту пакуль не рэалізавана"/>
+			<matrix-hash-selection-read-failed value="Немагчыма прачытаць выбраны тэкст: $ERROR$"/>
+			<matrix-window-activation-failed value="Немагчыма пераключыцца на выбраны файл"/>
+			<matrix-window-selection-unavailable value="Выбраны файл закрыты або яго немагчыма актываваць"/>
+			<matrix-incremental-position value="Перамясціць панэль пакрокавага пошуку"/>
+			<matrix-find-progress-bar value="Індыкатар выканання"/>
+			<matrix-find-previous-search value="Паказаць папярэдні пошук"/>
+			<matrix-find-results-summary value="Вынікі пошуку - ($INT_REPLACE$ супадзенняў)"/>
+			<matrix-udl-allow-code2-close value="Дазволіць канец кода 2"/>
+			<matrix-udl-allow-code2-middle value="Дазволіць сярэдзіну кода 2"/>
+			<matrix-udl-allow-code2-open value="Дазволіць пачатак кода 2"/>
+			<matrix-udl-allow-comment-fold-close value="Дазволіць канец згортвання каментарыя"/>
+			<matrix-udl-allow-comment-fold-middle value="Дазволіць сярэдзіну згортвання каментарыя"/>
+			<matrix-udl-allow-comment-fold-open value="Дазволіць пачатак згортвання каментарыя"/>
+			<matrix-udl-choose-json value="Выбраць файл JSON з азначэннем UDL"/>
+			<matrix-udl-close value="Закрыць мову, вызначаную карыстальнікам"/>
+			<matrix-udl-close-styler value="Закрыць налады стылю"/>
+			<matrix-udl-colors value="Колеры"/>
+			<matrix-udl-dark-mode-language value="Мова для цёмнага рэжыму"/>
+			<matrix-udl-definition-exported value="Азначэнне экспартавана"/>
+			<matrix-udl-definitions-saved value="Азначэнні захаваны"/>
+			<matrix-udl-enable-font value="Уключыць шрыфт"/>
+			<matrix-udl-error value="Памылка мовы, вызначанай карыстальнікам: $ERROR$"/>
+			<matrix-udl-file-failed value="Збой аперацыі з файлам UDL: $ERROR$"/>
+			<matrix-udl-file-progress value="Выконваецца аперацыя з файлам…"/>
+			<matrix-udl-import-rejected value="Імпарт адхілены: $ERROR$"/>
+			<matrix-udl-imported value="Імпартавана моў: $COUNT$"/>
+			<matrix-udl-live-edits value="Мова, вызначаная карыстальнікам — змены адразу ўжываюцца толькі да дакументаў, якія выкарыстоўваюць гэту мову"/>
+			<matrix-udl-loading value="Загрузка азначэнняў…"/>
+			<matrix-udl-memory-only value="Азначэнні толькі ў памяці (няма каталога канфігурацыі)"/>
+			<matrix-udl-missing-ids value="Адсутнічаюць ID моў, вызначаных карыстальнікам: $IDS$. Тэкст дакументаў і захаваныя ідэнтычнасці моў пакінуты без змен. Аднавіце азначэнні або яўна выберыце іншую мову."/>
+			<matrix-udl-open-panel-disconnected value="Панэль адкрыцця UDL адключана: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Выдаліць гэтае найменнае азначэнне? Існыя дакументы захаваюць тэкст і пяройдуць на безназоўную мову, вызначаную карыстальнікам."/>
+			<matrix-udl-retry-file value="Паўтарыць аперацыю з файлам UDL"/>
+			<matrix-udl-save-panel-disconnected value="Панэль захавання UDL адключана: $ERROR$"/>
+			<matrix-udl-unavailable value="Азначэнні недаступныя; выпраўце udl.json і паўтарыце спробу."/>
+			<matrix-udl-use-background value="Выкарыстоўваць фон"/>
+			<matrix-udl-use-foreground value="Выкарыстоўваць асноўны колер"/>
+			<matrix-udl-working-copy value="Вызначана карыстальнікам (працоўная копія)"/>
 			<!-- $INT_REPLACE$  and $STR_REPLACE$ are a place holders, don't translate these place holders -->
 			<word-chars-list-tip value="Гэта дазваляе вам уключаць дадатковы сімвал у бягучыя сімвалы слова пры падвоеным націску для выбару або пошуку з дапамогай параметра &quot;Толькі цэлае слова&quot;."/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 

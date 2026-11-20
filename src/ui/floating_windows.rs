@@ -23,6 +23,7 @@ pub(super) enum DialogKind {
     MacroRepeat,
     Udl,
     UdlStyler,
+    UdlName,
     ColumnEditor,
     DocumentSwitcher,
     Completion,
@@ -37,7 +38,7 @@ pub(super) enum DialogKind {
 }
 
 impl DialogKind {
-    const ALL: [Self; 36] = [
+    const ALL: [Self; 37] = [
         Self::Find,
         Self::FindSwap,
         Self::FindInResults,
@@ -63,6 +64,7 @@ impl DialogKind {
         Self::MacroRepeat,
         Self::Udl,
         Self::UdlStyler,
+        Self::UdlName,
         Self::ColumnEditor,
         Self::DocumentSwitcher,
         Self::Completion,
@@ -95,8 +97,9 @@ impl DialogKind {
             Self::MarkdownPreview => owner.markdown_preview.visible,
             Self::MacroSave => owner.macro_dialogs.save_visible,
             Self::MacroRepeat => owner.macro_dialogs.repeat_visible,
-            Self::Udl => owner.udl.visible,
+            Self::Udl => owner.udl.visible && !owner.udl.docked,
             Self::UdlStyler => owner.udl.styler_visible,
+            Self::UdlName => owner.udl_name_visible(),
             Self::ColumnEditor => owner.column_editor.visible,
             Self::DocumentSwitcher => owner.document_switcher_visible(),
             Self::Completion => owner.completion_visible(),
@@ -111,13 +114,52 @@ impl DialogKind {
         }
     }
 
-    fn title(self, owner: &MatrixWindow) -> &'static str {
+    fn translation_path(self) -> &'static str {
         match self {
-            Self::Find if owner.files_search.visible && owner.find_project_mode => "项目中查找",
-            Self::Find if owner.files_search.visible => "文件中查找",
-            Self::Find if owner.find_mark_mode => "标记",
-            Self::Find if owner.find_replace_mode => "替换",
-            Self::Find => "查找",
+            Self::Find | Self::FindSwap => "Find",
+            Self::FindInResults => "FindInFinder",
+            Self::GoTo => "GoToLine",
+            Self::CharacterRange => "FindCharsInRange",
+            Self::Preferences => "Preference",
+            Self::StyleConfigurator => "StyleConfig",
+            Self::ShortcutMapper => "ShortcutMapper",
+            Self::Help => "DebugInfo",
+            Self::HashText(HashAlgorithm::Md5) => "MD5FromTextDlg",
+            Self::HashText(HashAlgorithm::Sha1) => "SHA1FromTextDlg",
+            Self::HashText(HashAlgorithm::Sha256) => "SHA256FromTextDlg",
+            Self::HashText(HashAlgorithm::Sha512) => "SHA512FromTextDlg",
+            Self::HashFiles(HashAlgorithm::Md5) => "MD5FromFilesDlg",
+            Self::HashFiles(HashAlgorithm::Sha1) => "SHA1FromFilesDlg",
+            Self::HashFiles(HashAlgorithm::Sha256) => "SHA256FromFilesDlg",
+            Self::HashFiles(HashAlgorithm::Sha512) => "SHA512FromFilesDlg",
+            Self::WindowManager => "Window",
+            Self::MacroSave | Self::RunSave => "ShortcutMapperSubDialg",
+            Self::MacroRepeat => "MultiMacro",
+            Self::Udl => "UserDefine",
+            Self::UdlStyler => "UserDefine/StylerDialog",
+            Self::UdlName => "UserDefine",
+            Self::ColumnEditor => "ColumnEditor",
+            Self::Run => "Run",
+            Self::Close => "DoSaveOrNot",
+            Self::SaveAll => "DoSaveAll",
+            Self::Reload => "DoReloadOrNot",
+            _ => "",
+        }
+    }
+
+    fn title(self, owner: &MatrixWindow) -> &'static str {
+        if self == Self::Find { return owner.find_dialog_title(); }
+        if self == Self::UdlName { return owner.udl_name_title(); }
+        if self == Self::Reload {
+            return crate::localization::dialog_title(&owner.native_locale(),
+                if owner.workspace.active().is_modified() { "DoReloadOrNotAndLooseChange" } else { "DoReloadOrNot" }).unwrap_or("Reload");
+        }
+        if self != Self::Help && let Some(title) = crate::localization::dialog_title(&owner.native_locale(), self.translation_path())
+            .filter(|title| !title.is_empty()) {
+            return title;
+        }
+        match self {
+            Self::Find => "Find",
             Self::FindSwap => "",
             Self::FindInResults => "Find in search results",
             Self::FindInResultsProgress => owner.find_in_results_progress_title(),
@@ -136,6 +178,7 @@ impl DialogKind {
             Self::MacroRepeat => "Run a Macro Multiple Times",
             Self::Udl => "User Defined Language",
             Self::UdlStyler => "UDL Styler",
+            Self::UdlName => owner.udl_name_title(),
             Self::ColumnEditor => "列编辑器",
             Self::DocumentSwitcher => "Document switcher",
             Self::Completion => "Completion",
@@ -144,7 +187,7 @@ impl DialogKind {
             Self::Run => "运行...",
             Self::RunVariables => "",
             Self::RunSave => "快捷键",
-            Self::Close => "Save changes?",
+            Self::Close => crate::localization::dialog_title(&owner.native_locale(), "DoSaveOrNot").unwrap_or("Save"),
             Self::SaveAll => "Save all?",
             Self::Reload => "Reload?",
         }
@@ -154,8 +197,8 @@ impl DialogKind {
         if self == Self::WindowManager { owner.window_manager_title() } else { self.title(owner).to_owned() }
     }
 
-    fn dimensions(self, window: &Window) -> gpui::Size<gpui::Pixels> {
-        match self {
+    fn dimensions(self, owner: &MatrixWindow, window: &Window) -> gpui::Size<gpui::Pixels> {
+        let client = match self {
             Self::Find => size(
                 px(find_surface::DIALOG_WIDTH),
                 px(find_surface::DIALOG_HEIGHT),
@@ -175,8 +218,9 @@ impl DialogKind {
             Self::MarkdownPreview => size(gpui::px(700.), gpui::px(560.)),
             Self::MacroSave => size(px(420.), px(200.)),
             Self::MacroRepeat => size(px(480.), px(360.)),
-            Self::Udl => size(px(780.), px(600.)),
-            Self::UdlStyler => size(px(560.), px(500.)),
+            Self::Udl => size(px(udl_surface::WIDTH), px(udl_surface::HEIGHT)),
+            Self::UdlStyler => size(px(486.), px(457.5)),
+            Self::UdlName => size(px(udl_surface::NAME_WIDTH), px(udl_surface::NAME_HEIGHT)),
             Self::ColumnEditor => column_editor_surface::dialog_dimensions(window),
             Self::DocumentSwitcher => size(gpui::px(380. * dialog_font::switcher_scale()), gpui::px(320. * dialog_font::switcher_scale())),
             Self::Completion => size(gpui::px(360.), gpui::px(240.)),
@@ -185,8 +229,10 @@ impl DialogKind {
             Self::Run => run_surface::dimensions(),
             Self::RunVariables => run_surface::variables_dimensions(),
             Self::RunSave => run_surface::save_dimensions(),
-            Self::Close | Self::SaveAll | Self::Reload => size(px(480.), px(220.)),
-        }
+            Self::Close => owner.close_dialog_dimensions(window),
+            Self::SaveAll | Self::Reload => size(px(480.), px(220.)),
+        };
+        size(client.width, client.height + if self.borderless_popup() { gpui::px(0.) } else { gpui::px(window_caption::HEIGHT) })
     }
 
     fn confirmation(self) -> bool {
@@ -209,7 +255,7 @@ impl DialogKind {
             }
             Self::GoTo => owner.goto_visible = false,
             Self::CharacterRange => owner.character_range.visible = false,
-            Self::Preferences => owner.preferences_visible = false,
+            Self::Preferences => { owner.preferences_visible = false; owner.config_directory.close(); },
             Self::StyleConfigurator => owner.style_config.visible = false,
             Self::ShortcutMapper => owner.shortcut_mapper.visible = false,
             Self::About => owner.matrix_about_closed(cx),
@@ -221,10 +267,12 @@ impl DialogKind {
             Self::MacroSave => owner.macro_dialogs.save_visible = false,
             Self::MacroRepeat => owner.macro_dialogs.repeat_visible = false,
             Self::Udl => {
+                owner.finish_udl_styler(false, cx);
+                owner.dismiss_udl_name(cx);
                 owner.udl.visible = false;
-                owner.udl.styler_visible = false;
             }
-            Self::UdlStyler => owner.udl.styler_visible = false,
+            Self::UdlStyler => owner.finish_udl_styler(false, cx),
+            Self::UdlName => owner.dismiss_udl_name(cx),
             Self::ColumnEditor => owner.dismiss_column_editor(cx),
             Self::DocumentSwitcher => owner.dismiss_document_switcher(cx),
             Self::Completion => owner.dismiss_completion(cx),
@@ -243,6 +291,7 @@ pub(super) struct FloatingWindow {
     kind: DialogKind,
     _changed: gpui::Subscription,
     _released: gpui::Subscription,
+    _window_size_indicator: Option<window_size_indicator::WindowSizeIndicator>,
 }
 
 impl FloatingWindow {
@@ -257,6 +306,18 @@ impl FloatingWindow {
         cx: &mut Context<Self>,
     ) -> Self {
         window.set_window_title(&kind.window_title(owner.read(cx)));
+        let window_size_indicator = if !kind.borderless_popup() {
+            if let Err(error) = window_caption::hide_native_buttons(window) {
+                eprintln!("could not hide auxiliary native caption buttons: {error}");
+            }
+            match window_size_indicator::WindowSizeIndicator::new(window) {
+                Ok(indicator) => Some(indicator),
+                Err(error) => {
+                    eprintln!("could not install auxiliary size indicator: {error}");
+                    None
+                }
+            }
+        } else { None };
         if kind.borderless_popup()
             && let Ok(handle) = HasWindowHandle::window_handle(window)
             && let RawWindowHandle::AppKit(handle) = handle.as_raw()
@@ -270,6 +331,14 @@ impl FloatingWindow {
             let view = owner.read(cx);
             if kind.visible(view) {
                 window.set_window_title(&kind.window_title(view));
+                if kind == DialogKind::Close {
+                    let dimensions = kind.dimensions(view, window);
+                    if (f32::from(window.viewport_size().width - dimensions.width)).abs() > 1.
+                        || (f32::from(window.viewport_size().height - dimensions.height)).abs() > 1.
+                    {
+                        window.resize(dimensions);
+                    }
+                }
                 cx.notify();
             } else {
                 window.remove_window();
@@ -338,6 +407,7 @@ impl FloatingWindow {
             kind,
             _changed: changed,
             _released: released,
+            _window_size_indicator: window_size_indicator,
         }
     }
 
@@ -368,7 +438,14 @@ impl Render for FloatingWindow {
         {
             owner.read(cx).update_find_window(window);
         }
-        let content = self.owner.update(cx, |owner, cx| match kind {
+        if kind == DialogKind::Udl
+            && let Some(owner) = self.owner.upgrade()
+        {
+            owner.read(cx).update_udl_window(window);
+        }
+        let content = self.owner.update(cx, |owner, cx| {
+            let locale = owner.native_locale();
+            crate::localization::with_dialog(&locale, kind.translation_path(), || match kind {
             DialogKind::Find if owner.files_search.visible => owner.render_find_in_files(cx),
             DialogKind::Find => owner.render_find(cx),
             DialogKind::FindSwap => owner.render_find_swap_menu(cx),
@@ -389,6 +466,7 @@ impl Render for FloatingWindow {
             DialogKind::MacroRepeat => owner.render_repeat_macro(cx),
             DialogKind::Udl => owner.render_udl(window, cx),
             DialogKind::UdlStyler => owner.render_udl_styler(window, cx),
+            DialogKind::UdlName => owner.render_udl_name(window, cx),
             DialogKind::ColumnEditor => owner.render_column_editor(window, cx),
             DialogKind::DocumentSwitcher => owner.render_document_switcher(cx),
             DialogKind::Completion => owner.render_completion(cx),
@@ -397,9 +475,10 @@ impl Render for FloatingWindow {
             DialogKind::Run => owner.render_run(window, cx),
             DialogKind::RunVariables => owner.render_run_variables(cx),
             DialogKind::RunSave => owner.render_run_save(window, cx),
-            DialogKind::Close => owner.render_close_dialog(cx),
+            DialogKind::Close => owner.render_close_dialog(window, cx),
             DialogKind::SaveAll => owner.render_save_all_dialog(cx),
             DialogKind::Reload => owner.render_reload_dialog(cx),
+            })
         });
         let content = match content {
             Ok(content) => content,
@@ -409,13 +488,55 @@ impl Render for FloatingWindow {
                 None
             }
         };
+        let caption = (!kind.borderless_popup()).then(|| {
+            let title = self.owner.upgrade().map(|owner| kind.window_title(owner.read(cx))).unwrap_or_default();
+            let (close_id, icon_id) = if kind == DialogKind::Close {
+                ("confirmation-caption-close", "confirmation-close-icon")
+            } else {
+                ("auxiliary-caption-close", "auxiliary-close-icon")
+            };
+            window_caption::frame()
+                .child(window_caption::title(title).on_mouse_down(MouseButton::Left, cx.listener(|_, _, window, cx| {
+                    cx.stop_propagation();
+                    window.start_window_move();
+                })))
+                .when(matches!(kind, DialogKind::MarkdownPreview | DialogKind::WindowManager), |caption| {
+                    let maximized = window.is_maximized();
+                    caption.child(div().id("auxiliary-caption-maximize").role(Role::Button)
+                        .aria_label(if maximized { "Restore" } else { "Maximize" })
+                        .w(gpui::px(45.)).h(gpui::px(30.)).flex_shrink_0().flex().items_center().justify_center()
+                        .hover(|style| style.bg(rgb(0x5596d7)))
+                        .child(caption_icons::render(if maximized { caption_icons::Icon::Restore } else { caption_icons::Icon::Maximize }, "auxiliary-maximize-icon", window_caption::FOREGROUND))
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            cx.stop_propagation();
+                            if !matrix_surface::locked() { window.zoom_window(); }
+                        })))
+                })
+                .child(window_caption::close_button(close_id, icon_id, "Close")
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        cx.stop_propagation();
+                        if matrix_surface::locked() && kind != DialogKind::About { return; }
+                        if let Err(error) = view.owner.update(cx, |owner, cx| {
+                            if kind == DialogKind::Close { owner.cancel_close(window, cx); }
+                            else { owner.dismiss_floating(kind, window, cx); }
+                        }) {
+                            eprintln!("auxiliary caption close lost its document: {error}");
+                            window.remove_window();
+                        }
+                    })))
+        });
+        let content = content.map(|content| {
+            div().id("matrix-auxiliary-body").relative().flex_1().min_h(gpui::px(0.)).w_full()
+                .when(matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator | DialogKind::About | DialogKind::Close), |body| body.overflow_hidden())
+                .when(!matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator | DialogKind::About | DialogKind::Close), |body| body.overflow_y_scroll())
+                .child(content).into_any_element()
+        });
         div()
             .id("matrix-auxiliary-window")
             .key_context("MatrixAuxiliary")
             .tab_group()
             .size_full()
-            .when(matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator | DialogKind::About), |window| window.overflow_hidden())
-            .when(!matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator | DialogKind::About), |window| window.overflow_y_scroll())
+            .flex().flex_col()
             .bg(rgb(0xf0f0f0))
             .text_color(rgb(0x202020))
             .font_family("Helvetica")
@@ -618,12 +739,22 @@ impl Render for FloatingWindow {
                 });
                 cx.stop_propagation();
             }))
+            .children(caption)
             .children(content)
             .into_any_element()
     }
 }
 
 impl MatrixWindow {
+    pub(super) fn auxiliary_client_size(&self, window: &Window) -> gpui::Size<gpui::Pixels> {
+        let viewport = window.viewport_size();
+        if Window::window_handle(window) == self.document_window {
+            viewport
+        } else {
+            size(viewport.width, (viewport.height - gpui::px(window_caption::HEIGHT)).max(gpui::px(0.)))
+        }
+    }
+
     pub(super) fn route_to_document(
         &self,
         window: &Window,
@@ -747,6 +878,7 @@ impl MatrixWindow {
                     return;
                 }
                 self.preferences_visible = false;
+                self.config_directory.close();
             }
             DialogKind::StyleConfigurator => {
                 if self.style_config.visible { self.close_style_configurator(window, cx); return; }
@@ -766,10 +898,12 @@ impl MatrixWindow {
                 self.macro_dialogs.repeat_visible = false;
             }
             DialogKind::Udl => {
+                self.finish_udl_styler(false, cx);
+                self.dismiss_udl_name(cx);
                 self.udl.visible = false;
-                self.udl.styler_visible = false;
             }
-            DialogKind::UdlStyler => self.udl.styler_visible = false,
+            DialogKind::UdlStyler => self.finish_udl_styler(false, cx),
+            DialogKind::UdlName => self.dismiss_udl_name(cx),
             DialogKind::ColumnEditor => self.dismiss_column_editor(cx),
             DialogKind::DocumentSwitcher => self.dismiss_document_switcher(cx),
             DialogKind::Completion => self.dismiss_completion(cx),
@@ -853,6 +987,7 @@ impl MatrixWindow {
             DialogKind::RunSave => Some(self.run_save_input()),
             DialogKind::MacroSave => Some(self.macro_dialogs.name_input.clone()),
             DialogKind::MacroRepeat => Some(self.macro_dialogs.count_input.clone()),
+            DialogKind::UdlName => Some(self.udl_name_input()),
             _ => None,
         };
         let focus = match kind {
@@ -918,9 +1053,9 @@ impl MatrixWindow {
             let mut bounds = Bounds::centered(
                 window.display(cx).map(|display| display.id()),
                 if kind == DialogKind::Find && self.find_controls.compact {
-                    size(px(find_surface::DIALOG_WIDTH), px(find_surface::COMPACT_DIALOG_HEIGHT))
+                    size(px(find_surface::DIALOG_WIDTH), px(find_surface::COMPACT_DIALOG_HEIGHT) + gpui::px(window_caption::HEIGHT))
                 } else {
-                    kind.dimensions(window)
+                    kind.dimensions(self, window)
                 },
                 cx,
             );
@@ -940,6 +1075,9 @@ impl MatrixWindow {
                     continue;
                 };
                 bounds = positioned;
+                if !kind.borderless_popup() {
+                    bounds.size.height += gpui::px(window_caption::HEIGHT);
+                }
                 if kind != DialogKind::FindSwap && let Some(display) = window.display(cx) {
                     let area = display.visible_bounds();
                     bounds.size.width = bounds.size.width.min(area.size.width);
@@ -956,18 +1094,37 @@ impl MatrixWindow {
                         .min(area.bottom() - bounds.size.height);
                 }
             }
+            let resizable = matches!(kind, DialogKind::MarkdownPreview | DialogKind::WindowManager);
+            let minimum = if kind == DialogKind::WindowManager {
+                let client = window_manager_surface::minimum_dimensions();
+                size(client.width, client.height + gpui::px(window_caption::HEIGHT))
+            } else { bounds.size };
+            let content = if kind.borderless_popup() { Ok(bounds.size) } else {
+                window_caption::content_size_for_frame(window, bounds.size, resizable, false)
+            };
+            let content = match content {
+                Ok(content) => content,
+                Err(error) => {
+                    self.floating_opening.remove(&kind);
+                    self.notify_editor_error(format!("无法计算弹窗尺寸：{error}"), cx);
+                    continue;
+                }
+            };
+            bounds.size = content;
             let options = gpui::WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 focus: !matches!(kind, DialogKind::Completion | DialogKind::Calltip),
                 kind: if kind.borderless_popup() { gpui::WindowKind::PopUp } else { gpui::WindowKind::Floating },
                 titlebar: (!kind.borderless_popup()).then(|| TitlebarOptions {
                     title: Some(kind.window_title(self).into()),
+                    appears_transparent: true,
                     ..Default::default()
                 }),
+                app_owns_titlebar_drag: !kind.borderless_popup(),
                 is_movable: !kind.borderless_popup(),
                 is_minimizable: false,
-                is_resizable: matches!(kind, DialogKind::MarkdownPreview | DialogKind::WindowManager),
-                window_min_size: Some(if kind == DialogKind::WindowManager { window_manager_surface::minimum_dimensions() } else { bounds.size }),
+                is_resizable: resizable,
+                window_min_size: Some(minimum),
                 ..Default::default()
             };
             let weak = cx.weak_entity();

@@ -1959,6 +1959,60 @@ Om du väljer avancerat läge men inte redigerar filer i de omfattande språken 
 			<networkpathwarning-serverwhitelist-tip value="Lägger till servern för den aktuella filen i Notepad++:s serverWhiteList.xml.
 
 Klicka på knappen för att öppna webbplatsen med relevant användarhandboksavsnitt för mer information."/>
+			<matrix-close value="Stäng"/>
+			<matrix-retry value="Försök igen"/>
+			<matrix-cancelled value="Avbruten"/>
+			<matrix-read-only value="Skrivskyddad"/>
+			<matrix-find-status-details value="Statusdetaljer"/>
+			<matrix-find-backward-unavailable value="Bakåtsökning med reguljära uttryck är inaktiverad"/>
+			<matrix-hash-select-files value="Välj filer"/>
+			<matrix-hash-calculating value="Beräknar kondensat…"/>
+			<matrix-hash-selection-failed value="Det gick inte att välja filer: $ERROR$"/>
+			<matrix-hash-read-failed value="Det går inte att läsa följande filer:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Stäng felmeddelandet"/>
+			<matrix-hash-file-paths value="Filsökvägar (skrivskyddade)"/>
+			<matrix-hash-digest-result value="Kondensatresultat (skrivskyddat)"/>
+			<matrix-hash-source-text value="Källtext för kondensat"/>
+			<matrix-hash-selection-composition value="Beräkning av kondensat för markeringen under aktiv textkomposition är ännu inte implementerad"/>
+			<matrix-hash-selection-read-failed value="Det går inte att läsa markeringen: $ERROR$"/>
+			<matrix-window-activation-failed value="Det går inte att växla till den valda filen"/>
+			<matrix-window-selection-unavailable value="Den valda filen är stängd eller kan inte aktiveras"/>
+			<matrix-incremental-position value="Flytta fältet för inkrementell sökning"/>
+			<matrix-find-progress-bar value="Förloppsindikator"/>
+			<matrix-find-previous-search value="Visa föregående sökning"/>
+			<matrix-find-resize-results value="Ändra storlek på sökresultaten"/>
+			<matrix-find-results-summary value="Sökresultat - ($INT_REPLACE$ träffar)"/>
+			<matrix-udl-allow-code2-close value="Tillåt slut på kodblock 2"/>
+			<matrix-udl-allow-code2-middle value="Tillåt mittdel i kodblock 2"/>
+			<matrix-udl-allow-code2-open value="Tillåt början på kodblock 2"/>
+			<matrix-udl-allow-comment-fold-close value="Tillåt slut på kommentargruppering"/>
+			<matrix-udl-allow-comment-fold-middle value="Tillåt mittdel i kommentargruppering"/>
+			<matrix-udl-allow-comment-fold-open value="Tillåt början på kommentargruppering"/>
+			<matrix-udl-choose-json value="Välj en JSON-fil med en UDL-definition"/>
+			<matrix-udl-close value="Stäng användardefinierat språk"/>
+			<matrix-udl-close-styler value="Stäng stilinställningen"/>
+			<matrix-udl-colors value="Färger"/>
+			<matrix-udl-dark-mode-language value="Språk för mörkt läge"/>
+			<matrix-udl-definition-exported value="Definitionen har exporterats"/>
+			<matrix-udl-definitions-saved value="Definitionerna har sparats"/>
+			<matrix-udl-enable-font value="Aktivera teckensnitt"/>
+			<matrix-udl-error value="Fel i användardefinierat språk: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-filåtgärden misslyckades: $ERROR$"/>
+			<matrix-udl-file-progress value="Filåtgärd pågår…"/>
+			<matrix-udl-import-rejected value="Importen avvisades: $ERROR$"/>
+			<matrix-udl-imported value="Antal importerade språk: $COUNT$"/>
+			<matrix-udl-live-edits value="Användardefinierat språk — ändringar tillämpas direkt endast i dokument som använder detta språk"/>
+			<matrix-udl-loading value="Läser in definitioner…"/>
+			<matrix-udl-memory-only value="Definitionerna finns bara i minnet (ingen konfigurationsmapp)"/>
+			<matrix-udl-missing-ids value="Saknade ID:n för användardefinierade språk: $IDS$. Dokumenttexten och de sparade språkidentiteterna har bevarats. Återställ definitionerna eller välj uttryckligen ett annat språk i menyn Språk."/>
+			<matrix-udl-open-panel-disconnected value="UDL-öppningsdialogen kopplades från: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Vill du ta bort den här namngivna definitionen? Befintliga dokument behåller sin text och växlar till det namnlösa användardefinierade språket."/>
+			<matrix-udl-retry-file value="Försök med UDL-filåtgärden igen"/>
+			<matrix-udl-save-panel-disconnected value="UDL-spardialogen kopplades från: $ERROR$"/>
+			<matrix-udl-unavailable value="Definitionerna är inte tillgängliga; rätta udl.json och försök igen."/>
+			<matrix-udl-use-background value="Använd bakgrundsfärg"/>
+			<matrix-udl-use-foreground value="Använd förgrundsfärg"/>
+			<matrix-udl-working-copy value="Användardefinierat (arbetskopia)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

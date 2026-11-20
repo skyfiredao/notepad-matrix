@@ -522,5 +522,65 @@
 				<Item id="2" name="Huwag na lang"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="Ayos"/>
+			<common-cancel value="Huwag na lang"/>
+			<common-name value="Pangalan"/>
+			<discover-file-candidates-title value="Naghahanap ng mga posibleng file..."/>
+			<matrix-close value="Isara"/>
+			<matrix-retry value="Subukang muli"/>
+			<matrix-cancelled value="Kinansela"/>
+			<matrix-read-only value="Basa Lang"/>
+			<matrix-find-status-details value="Mga detalye ng katayuan"/>
+			<matrix-find-backward-unavailable value="Naka-disable ang pabalik na paghahanap gamit ang regular na ekspresyon"/>
+			<matrix-hash-select-files value="Pumili ng mga file"/>
+			<matrix-hash-calculating value="Kinakalkula ang halagang hash…"/>
+			<matrix-hash-selection-failed value="Nabigo ang pagpili ng file: $ERROR$"/>
+			<matrix-hash-read-failed value="Hindi mabasa ang mga sumusunod na file:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Isara ang mensahe ng error"/>
+			<matrix-hash-file-paths value="Mga landas ng file (basa lang)"/>
+			<matrix-hash-digest-result value="Resulta ng hash (basa lang)"/>
+			<matrix-hash-source-text value="Pinagmulang teksto ng hash"/>
+			<matrix-hash-selection-composition value="Hindi pa naipapatupad ang pagkuwenta ng hash ng napiling teksto habang aktibo ang pagbubuo ng input"/>
+			<matrix-hash-selection-read-failed value="Hindi mabasa ang napiling teksto: $ERROR$"/>
+			<matrix-window-activation-failed value="Hindi makalipat sa napiling file"/>
+			<matrix-window-selection-unavailable value="Sarado na o hindi ma-activate ang napiling file"/>
+			<matrix-incremental-position value="Ilipat ang bar ng paunti-unting paghahanap"/>
+			<matrix-find-progress-bar value="Bar ng pag-usad"/>
+			<matrix-find-previous-search value="Ipakita ang nakaraang paghahanap"/>
+			<matrix-find-results-summary value="Mga resulta ng paghahanap - ($INT_REPLACE$ tugma)"/>
+			<matrix-udl-allow-code2-close value="Payagan ang panara ng code 2"/>
+			<matrix-udl-allow-code2-middle value="Payagan ang gitna ng code 2"/>
+			<matrix-udl-allow-code2-open value="Payagan ang pambukas ng code 2"/>
+			<matrix-udl-allow-comment-fold-close value="Payagan ang panara ng pagtitiklop ng komento"/>
+			<matrix-udl-allow-comment-fold-middle value="Payagan ang gitna ng pagtitiklop ng komento"/>
+			<matrix-udl-allow-comment-fold-open value="Payagan ang pambukas ng pagtitiklop ng komento"/>
+			<matrix-udl-choose-json value="Pumili ng JSON file ng depinisyon ng UDL"/>
+			<matrix-udl-close value="Isara ang wikang itinakda ng gumagamit"/>
+			<matrix-udl-close-styler value="Isara ang tagapagtakda ng estilo"/>
+			<matrix-udl-colors value="Mga kulay"/>
+			<matrix-udl-dark-mode-language value="Wika para sa madilim na mode"/>
+			<matrix-udl-definition-exported value="Nai-export ang depinisyon"/>
+			<matrix-udl-definitions-saved value="Nai-save ang mga depinisyon"/>
+			<matrix-udl-enable-font value="Paganahin ang tipo ng titik"/>
+			<matrix-udl-error value="Error sa wikang itinakda ng gumagamit: $ERROR$"/>
+			<matrix-udl-file-failed value="Nabigo ang operasyon sa UDL file: $ERROR$"/>
+			<matrix-udl-file-progress value="Isinasagawa ang operasyon sa file…"/>
+			<matrix-udl-import-rejected value="Tinanggihan ang pag-import: $ERROR$"/>
+			<matrix-udl-imported value="Na-import ang $COUNT$ wika"/>
+			<matrix-udl-live-edits value="Wikang itinakda ng gumagamit — agad na inilalapat ang mga pagbabago sa mga dokumentong gumagamit lamang ng wikang ito"/>
+			<matrix-udl-loading value="Nilo-load ang mga depinisyon…"/>
+			<matrix-udl-memory-only value="Nasa memorya lamang ang mga depinisyon (walang direktoryo ng pagsasaayos)"/>
+			<matrix-udl-missing-ids value="Nawawalang ID ng wikang itinakda ng gumagamit: $IDS$. Napanatili ang teksto ng dokumento at ang naka-save na pagkakakilanlan ng wika. Ibalik ang mga depinisyon o tahasang pumili ng ibang wika."/>
+			<matrix-udl-open-panel-disconnected value="Nadiskonekta ang panel ng pagbubukas ng UDL: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Alisin ang pinangalanang depinisyong ito? Pananatilihin ng mga kasalukuyang dokumento ang kanilang teksto at lilipat sa wikang itinakda ng gumagamit na walang pangalan."/>
+			<matrix-udl-retry-file value="Subukang muli ang operasyon sa UDL file"/>
+			<matrix-udl-save-panel-disconnected value="Nadiskonekta ang panel ng pag-save ng UDL: $ERROR$"/>
+			<matrix-udl-unavailable value="Hindi magamit ang mga depinisyon; itama ang udl.json at subukang muli."/>
+			<matrix-udl-use-background value="Gamitin ang likuran"/>
+			<matrix-udl-use-foreground value="Gamitin ang harapan"/>
+			<matrix-udl-working-copy value="Itinakda ng gumagamit (kopyang ginagamit sa pag-edit)"/>
+			<matrix-find-resize-results value="Baguhin ang laki ng mga resulta ng paghahanap"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

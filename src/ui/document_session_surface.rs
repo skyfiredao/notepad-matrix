@@ -455,7 +455,7 @@ impl MatrixWindow {
                 }))
                 .on_modifiers_changed(cx.listener(
                     |view, event: &gpui::ModifiersChangedEvent, window, cx| {
-                        if !event.modifiers.control {
+                        if !event.modifiers.control && !event.modifiers.platform {
                             view.finish_document_switcher(true, window, cx);
                         }
                     },

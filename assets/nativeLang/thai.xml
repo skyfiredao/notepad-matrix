@@ -588,5 +588,65 @@
 				<Item id="2" name="ยกเลิก"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="ตกลง"/>
+			<common-cancel value="ยกเลิก"/>
+			<common-name value="ชื่อ"/>
+			<discover-file-candidates-title value="กำลังค้นหาแฟ้มที่อาจตรงเงื่อนไข..."/>
+			<matrix-close value="ปิด"/>
+			<matrix-retry value="ลองใหม่"/>
+			<matrix-cancelled value="ยกเลิกแล้ว"/>
+			<matrix-read-only value="อ่านอย่างเดียว"/>
+			<matrix-find-status-details value="รายละเอียดสถานะ"/>
+			<matrix-find-resize-results value="ปรับขนาดผลการค้นหา"/>
+			<matrix-find-backward-unavailable value="ปิดการค้นหานิพจน์ปรกติย้อนหลังอยู่"/>
+			<matrix-hash-select-files value="เลือกแฟ้ม"/>
+			<matrix-hash-calculating value="กำลังคำนวณค่าแฮช…"/>
+			<matrix-hash-selection-failed value="เลือกแฟ้มไม่สำเร็จ: $ERROR$"/>
+			<matrix-hash-read-failed value="ไม่สามารถอ่านแฟ้มต่อไปนี้:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="ปิดข้อผิดพลาด"/>
+			<matrix-hash-file-paths value="เส้นทางแฟ้ม (อ่านอย่างเดียว)"/>
+			<matrix-hash-digest-result value="ผลค่าแฮช (อ่านอย่างเดียว)"/>
+			<matrix-hash-source-text value="ข้อความต้นทางสำหรับคำนวณค่าแฮช"/>
+			<matrix-hash-selection-composition value="ยังไม่รองรับการคำนวณแฮชส่วนที่เลือกขณะกำลังประกอบข้อความ"/>
+			<matrix-hash-selection-read-failed value="ไม่สามารถอ่านส่วนที่เลือก: $ERROR$"/>
+			<matrix-window-activation-failed value="ไม่สามารถสลับไปยังแฟ้มที่เลือก"/>
+			<matrix-window-selection-unavailable value="แฟ้มที่เลือกปิดอยู่หรือไม่สามารถเปิดใช้งานได้"/>
+			<matrix-incremental-position value="ย้ายแถบค้นหาแบบเพิ่มทีละอักษร"/>
+			<matrix-find-progress-bar value="แถบความคืบหน้า"/>
+			<matrix-find-previous-search value="แสดงการค้นหาก่อนหน้า"/>
+			<matrix-find-results-summary value="ผลการค้นหา - (พบ $INT_REPLACE$ รายการ)"/>
+			<matrix-udl-allow-code2-close value="อนุญาตส่วนปิดของโค้ด 2"/>
+			<matrix-udl-allow-code2-middle value="อนุญาตส่วนกลางของโค้ด 2"/>
+			<matrix-udl-allow-code2-open value="อนุญาตส่วนเปิดของโค้ด 2"/>
+			<matrix-udl-allow-comment-fold-close value="อนุญาตส่วนปิดของการพับหมายเหตุ"/>
+			<matrix-udl-allow-comment-fold-middle value="อนุญาตส่วนกลางของการพับหมายเหตุ"/>
+			<matrix-udl-allow-comment-fold-open value="อนุญาตส่วนเปิดของการพับหมายเหตุ"/>
+			<matrix-udl-choose-json value="เลือกแฟ้มนิยาม UDL แบบ JSON"/>
+			<matrix-udl-close value="ปิดภาษาที่ผู้ใช้กำหนด"/>
+			<matrix-udl-close-styler value="ปิดตัวจัดรูปแบบ"/>
+			<matrix-udl-colors value="สี"/>
+			<matrix-udl-dark-mode-language value="ภาษาสำหรับโหมดมืด"/>
+			<matrix-udl-definition-exported value="ส่งออกนิยามแล้ว"/>
+			<matrix-udl-definitions-saved value="บันทึกนิยามแล้ว"/>
+			<matrix-udl-enable-font value="เปิดใช้แบบอักษร"/>
+			<matrix-udl-error value="ข้อผิดพลาดของภาษาที่ผู้ใช้กำหนด: $ERROR$"/>
+			<matrix-udl-file-failed value="ดำเนินการกับแฟ้ม UDL ไม่สำเร็จ: $ERROR$"/>
+			<matrix-udl-file-progress value="กำลังดำเนินการกับแฟ้ม…"/>
+			<matrix-udl-import-rejected value="การนำเข้าถูกปฏิเสธ: $ERROR$"/>
+			<matrix-udl-imported value="นำเข้าแล้ว $COUNT$ ภาษา"/>
+			<matrix-udl-live-edits value="ภาษาที่ผู้ใช้กำหนด — การแก้ไขมีผลทันทีเฉพาะเอกสารที่ใช้ภาษานี้"/>
+			<matrix-udl-loading value="กำลังโหลดนิยาม…"/>
+			<matrix-udl-memory-only value="นิยามอยู่ในหน่วยความจำเท่านั้น (ไม่มีไดเรกทอรีการตั้งค่า)"/>
+			<matrix-udl-missing-ids value="ไม่พบรหัสภาษาที่ผู้ใช้กำหนด: $IDS$ ข้อความในเอกสารและข้อมูลระบุภาษาที่บันทึกไว้ยังคงอยู่ โปรดกู้คืนนิยามหรือเลือกภาษาอื่นอย่างชัดเจน"/>
+			<matrix-udl-open-panel-disconnected value="แผงเปิด UDL ถูกตัดการเชื่อมต่อ: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="ลบนิยามที่มีชื่อนี้หรือไม่? เอกสารที่มีอยู่จะคงข้อความไว้และเปลี่ยนไปใช้ภาษาที่ผู้ใช้กำหนดแบบไม่มีชื่อ"/>
+			<matrix-udl-retry-file value="ลองดำเนินการกับแฟ้ม UDL อีกครั้ง"/>
+			<matrix-udl-save-panel-disconnected value="แผงบันทึก UDL ถูกตัดการเชื่อมต่อ: $ERROR$"/>
+			<matrix-udl-unavailable value="นิยามไม่พร้อมใช้งาน โปรดแก้ไข udl.json แล้วลองใหม่"/>
+			<matrix-udl-use-background value="ใช้สีพื้นหลัง"/>
+			<matrix-udl-use-foreground value="ใช้สีพื้นหน้า"/>
+			<matrix-udl-working-copy value="ผู้ใช้กำหนด (สำเนาทำงาน)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

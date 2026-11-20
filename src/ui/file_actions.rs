@@ -1,8 +1,15 @@
 use super::*;
 use crate::files::{DiskFile, OverwritePolicy};
+use gpui::Pixels;
 
 use crate::workspace::closing as closing_model;
 pub(super) use closing_model::CloseBatch as ConditionalClose;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum CloseAllAnswer {
+    Save,
+    Discard,
+}
 
 pub(super) struct FilePromptState {
     current_directory: Option<PathBuf>,
@@ -116,6 +123,8 @@ impl MatrixWindow {
                 ConditionalClose::selected(self.workspace.close_targets(condition))
             },
         );
+        self.close_all_answer = None;
+        self.close_multi = self.conditional_close.as_ref().is_some_and(|batch| batch.dirty_count(&self.workspace) > 1);
         self.advance_conditional_close(window, cx);
     }
 
@@ -182,6 +191,8 @@ impl MatrixWindow {
                 CloseSide::Right => self.workspace.close_right_targets(),
             },
         ));
+        self.close_all_answer = None;
+        self.close_multi = self.conditional_close.as_ref().is_some_and(|batch| batch.dirty_count(&self.workspace) > 1);
         self.advance_conditional_close(window, cx);
     }
 
@@ -209,7 +220,14 @@ impl MatrixWindow {
                 if let Some(batch) = &mut self.conditional_close {
                     batch.approve_automatic(id, disposition);
                 }
+            } else if self.close_all_answer == Some(CloseAllAnswer::Discard) {
+                if let Some(batch) = &mut self.conditional_close {
+                    batch.approve(id, crate::workspace::CloseDisposition::DiscardConfirmed);
+                }
             } else {
+                if self.conditional_close.as_ref().is_some_and(ConditionalClose::uses_global_prompt_count) {
+                    self.close_multi = self.workspace.dirty_buffers().len() > 1;
+                }
                 let view = self
                     .conditional_close
                     .as_ref()
@@ -221,9 +239,13 @@ impl MatrixWindow {
                 }
                 self.close_target = Some(id);
                 self.close_choice = 0;
-                self.close_dialog = true;
-                self.close_focus.focus(window, cx);
-                cx.notify();
+                self.close_dialog = self.close_all_answer != Some(CloseAllAnswer::Save);
+                if self.close_all_answer == Some(CloseAllAnswer::Save) {
+                    self.save_and_close(window, cx);
+                } else {
+                    self.close_focus.focus(window, cx);
+                    cx.notify();
+                }
                 return;
             }
         }
@@ -241,6 +263,8 @@ impl MatrixWindow {
         self.close_target = None;
         self.close_dialog = false;
         self.close_after_save = false;
+        self.close_all_answer = None;
+        self.close_multi = false;
         self.close_tabs_queue.clear();
         self.close_discarded.clear();
         if self.file_busy
@@ -316,19 +340,23 @@ impl MatrixWindow {
     }
 
     fn cancel_native_quit(&mut self) {
+        self.close_all_answer = None;
         self.application_quit_pending = false;
         if let Some(control) = &self.native_quit {
             control.cancel();
         }
     }
 
-    pub(super) fn file_dialog_bindings() -> [KeyBinding; 17] {
+    pub(super) fn file_dialog_bindings() -> [KeyBinding; 20] {
         [
             KeyBinding::new("enter", FileDialogActivate, Some("MatrixClose")),
             KeyBinding::new("escape", CancelClose, Some("MatrixClose")),
             KeyBinding::new("alt-y", SaveAndClose, Some("MatrixClose")),
             KeyBinding::new("alt-n", DiscardClose, Some("MatrixClose")),
             KeyBinding::new("alt-c", CancelClose, Some("MatrixClose")),
+            KeyBinding::new("alt-a", SaveAllAndClose, Some("MatrixClose")),
+            KeyBinding::new("alt-o", DiscardAllAndClose, Some("MatrixClose")),
+            KeyBinding::new("space", FileDialogActivate, Some("MatrixClose")),
             KeyBinding::new("tab", FileDialogNext, Some("MatrixClose")),
             KeyBinding::new("shift-tab", FileDialogPrevious, Some("MatrixClose")),
             KeyBinding::new("right", FileDialogNext, Some("MatrixClose")),
@@ -366,6 +394,8 @@ impl MatrixWindow {
         self.close_target = None;
         self.close_after_save = false;
         self.conditional_close = Some(ConditionalClose::all(&self.workspace));
+        self.close_all_answer = None;
+        self.close_multi = self.conditional_close.as_ref().is_some_and(|batch| batch.dirty_count(&self.workspace) > 1);
         self.advance_conditional_close(window, cx);
     }
 
@@ -390,6 +420,8 @@ impl MatrixWindow {
             return;
         }
         let id = self.workspace.active().id();
+        self.close_all_answer = None;
+        self.close_multi = false;
         self.menu_input(MenuEvent::Dismiss, window, cx);
         let automatic = closing_model::individual_close_disposition(
             &self.workspace,
@@ -484,7 +516,7 @@ impl MatrixWindow {
         while let Some(id) = self.save_all_queue.pop_front() {
             if !self.activate_buffer(id, window, cx) || self.workspace.active().id() != id {
                 self.save_all_errors.push(
-                    self.editor_error.clone().unwrap_or_else(|| {
+                    self.editor_error.as_ref().map(|error| error.render(&self.native_locale())).unwrap_or_else(|| {
                         format!("Could not activate buffer {} for saving", id.0)
                     }),
                 );
@@ -502,10 +534,10 @@ impl MatrixWindow {
         let error = if self.save_all_errors.is_empty() {
             self.editor_error.clone()
         } else {
-            Some(format!(
+            Some(crate::localization::Text::from(format!(
                 "Save All completed with errors: {}",
                 std::mem::take(&mut self.save_all_errors).join("; ")
-            ))
+            )))
         };
         let restore_view = self.save_all_restore_view.take();
         if let Some(id) = self.save_all_restore.take() {
@@ -516,7 +548,7 @@ impl MatrixWindow {
             }
         }
         if let Some(error) = error {
-            self.notify_editor_error(error, cx);
+            self.notify_localized_editor_error(error, cx);
         }
         self.editor_focus.focus(window, cx);
         cx.notify();
@@ -553,6 +585,7 @@ impl MatrixWindow {
             return None;
         }
         let button = |id: &'static str, label: &'static str, selected: bool| {
+            let label = crate::localization::current_dialog_control("DoSaveAll", if id == "save-all-yes" { 6 } else { 7 }).unwrap_or(label);
             div()
                 .id(id)
                 .debug_selector(move || id.into())
@@ -578,7 +611,7 @@ impl MatrixWindow {
                     div()
                         .id("save-all-dialog")
                         .role(Role::Dialog)
-                        .aria_label("Save all?")
+                        .aria_label(crate::localization::dialog_title(&self.native_locale(), "DoSaveAll").unwrap_or("Save All Confirmation"))
                         .track_focus(&self.close_focus)
                         .key_context("MatrixSaveAll")
                         .on_action(cx.listener(|view, _: &FileDialogNext, _, cx| {
@@ -620,7 +653,8 @@ impl MatrixWindow {
                         .text_color(rgb(0x202020))
                         .border_1()
                         .border_color(rgb(0x808080))
-                        .child("Save all modified documents?")
+                        .child(crate::localization::current_dialog_control("DoSaveAll", 1766)
+                            .unwrap_or("Save all modified documents?").split("\n\n").next().unwrap_or("Save all modified documents?"))
                         .child(
                             div()
                                 .flex()
@@ -966,6 +1000,7 @@ impl MatrixWindow {
             return;
         }
         self.close_target = None;
+        self.close_multi = self.workspace.dirty_buffers().len() > 1;
         let pending = self
             .workspace
             .dirty_buffers()
@@ -973,6 +1008,12 @@ impl MatrixWindow {
             .find(|id| !self.close_discarded.contains(id));
         if let Some(id) = pending {
             if !self.activate_buffer(id, window, cx) {
+                self.close_after_save = false;
+                self.close_dialog = false;
+                self.close_multi = false;
+                self.close_discarded.clear();
+                self.cancel_native_quit();
+                cx.notify();
                 return;
             }
             self.scroll_active_tab_into_view();
@@ -980,8 +1021,13 @@ impl MatrixWindow {
             self.editor_painted_revision = None;
             self.close_dialog = true;
             self.close_choice = 0;
-            self.close_focus.focus(window, cx);
-            cx.notify();
+            if self.close_all_answer == Some(CloseAllAnswer::Save) {
+                self.close_dialog = false;
+                self.save_and_close(window, cx);
+            } else {
+                self.close_focus.focus(window, cx);
+                cx.notify();
+            }
         } else {
             if self.retire_recovery_on_confirmed_close(cx) {
                 self.finish_window_close(window, cx);
@@ -1004,31 +1050,146 @@ impl MatrixWindow {
         cx.quit();
     }
 
-    pub(super) fn render_close_dialog(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(super) fn apply_close_all(&mut self, answer: CloseAllAnswer, window: &mut Window, cx: &mut Context<Self>) {
+        if self.route_to_document(window, cx, move |view, window, cx| view.apply_close_all(answer, window, cx)) {
+            return;
+        }
+        if !self.close_dialog || !self.close_multi || self.file_busy || self.reload_target.is_some() {
+            return;
+        }
+        self.close_all_answer = Some(answer);
+        self.close_dialog = false;
+        match answer {
+            CloseAllAnswer::Save => self.save_and_close(window, cx),
+            CloseAllAnswer::Discard if self.conditional_close.is_some() => self.discard_close(window, cx),
+            CloseAllAnswer::Discard => {
+                self.close_discarded.extend(self.workspace.dirty_buffers());
+                self.request_close(window, cx);
+            }
+        }
+    }
+
+    fn activate_close_choice(&mut self, choice: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.close_dialog || self.file_busy { return; }
+        match choice {
+            0 => self.save_and_close(window, cx),
+            1 => self.discard_close(window, cx),
+            2 => self.cancel_close(window, cx),
+            3 => self.apply_close_all(CloseAllAnswer::Save, window, cx),
+            4 => self.apply_close_all(CloseAllAnswer::Discard, window, cx),
+            _ => {}
+        }
+    }
+
+    fn close_message(&self) -> String {
+        let filename = self.disk_file().map(|file| file.path().to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.workspace.active().name());
+        crate::localization::dialog_control(&self.native_locale(), "DoSaveOrNot", 1761)
+            .unwrap_or("Save file \"$STR_REPLACE$\" ?")
+            .replace("$STR_REPLACE$", &filename)
+            .replace("\r\n", "\n").replace('\r', "\n")
+    }
+
+    pub(super) fn close_dialog_dimensions(&self, window: &Window) -> gpui::Size<Pixels> {
+        use super::dialog_font::px;
+        if self.close_multi { return size(px(468.), px(120.)); }
+        let message = self.close_message();
+        let font = gpui::font(dialog_font::font_family());
+        let font_size = gpui::px(dialog_font::base_size());
+        let run = |text: &str| gpui::TextRun {
+            len: text.len(), font: font.clone(), color: rgb(0x202020).into(),
+            background_color: None, underline: None, strikethrough: None,
+        };
+        let measured = message.lines().map(|line| window.text_system().shape_line(line.to_owned().into(), font_size, &[run(line)], None).width())
+            .fold(px(0.), Pixels::max);
+        let width = (measured + px(80.)).max(px(320.)).min(px(600.));
+        let measure_height = |text: &str| {
+            match window.text_system().shape_text(text.to_owned().into(), font_size, &[run(text)], Some(width - px(80.)), None) {
+                Ok(lines) => lines.iter().map(|line| line.size(dialog_font::line_height()).height).fold(px(0.), |total, height| total + height),
+                Err(error) => {
+                    eprintln!("could not measure save confirmation text: {error}");
+                    px(32.)
+                }
+            }
+        };
+        let mut body_height = measure_height(&message);
+        if let Some(error) = &self.editor_error {
+            body_height += px(6.) + measure_height(&error.render(&self.native_locale()));
+        }
+        size(width, body_height.max(px(32.)).min(px(220.)) + px(76.))
+    }
+
+    pub(super) fn render_close_dialog(&mut self, window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         use super::dialog_font::px;
         if !self.close_dialog {
             return None;
         }
-        let button = |id: &'static str, label: &'static str, selected: bool| {
+        let dimensions = self.close_dialog_dimensions(window);
+        let rtl = crate::localization::is_rtl(&self.native_locale());
+        let count = if self.close_multi { 5 } else { 3 };
+        let enabled = !self.file_busy;
+        let foreground = if self.dark { 0xe6e6e6 } else { 0x202020 };
+        let background = if self.dark { 0x202020 } else { 0xf0f0f0 };
+        let specs = if self.close_multi {
+            vec![
+                ("close-save", "Yes", 6, 0, px(15.), px(75.)),
+                ("close-discard", "No", 7, 1, px(94.5), px(75.)),
+                ("close-cancel", "Cancel", 2, 2, px(174.), px(90.)),
+                ("close-save-all", "Yes to all", 4, 3, px(268.5), px(90.)),
+                ("close-discard-all", "No to all", 5, 4, px(363.), px(90.)),
+            ]
+        } else {
+            let left = dimensions.width - px(271.);
+            vec![
+                ("close-save", "Yes", 6, 0, left, px(75.)),
+                ("close-discard", "No", 7, 1, left + px(83.), px(75.)),
+                ("close-cancel", "Cancel", 2, 2, left + px(166.), px(90.)),
+            ]
+        };
+        let buttons = specs.into_iter().map(|(id, label, source_id, choice, left, width)| {
+            let label = crate::localization::current_dialog_control("DoSaveOrNot", source_id).unwrap_or(label);
+            let selected = self.close_choice == choice;
             div()
                 .id(id)
                 .debug_selector(move || id.into())
                 .role(Role::Button)
                 .aria_label(label)
                 .aria_selected(selected)
-                .aria_description(if self.file_busy {
+                .aria_description(if !enabled {
                     "Unavailable while saving"
                 } else {
                     ""
                 })
+                .a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } })
+                .absolute()
+                .left(if rtl { dimensions.width - left - width } else { left })
+                .top(if self.close_multi { px(90.) } else { dimensions.height - px(36.) })
+                .w(width)
+                .h(px(21.))
                 .border_1()
-                .border_color(rgb(if selected { 0x0078d4 } else { 0x808080 }))
-                .bg(rgb(if selected { 0xdceeff } else { 0xe8e8e8 }))
-                .text_color(rgb(if self.file_busy { 0x808080 } else { 0x202020 }))
-                .px(px(16.))
-                .py(px(5.))
+                .border_color(rgb(if selected { 0x0078d4 } else if self.dark { 0x606060 } else { 0x808080 }))
+                .bg(rgb(if self.dark { 0x333333 } else { 0xf0f0f0 }))
+                .text_color(rgb(if enabled { foreground } else { 0x808080 }))
+                .flex().items_center().justify_center()
+                .when(enabled, |button| button.cursor_pointer().hover(|style| style.border_color(rgb(0x0078d4))))
                 .child(label)
-        };
+                .on_click(cx.listener(move |view, _, window, cx| view.activate_close_choice(choice, window, cx)))
+        }).collect::<Vec<_>>();
+        let message_left = if self.close_multi { px(10.5) } else { px(64.) };
+        let message_width = if self.close_multi { px(435.) } else { dimensions.width - px(80.) };
+        let mut message = div().id("close-message").absolute()
+            .left(if rtl { dimensions.width - message_left - message_width } else { message_left })
+            .top(if self.close_multi { px(15.) } else { px(20.) })
+            .w(message_width)
+            .h(if self.close_multi { px(60.) } else { dimensions.height - px(76.) })
+            .overflow_y_scroll().flex().flex_col().gap(px(6.))
+            .when(rtl, |message| message.text_right())
+            .child(div().w_full().min_w(px(0.)).flex_shrink_0().child(self.close_message()));
+        if let Some(error) = &self.editor_error {
+            let error = error.render(&self.native_locale());
+            message = message.child(div().id("close-save-error").role(Role::Alert).aria_label(error.clone()).flex_shrink_0()
+                .text_color(rgb(if self.dark { 0xffa080 } else { 0xb00020 })).child(error));
+        }
         Some(
             div()
                 .id("close-overlay")
@@ -1041,30 +1202,26 @@ impl MatrixWindow {
                     div()
                         .id("close-dialog")
                         .role(Role::Dialog)
-                        .aria_label("Save changes?")
+                        .aria_label(crate::localization::dialog_title(&self.native_locale(), "DoSaveOrNot").unwrap_or("Save"))
                         .track_focus(&self.close_focus)
                         .key_context("MatrixClose")
-                        .on_action(cx.listener(|view, _: &FileDialogNext, _, cx| {
+                        .on_action(cx.listener(move |view, _: &FileDialogNext, _, cx| {
                             if view.close_dialog && !view.file_busy {
-                                view.close_choice = (view.close_choice + 1) % 3;
+                                    view.close_choice = (view.close_choice + 1) % count;
                                 cx.notify();
                             }
                             cx.stop_propagation();
                         }))
-                        .on_action(cx.listener(|view, _: &FileDialogPrevious, _, cx| {
+                        .on_action(cx.listener(move |view, _: &FileDialogPrevious, _, cx| {
                             if view.close_dialog && !view.file_busy {
-                                view.close_choice = (view.close_choice + 2) % 3;
+                                    view.close_choice = (view.close_choice + count - 1) % count;
                                 cx.notify();
                             }
                             cx.stop_propagation();
                         }))
                         .on_action(cx.listener(|view, _: &FileDialogActivate, window, cx| {
                             if view.close_dialog && !view.file_busy {
-                                match view.close_choice {
-                                    0 => view.save_and_close(window, cx),
-                                    1 => view.discard_close(window, cx),
-                                    _ => view.cancel_close(window, cx),
-                                }
+                                view.activate_close_choice(view.close_choice, window, cx);
                             }
                             cx.stop_propagation();
                         }))
@@ -1080,50 +1237,25 @@ impl MatrixWindow {
                             view.save_and_close(window, cx);
                             cx.stop_propagation();
                         }))
-                        .w_full()
-                        .p(px(16.))
-                        .flex()
-                        .flex_col()
-                        .gap(px(12.))
+                        .on_action(cx.listener(|view, _: &SaveAllAndClose, window, cx| {
+                            view.apply_close_all(CloseAllAnswer::Save, window, cx);
+                            cx.stop_propagation();
+                        }))
+                        .on_action(cx.listener(|view, _: &DiscardAllAndClose, window, cx| {
+                            view.apply_close_all(CloseAllAnswer::Discard, window, cx);
+                            cx.stop_propagation();
+                        }))
+                        .size_full().relative()
+                        .font_family(dialog_font::font_family())
+                        .text_size(gpui::px(dialog_font::base_size()))
+                        .line_height(dialog_font::line_height())
                         .border_1()
-                        .border_color(rgb(0x808080))
-                        .bg(rgb(0xf0f0f0))
-                        .text_color(rgb(0x202020))
-                        .child("Save changes before closing?")
-                        .when_some(self.editor_error.clone(), |dialog, error| {
-                            dialog.child(
-                                div()
-                                    .id("close-save-error")
-                                    .role(Role::Alert)
-                                    .aria_label(error.clone())
-                                    .child(error),
-                            )
-                        })
-                        .child(
-                            div()
-                                .flex()
-                                .gap(px(8.))
-                                .child(
-                                    button("close-save", "Yes", self.close_choice == 0).on_click(
-                                        cx.listener(|view, _, window, cx| {
-                                            view.save_and_close(window, cx)
-                                        }),
-                                    ),
-                                )
-                                .child(
-                                    button("close-discard", "No", self.close_choice == 1).on_click(
-                                        cx.listener(|view, _, window, cx| {
-                                            view.discard_close(window, cx)
-                                        }),
-                                    ),
-                                )
-                                .child(
-                                    button("close-cancel", "Cancel", self.close_choice == 2)
-                                        .on_click(cx.listener(|view, _, window, cx| {
-                                            view.cancel_close(window, cx)
-                                        })),
-                                ),
-                        ),
+                        .border_color(rgb(if self.dark { 0x606060 } else { 0x808080 }))
+                        .bg(rgb(background)).text_color(rgb(foreground))
+                        .when(!self.close_multi, |dialog| dialog.child(div().absolute().left(if rtl { dimensions.width - px(48.) } else { px(16.) }).top(px(20.))
+                            .size(px(32.)).rounded_full().bg(rgb(0x0078d4)).text_color(rgb(0xffffff))
+                            .text_size(px(26.)).line_height(px(32.)).flex().items_center().justify_center().child("?")))
+                        .child(message).children(buttons),
                 )
                 .into_any_element(),
         )
@@ -1211,6 +1343,13 @@ impl MatrixWindow {
         self.start_save(false, window, cx);
         if self.conditional_close.is_some() && !self.file_busy {
             self.finish_close_batch(true, window, cx);
+        } else if self.close_all_answer.is_some() && !self.file_busy {
+            self.close_after_save = false;
+            self.cancel_native_quit();
+            self.close_dialog = true;
+            self.close_choice = 0;
+            self.close_focus.focus(window, cx);
+            cx.notify();
         }
     }
 
@@ -1542,6 +1681,9 @@ impl MatrixWindow {
                     }
                     view.request_close(window, cx);
                 } else if closing {
+                    view.cancel_native_quit();
+                    view.close_all_answer = None;
+                    view.close_choice = 0;
                     view.close_dialog = true;
                     view.close_focus.focus(window, cx);
                 } else {

@@ -1537,6 +1537,61 @@ HUOM:
 
 2. Jos &quot;Poista rivitys käytöstä&quot; on valittuna avattassa suuri tiedosto, &quot;Rivitys&quot; poistetaan käytöstä kaikissa tiedostoissa. Se voidaan palauttaa käyttöön valikosta &quot;Näytä-&gt;Rivitys&quot;."/>
 <searchingInSelThresh-tip value="Valittujen merkkien lukumäärä muokkausvyöhykkeellä tarkistaa automaattisesti &quot;Valinnassa&quot; valintaruutu, kun Etsi-valintaikkuna on aktivoitu. Suurin arvo on 1024. Aseta arvoksi 0, jos haluat poistaa automaattisen tarkistuksen käytöstä."/>
+			<matrix-close value="Sulje"/>
+			<matrix-retry value="Yritä uudelleen"/>
+			<matrix-cancelled value="Peruutettu"/>
+			<matrix-read-only value="Vain luku"/>
+			<matrix-find-status-details value="Tilan tiedot"/>
+			<matrix-find-backward-unavailable value="Säännöllisten lausekkeiden haku taaksepäin on poistettu käytöstä"/>
+			<matrix-hash-select-files value="Valitse tiedostot"/>
+			<matrix-hash-calculating value="Lasketaan tiivistettä…"/>
+			<matrix-hash-selection-failed value="Tiedostojen valinta epäonnistui: $ERROR$"/>
+			<matrix-hash-read-failed value="Seuraavia tiedostoja ei voi lukea:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Sulje virheilmoitus"/>
+			<matrix-hash-file-paths value="Tiedostopolut (vain luku)"/>
+			<matrix-hash-digest-result value="Tiivisteen tulos (vain luku)"/>
+			<matrix-hash-source-text value="Tiivisteen lähdeteksti"/>
+			<matrix-hash-selection-composition value="Valinnan tiivisteen laskentaa tekstin koostamisen aikana ei ole vielä toteutettu"/>
+			<matrix-hash-selection-read-failed value="Valintaa ei voi lukea: $ERROR$"/>
+			<matrix-window-activation-failed value="Valittuun tiedostoon ei voi siirtyä"/>
+			<matrix-window-selection-unavailable value="Valittu tiedosto on suljettu tai sitä ei voi aktivoida"/>
+			<matrix-incremental-position value="Siirrä askeltavan haun palkkia"/>
+			<matrix-find-progress-bar value="Edistymispalkki"/>
+			<matrix-find-previous-search value="Näytä edellinen haku"/>
+			<matrix-find-resize-results value="Muuta hakutulosten kokoa"/>
+			<matrix-find-results-summary value="Hakutulokset - ($INT_REPLACE$ osumaa)"/>
+			<matrix-udl-allow-code2-close value="Salli koodilohkon 2 lopetus"/>
+			<matrix-udl-allow-code2-middle value="Salli koodilohkon 2 keskiosa"/>
+			<matrix-udl-allow-code2-open value="Salli koodilohkon 2 aloitus"/>
+			<matrix-udl-allow-comment-fold-close value="Salli kommenttitaiton lopetus"/>
+			<matrix-udl-allow-comment-fold-middle value="Salli kommenttitaiton keskiosa"/>
+			<matrix-udl-allow-comment-fold-open value="Salli kommenttitaiton aloitus"/>
+			<matrix-udl-choose-json value="Valitse JSON-muotoinen UDL-määritystiedosto"/>
+			<matrix-udl-close value="Sulje käyttäjän määrittämä kieli"/>
+			<matrix-udl-close-styler value="Sulje muotoilu"/>
+			<matrix-udl-colors value="Värit"/>
+			<matrix-udl-dark-mode-language value="Tumman tilan kieli"/>
+			<matrix-udl-definition-exported value="Määritys viety"/>
+			<matrix-udl-definitions-saved value="Määritykset tallennettu"/>
+			<matrix-udl-enable-font value="Käytä fonttia"/>
+			<matrix-udl-error value="Käyttäjän määrittämän kielen virhe: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-tiedostotoiminto epäonnistui: $ERROR$"/>
+			<matrix-udl-file-progress value="Tiedostotoiminto käynnissä…"/>
+			<matrix-udl-import-rejected value="Tuonti hylätty: $ERROR$"/>
+			<matrix-udl-imported value="Tuotuja kieliä: $COUNT$"/>
+			<matrix-udl-live-edits value="Käyttäjän määrittämä kieli — muutokset tulevat heti voimaan vain tätä kieltä käyttävissä asiakirjoissa"/>
+			<matrix-udl-loading value="Ladataan määrityksiä…"/>
+			<matrix-udl-memory-only value="Määritykset ovat vain muistissa (asetushakemistoa ei ole)"/>
+			<matrix-udl-missing-ids value="Puuttuvat käyttäjän määrittämien kielten tunnisteet: $IDS$. Asiakirjojen teksti ja tallennetut kielitunnisteet on säilytetty. Palauta määritykset tai valitse nimenomaisesti toinen kieli Kieli-valikosta."/>
+			<matrix-udl-open-panel-disconnected value="Yhteys UDL-avausikkunaan katkesi: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Poistetaanko tämä nimetty määritys? Olemassa olevien asiakirjojen teksti säilyy, ja ne siirtyvät nimettömään käyttäjän määrittämään kieleen."/>
+			<matrix-udl-retry-file value="Yritä UDL-tiedostotoimintoa uudelleen"/>
+			<matrix-udl-save-panel-disconnected value="Yhteys UDL-tallennusikkunaan katkesi: $ERROR$"/>
+			<matrix-udl-unavailable value="Määritykset eivät ole käytettävissä; korjaa udl.json ja yritä uudelleen."/>
+			<matrix-udl-use-background value="Käytä taustaväriä"/>
+			<matrix-udl-use-foreground value="Käytä tekstin väriä"/>
+			<matrix-udl-working-copy value="Käyttäjän määrittämä (työkopio)"/>
+			<discover-file-candidates-title value="Etsitään mahdollisia tiedostoja…"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

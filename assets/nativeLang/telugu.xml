@@ -567,5 +567,65 @@
 				<Item id="2" name="క్యాన్సల్"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="ఓకే"/>
+			<common-cancel value="రద్దు చేయి"/>
+			<common-name value="పేరు"/>
+			<discover-file-candidates-title value="సరిపడే ఫైళ్లను వెతుకుతోంది..."/>
+			<matrix-close value="మూసివేయి"/>
+			<matrix-retry value="మళ్లీ ప్రయత్నించు"/>
+			<matrix-cancelled value="రద్దు చేయబడింది"/>
+			<matrix-read-only value="చదవడానికి మాత్రమే"/>
+			<matrix-find-status-details value="స్థితి వివరాలు"/>
+			<matrix-find-backward-unavailable value="నియమిత వ్యక్తీకరణతో వెనుకకు వెతకడం నిలిపివేయబడింది"/>
+			<matrix-hash-select-files value="ఫైళ్లను ఎంచుకో"/>
+			<matrix-hash-calculating value="హాష్ విలువను లెక్కిస్తోంది…"/>
+			<matrix-hash-selection-failed value="ఫైలు ఎంపిక విఫలమైంది: $ERROR$"/>
+			<matrix-hash-read-failed value="కింది ఫైళ్లను చదవలేకపోయింది:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="దోష సందేశాన్ని మూసివేయి"/>
+			<matrix-hash-file-paths value="ఫైలు మార్గాలు (చదవడానికి మాత్రమే)"/>
+			<matrix-hash-digest-result value="హాష్ ఫలితం (చదవడానికి మాత్రమే)"/>
+			<matrix-hash-source-text value="హాష్ మూల పాఠ్యం"/>
+			<matrix-hash-selection-composition value="ఇన్‌పుట్ కూర్పు సక్రియంగా ఉన్నప్పుడు ఎంచుకున్న పాఠ్యానికి హాష్ లెక్కించడం ఇంకా అమలు చేయలేదు"/>
+			<matrix-hash-selection-read-failed value="ఎంచుకున్న పాఠ్యాన్ని చదవలేకపోయింది: $ERROR$"/>
+			<matrix-window-activation-failed value="ఎంచుకున్న ఫైలుకు మారలేకపోయింది"/>
+			<matrix-window-selection-unavailable value="ఎంచుకున్న ఫైలు మూసివేయబడింది లేదా సక్రియం చేయడం సాధ్యం కాదు"/>
+			<matrix-incremental-position value="క్రమానుగత శోధన పట్టీని కదిలించు"/>
+			<matrix-find-progress-bar value="పురోగతి పట్టీ"/>
+			<matrix-find-previous-search value="మునుపటి శోధనను చూపించు"/>
+			<matrix-find-results-summary value="శోధన ఫలితాలు - ($INT_REPLACE$ సరిపోలికలు)"/>
+			<matrix-udl-allow-code2-close value="కోడ్ 2 ముగింపును అనుమతించు"/>
+			<matrix-udl-allow-code2-middle value="కోడ్ 2 మధ్య భాగాన్ని అనుమతించు"/>
+			<matrix-udl-allow-code2-open value="కోడ్ 2 ప్రారంభాన్ని అనుమతించు"/>
+			<matrix-udl-allow-comment-fold-close value="వ్యాఖ్య మడత ముగింపును అనుమతించు"/>
+			<matrix-udl-allow-comment-fold-middle value="వ్యాఖ్య మడత మధ్య భాగాన్ని అనుమతించు"/>
+			<matrix-udl-allow-comment-fold-open value="వ్యాఖ్య మడత ప్రారంభాన్ని అనుమతించు"/>
+			<matrix-udl-choose-json value="JSON ఆకృతిలోని UDL నిర్వచన ఫైలును ఎంచుకో"/>
+			<matrix-udl-close value="వినియోగదారు నిర్వచించిన భాషను మూసివేయి"/>
+			<matrix-udl-close-styler value="శైలి అమరిక సాధనాన్ని మూసివేయి"/>
+			<matrix-udl-colors value="రంగులు"/>
+			<matrix-udl-dark-mode-language value="చీకటి విధానపు భాష"/>
+			<matrix-udl-definition-exported value="నిర్వచనం ఎగుమతి చేయబడింది"/>
+			<matrix-udl-definitions-saved value="నిర్వచనాలు భద్రపరచబడ్డాయి"/>
+			<matrix-udl-enable-font value="అక్షరశైలిని ప్రారంభించు"/>
+			<matrix-udl-error value="వినియోగదారు నిర్వచించిన భాషలో దోషం: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ఫైలు చర్య విఫలమైంది: $ERROR$"/>
+			<matrix-udl-file-progress value="ఫైలు చర్య జరుగుతోంది…"/>
+			<matrix-udl-import-rejected value="దిగుమతి తిరస్కరించబడింది: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ భాషలు దిగుమతి చేయబడ్డాయి"/>
+			<matrix-udl-live-edits value="వినియోగదారు నిర్వచించిన భాష — ఈ భాషను ఉపయోగించే పత్రాలకు మాత్రమే మార్పులు వెంటనే వర్తిస్తాయి"/>
+			<matrix-udl-loading value="నిర్వచనాలను లోడ్ చేస్తోంది…"/>
+			<matrix-udl-memory-only value="నిర్వచనాలు మెమరీలో మాత్రమే ఉన్నాయి (ఆకృతీకరణ డైరెక్టరీ లేదు)"/>
+			<matrix-udl-missing-ids value="వినియోగదారు నిర్వచించిన భాషల ఐడీలు లేవు: $IDS$. పత్రం పాఠ్యం మరియు భద్రపరచిన భాషల గుర్తింపులు అలాగే ఉంచబడ్డాయి. నిర్వచనాలను పునరుద్ధరించండి లేదా స్పష్టంగా మరొక భాషను ఎంచుకోండి."/>
+			<matrix-udl-open-panel-disconnected value="UDL తెరవడం ప్యానెల్ అనుసంధానం తెగిపోయింది: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="పేరున్న ఈ నిర్వచనాన్ని తీసివేయాలా? ఉన్న పత్రాలు వాటి పాఠ్యాన్ని అలాగే ఉంచుకుని పేరు లేని వినియోగదారు నిర్వచించిన భాషకు మారతాయి."/>
+			<matrix-udl-retry-file value="UDL ఫైలు చర్యను మళ్లీ ప్రయత్నించు"/>
+			<matrix-udl-save-panel-disconnected value="UDL భద్రపరచడం ప్యానెల్ అనుసంధానం తెగిపోయింది: $ERROR$"/>
+			<matrix-udl-unavailable value="నిర్వచనాలు అందుబాటులో లేవు; udl.json సరిచేసి మళ్లీ ప్రయత్నించండి."/>
+			<matrix-udl-use-background value="నేపథ్యాన్ని ఉపయోగించు"/>
+			<matrix-udl-use-foreground value="ముందుభాగాన్ని ఉపయోగించు"/>
+			<matrix-udl-working-copy value="వినియోగదారు నిర్వచించినది (పని ప్రతి)"/>
+			<matrix-find-resize-results value="శోధన ఫలితాల పరిమాణాన్ని మార్చు"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

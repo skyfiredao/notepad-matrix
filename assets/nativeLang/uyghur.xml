@@ -654,5 +654,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="جەزىملەش"/>
+			<common-cancel value="قالدۇرۇش"/>
+			<common-name value="ئاتى"/>
+			<discover-file-candidates-title value="ماس كېلىشى مۇمكىن بولغان ھۆججەتلەر ئىزدەلمەكتە..."/>
+			<matrix-close value="يېپىش"/>
+			<matrix-retry value="قايتا سىناش"/>
+			<matrix-cancelled value="بىكار قىلىندى"/>
+			<matrix-read-only value="پەقەت ئوقۇش"/>
+			<matrix-find-status-details value="ھالەت تەپسىلاتلىرى"/>
+			<matrix-find-backward-unavailable value="مۇنتىزىم ئىپادە بىلەن كەينىگە ئىزدەش چەكلەنگەن"/>
+			<matrix-hash-select-files value="ھۆججەت تاللاش"/>
+			<matrix-hash-calculating value="ھاش قىممىتى ھېسابلىنىۋاتىدۇ…"/>
+			<matrix-hash-selection-failed value="ھۆججەت تاللاش مەغلۇپ بولدى: $ERROR$"/>
+			<matrix-hash-read-failed value="تۆۋەندىكى ھۆججەتلەرنى ئوقۇغىلى بولمىدى:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="خاتالىق ئۇچۇرىنى يېپىش"/>
+			<matrix-hash-file-paths value="ھۆججەت يوللىرى (پەقەت ئوقۇش)"/>
+			<matrix-hash-digest-result value="ھاش نەتىجىسى (پەقەت ئوقۇش)"/>
+			<matrix-hash-source-text value="ھاشنىڭ مەنبە تېكىستى"/>
+			<matrix-hash-selection-composition value="كىرگۈزۈش تېكىستى تۈزۈلۈۋاتقاندا تاللانغان تېكىستنىڭ ھاش قىممىتىنى ھېسابلاش تېخى ئەمەلگە ئاشۇرۇلمىغان"/>
+			<matrix-hash-selection-read-failed value="تاللانغان تېكىستنى ئوقۇغىلى بولمىدى: $ERROR$"/>
+			<matrix-window-activation-failed value="تاللانغان ھۆججەتكە ئالماشقىلى بولمىدى"/>
+			<matrix-window-selection-unavailable value="تاللانغان ھۆججەت يېپىلغان ياكى ئۇنى ئاكتىپلىغىلى بولمايدۇ"/>
+			<matrix-incremental-position value="تەدرىجىي ئىزدەش بالداقنى يۆتكەش"/>
+			<matrix-find-progress-bar value="ئىلگىرىلەش بالدىقى"/>
+			<matrix-find-previous-search value="ئالدىنقى ئىزدەشنى كۆرسىتىش"/>
+			<matrix-find-results-summary value="ئىزدەش نەتىجىسى - ($INT_REPLACE$ ماس كەلگەن)"/>
+			<matrix-udl-allow-code2-close value="2-كودنىڭ يېپىلىشىغا يول قويۇش"/>
+			<matrix-udl-allow-code2-middle value="2-كودنىڭ ئوتتۇرا قىسمىغا يول قويۇش"/>
+			<matrix-udl-allow-code2-open value="2-كودنىڭ ئېچىلىشىغا يول قويۇش"/>
+			<matrix-udl-allow-comment-fold-close value="ئىزاھات قاتلىمىنىڭ يېپىلىشىغا يول قويۇش"/>
+			<matrix-udl-allow-comment-fold-middle value="ئىزاھات قاتلىمىنىڭ ئوتتۇرا قىسمىغا يول قويۇش"/>
+			<matrix-udl-allow-comment-fold-open value="ئىزاھات قاتلىمىنىڭ ئېچىلىشىغا يول قويۇش"/>
+			<matrix-udl-choose-json value="JSON پىچىمىدىكى UDL ئېنىقلىما ھۆججىتىنى تاللاش"/>
+			<matrix-udl-close value="ئىشلەتكۈچى بەلگىلىگەن تىلنى يېپىش"/>
+			<matrix-udl-close-styler value="ئۇسلۇب تەڭشىگۈچنى يېپىش"/>
+			<matrix-udl-colors value="رەڭلەر"/>
+			<matrix-udl-dark-mode-language value="قاراڭغۇ ھالەت تىلى"/>
+			<matrix-udl-definition-exported value="ئېنىقلىما چىقىرىلدى"/>
+			<matrix-udl-definitions-saved value="ئېنىقلىمىلار ساقلاندى"/>
+			<matrix-udl-enable-font value="خەت نۇسخىسىنى قوزغىتىش"/>
+			<matrix-udl-error value="ئىشلەتكۈچى بەلگىلىگەن تىل خاتالىقى: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ھۆججەت مەشغۇلاتى مەغلۇپ بولدى: $ERROR$"/>
+			<matrix-udl-file-progress value="ھۆججەت مەشغۇلاتى ئېلىپ بېرىلىۋاتىدۇ…"/>
+			<matrix-udl-import-rejected value="ئەكىرىش رەت قىلىندى: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ تىل ئەكىرىلدى"/>
+			<matrix-udl-live-edits value="ئىشلەتكۈچى بەلگىلىگەن تىل — ئۆزگەرتىشلەر پەقەت بۇ تىلنى ئىشلىتىدىغان پۈتۈكلەرگە دەرھال قوللىنىلىدۇ"/>
+			<matrix-udl-loading value="ئېنىقلىمىلار يۈكلىنىۋاتىدۇ…"/>
+			<matrix-udl-memory-only value="ئېنىقلىمىلار پەقەت ئىچكى ساقلىغۇچتا (سەپلىمە مۇندەرىجىسى يوق)"/>
+			<matrix-udl-missing-ids value="ئىشلەتكۈچى بەلگىلىگەن تىل كىملىكلىرى كەم: $IDS$. پۈتۈك تېكىستى ۋە ساقلانغان تىل كىملىكلىرى ساقلاپ قېلىندى. ئېنىقلىمىلارنى ئەسلىگە كەلتۈرۈڭ ياكى باشقا بىر تىلنى ئېنىق تاللاڭ."/>
+			<matrix-udl-open-panel-disconnected value="UDL ئېچىش تاختىسىنىڭ ئۇلىنىشى ئۈزۈلدى: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="بۇ نام بېرىلگەن ئېنىقلىما ئۆچۈرۈلسۇنمۇ؟ مەۋجۇت پۈتۈكلەر تېكىستىنى ساقلاپ قالىدۇ ۋە نامسىز ئىشلەتكۈچى بەلگىلىگەن تىلغا ئالماشتۇرىدۇ."/>
+			<matrix-udl-retry-file value="UDL ھۆججەت مەشغۇلاتىنى قايتا سىناش"/>
+			<matrix-udl-save-panel-disconnected value="UDL ساقلاش تاختىسىنىڭ ئۇلىنىشى ئۈزۈلدى: $ERROR$"/>
+			<matrix-udl-unavailable value="ئېنىقلىمىلارنى ئىشلەتكىلى بولمايدۇ؛ udl.json نى تۈزىتىپ قايتا سىناڭ."/>
+			<matrix-udl-use-background value="تەگلىك رەڭگىنى ئىشلىتىش"/>
+			<matrix-udl-use-foreground value="ئالدىيۈز رەڭگىنى ئىشلىتىش"/>
+			<matrix-udl-working-copy value="ئىشلەتكۈچى بەلگىلىگەن (خىزمەت نۇسخىسى)"/>
+			<matrix-find-resize-results value="ئىزدەش نەتىجىلىرىنىڭ چوڭلۇقىنى ئۆزگەرتىش"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

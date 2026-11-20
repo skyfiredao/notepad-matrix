@@ -64,7 +64,7 @@ impl MatrixWindow {
             Ok(definition) => definition,
             Err(error) => {
                 self.builtin.syntax_cache = None;
-                self.editor_error = Some(error);
+                self.editor_error = Some(error.into());
                 return None;
             }
         };
@@ -137,14 +137,14 @@ impl MatrixWindow {
                 if self
                     .editor_error
                     .as_ref()
-                    .is_some_and(|error| error.starts_with("Built-in language "))
+                    .is_some_and(|error| matches!(error, crate::localization::Text::Literal(text) if text.starts_with("Built-in language ")))
                 {
                     self.editor_error = None;
                 }
                 Some(update)
             }
             Err(error) => {
-                self.editor_error = Some(format!("Built-in language {id}: {error}"));
+                self.editor_error = Some(format!("Built-in language {id}: {error}").into());
                 None
             }
         }

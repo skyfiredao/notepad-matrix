@@ -141,6 +141,7 @@ impl MatrixWindow {
             return None;
         }
         let button = |id: &'static str, label: &'static str, selected: bool| {
+            let label = crate::localization::current_dialog_control("DoSaveOrNot", if id == "reload-yes" { 6 } else { 7 }).unwrap_or(label);
             div()
                 .id(id)
                 .debug_selector(move || id.into())
@@ -166,7 +167,7 @@ impl MatrixWindow {
                     div()
                         .id("reload-dialog")
                         .role(Role::Dialog)
-                        .aria_label("Reload?")
+                        .aria_label(crate::localization::dialog_title(&self.native_locale(), "DoReloadOrNot").unwrap_or("Reload"))
                         .track_focus(&self.close_focus)
                         .key_context("MatrixReload")
                         .on_action(cx.listener(|view, _: &ToggleReloadChoice, _, cx| {
@@ -202,7 +203,11 @@ impl MatrixWindow {
                         .border_1()
                         .border_color(rgb(0x808080))
                         .child(if self.reload_external_change {
-                            format!("\"{}\"\n\nThis file has been modified by another program.\nDo you want to reload it and lose the changes made in Notepad Matrix?", self.disk_file().map(|file| file.path().display().to_string()).unwrap_or_default())
+                            crate::localization::dialog_message(&self.native_locale(),
+                                if self.workspace.active().is_modified() { "DoReloadOrNotAndLooseChange" } else { "DoReloadOrNot" })
+                                .unwrap_or("\"$STR_REPLACE$\"\n\nThis file has been modified by another program.\nDo you want to reload it?")
+                                .replace("Notepad++", "Notepad Matrix")
+                                .replace("$STR_REPLACE$", &self.disk_file().map(|file| file.path().display().to_string()).unwrap_or_default())
                         } else {
                             "Reload the current file and lose unsaved changes?".into()
                         })

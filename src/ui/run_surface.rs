@@ -1,4 +1,5 @@
 use super::*;
+use crate::localization;
 use gpui::{Pixels, point};
 use super::dialog_font::px;
 use crate::shortcuts::{CommandKey, KeyCombo};
@@ -250,7 +251,7 @@ impl MatrixWindow {
             Popup::History => (point(px(24.5), px(68.25)), px(591.5)),
             Popup::Keys => (point(px(192.5), px(91.)), px(112.)),
         };
-        let content_top = (window.bounds().size.height - window.viewport_size().height).max(px(0.));
+        let content_top = (window.bounds().size.height - self.auxiliary_client_size(window).height).max(px(0.));
         let mut bounds = Bounds::new(window.bounds().origin + point(px(0.), content_top) + offset, size(width, px((count as f32 * 22. + 6.).min(280.))));
         if let Some(display) = window.display(cx) {
             let area = display.visible_bounds();
@@ -392,6 +393,8 @@ impl MatrixWindow {
 
     pub(super) fn render_run_save(&self, _window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !self.run_save_visible() { return None; }
+        self.run_state.save_name.update(cx, |field, cx| field.set_label(
+            localization::current_dialog_control("ShortcutMapperSubDialg", 5006).unwrap_or("Name"), cx));
         let combo = self.run_state.save_combo;
         let enabled = !self.run_state.save_name.read(cx).text().is_empty() && combo.valid();
         let conflict = !self.shortcut_mapper.bindings.conflicts(&CommandKey::Run(self.shortcut_mapper.bindings.run_commands.len()), &[combo]).is_empty();
@@ -411,7 +414,7 @@ impl MatrixWindow {
                 }))
                 .flex().items_center().gap(px(4.)).child(if checked { "☑" } else { "☐" }).child(label)
         };
-        Some(div().id("run-save-dialog").role(Role::Dialog).aria_label("快捷键")
+        Some(div().id("run-save-dialog").role(Role::Dialog).aria_label(localization::dialog_title(&self.native_locale(), "ShortcutMapperSubDialg").unwrap_or("Shortcut"))
             .key_context("MatrixRunSave").relative().size_full().bg(rgb(0xf0f0f0))
             .font_family(dialog_font::font_family()).text_size(px(13.))
             .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, window, cx| {
@@ -422,13 +425,13 @@ impl MatrixWindow {
                 }
                 cx.stop_propagation();
             }))
-            .child(div().absolute().left(px(17.5)).top(px(14.)).w(px(75.)).text_align(gpui::TextAlign::Right).child("名称："))
+            .child(div().absolute().left(px(17.5)).top(px(14.)).w(px(75.)).text_align(gpui::TextAlign::Right).child(localization::current_dialog_control("ShortcutMapperSubDialg", 5006).unwrap_or("Name")))
             .child(div().absolute().left(px(98.)).top(px(14.)).w(px(206.5)).child(self.run_state.save_name.clone()))
             .child(div().absolute().left(px(21.)).top(px(47.25)).child(check("run-save-ctrl", "Ctrl", combo.ctrl).on_click(cx.listener(|view, _, _, cx| { view.run_state.save_combo.ctrl ^= true; cx.notify(); }))))
             .child(div().absolute().left(px(21.)).top(px(84.)).child(check("run-save-alt", "Alt", combo.alt).on_click(cx.listener(|view, _, _, cx| { view.run_state.save_combo.alt ^= true; cx.notify(); }))))
             .child(div().absolute().left(px(99.75)).top(px(68.25)).child(check("run-save-shift", "Shift", combo.shift).on_click(cx.listener(|view, _, _, cx| { view.run_state.save_combo.shift ^= true; cx.notify(); }))))
             .child(div().absolute().left(px(21.)).top(px(112.)).child(check("run-save-cmd", "Cmd", combo.cmd).on_click(cx.listener(|view, _, _, cx| { view.run_state.save_combo.cmd ^= true; cx.notify(); }))))
-            .child(div().id("run-save-key").role(Role::ComboBox).tab_index(0).aria_label("快捷键").aria_value(crate::shortcuts::key_name(combo.key)).absolute().left(px(192.5)).top(px(66.5)).w(px(112.)).h(px(24.)).border_1().border_color(rgb(0x808080)).bg(rgb(0xffffff)).px(px(4.)).flex().justify_between().items_center()
+            .child(div().id("run-save-key").role(Role::ComboBox).tab_index(0).aria_label(localization::dialog_title(&self.native_locale(), "ShortcutMapperSubDialg").unwrap_or("Shortcut")).aria_value(crate::shortcuts::key_name(combo.key)).absolute().left(px(192.5)).top(px(66.5)).w(px(112.)).h(px(24.)).border_1().border_color(rgb(0x808080)).bg(rgb(0xffffff)).px(px(4.)).flex().justify_between().items_center()
                 .child(crate::shortcuts::key_name(combo.key)).child("▾")
                 .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, window, cx| {
                     match event.keystroke.key.as_str() {
@@ -447,26 +450,29 @@ impl MatrixWindow {
                 }))
                 .on_click(cx.listener(|view, _, window, cx| view.open_run_popup(Popup::Keys, window, cx))))
             .child(div().absolute().left(px(68.25)).top(px(140.)).flex().gap(px(10.5))
-                .child(div().id("run-save-ok").role(Role::Button).aria_label("确定").a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).tab_index(0).w(px(87.5)).h(px(24.5)).border_1().border_color(rgb(0x808080)).flex().items_center().justify_center().text_color(rgb(if enabled { 0x202020 } else { 0x808080 })).child("确定")
+                .child(div().id("run-save-ok").role(Role::Button).aria_label(localization::current_dialog_control("ShortcutMapperSubDialg", 1).unwrap_or("OK")).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).tab_index(0).w(px(87.5)).h(px(24.5)).border_1().border_color(rgb(0x808080)).flex().items_center().justify_center().text_color(rgb(if enabled { 0x202020 } else { 0x808080 })).child(localization::current_dialog_control("ShortcutMapperSubDialg", 1).unwrap_or("OK"))
                     .on_click(cx.listener(|view, _, window, cx| view.confirm_run_save(window, cx))))
-                .child(div().id("run-save-cancel").role(Role::Button).aria_label("取消").tab_index(0).w(px(87.5)).h(px(24.5)).border_1().border_color(rgb(0x808080)).flex().items_center().justify_center().child("取消")
+                .child(div().id("run-save-cancel").role(Role::Button).aria_label(localization::current_dialog_control("ShortcutMapperSubDialg", 2).unwrap_or("Cancel")).tab_index(0).w(px(87.5)).h(px(24.5)).border_1().border_color(rgb(0x808080)).flex().items_center().justify_center().child(localization::current_dialog_control("ShortcutMapperSubDialg", 2).unwrap_or("Cancel"))
                     .on_click(cx.listener(|view, _, window, cx| view.cancel_run(window, cx)))))
             .when(conflict || self.run_state.save_warning || !self.run_state.save_message.is_empty(), |dialog| dialog.child(
                 div().absolute().left(px(10.5)).top(px(169.)).text_color(rgb(0xa00000)).child(
                     if !self.run_state.save_message.is_empty() { self.run_state.save_message.clone() }
-                    else if conflict { "发现快捷键冲突！".into() } else { "这将禁用快捷键".into() })))
+                    else if conflict { localization::current_dialog_control("ShortcutMapperSubDialg", 5012).unwrap_or("CONFLICT FOUND!").into() }
+                    else { localization::current_dialog_control("ShortcutMapperSubDialg", 5007).unwrap_or("This will remove shortcut from this command").into() })))
             .into_any_element())
     }
 
     pub(super) fn render_run(&self, window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !self.run_visible { return None; }
+        self.run_input.update(cx, |field, cx| field.set_label(
+            localization::current_dialog_control("Run", 1903).unwrap_or("The Program to Run"), cx));
         let button = |id: &'static str, text: &'static str, focus: &FocusHandle, x: f32, y: f32, width: f32| {
             div().id(id).debug_selector(move || id.into()).role(Role::Button).aria_label(text)
                 .track_focus(focus).key_context("MatrixRunButton").absolute().left(px(x * 1.75)).top(px(y * 1.75))
                 .w(px(width * 1.75)).h(px(24.5)).border_1().border_color(rgb(if focus.is_focused(window) { 0x0067c0 } else { 0xaaaaaa }))
                 .bg(rgb(0xe1e1e1)).flex().items_center().justify_center().child(text)
         };
-        Some(div().id("run-dialog").debug_selector(|| "run-dialog".into()).role(Role::Dialog).aria_label("运行...")
+        Some(div().id("run-dialog").debug_selector(|| "run-dialog".into()).role(Role::Dialog).aria_label(localization::dialog_title(&self.native_locale(), "Run").unwrap_or("Run..."))
             .key_context("MatrixRun").relative().w_full().h(px(140.)).bg(rgb(if self.dark { 0x282828 } else { 0xf0f0f0 }))
             .font_family(dialog_font::font_family()).text_size(px(13.)).occlude()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -474,7 +480,7 @@ impl MatrixWindow {
                 if event.keystroke.key == "down" && !view.run_state.save_visible { view.open_run_popup(Popup::History, window, cx); cx.stop_propagation(); }
             }))
             .child(div().absolute().left(px(12.25)).top(px(10.5)).w(px(679.)).h(px(84.)).border_1().border_color(rgb(0xd3d3d3)))
-            .child(div().absolute().left(px(300.)).top(px(2.)).px(px(3.)).bg(rgb(if self.dark { 0x282828 } else { 0xf0f0f0 })).child("输入运行程序名"))
+            .child(div().absolute().left(px(300.)).top(px(2.)).px(px(3.)).bg(rgb(if self.dark { 0x282828 } else { 0xf0f0f0 })).child(localization::current_dialog_control("Run", 1903).unwrap_or("The Program to Run")))
             .child(div().absolute().left(px(24.5)).top(px(45.5)).w(px(591.5)).h(px(22.)).child(self.run_input.clone()))
             .child(div().id("run-history").role(Role::Button).aria_label("运行历史").absolute().left(px(596.)).top(px(45.5)).w(px(20.)).h(px(22.)).flex().items_center().justify_center().child("⌄")
                 .on_click(cx.listener(|view, _, window, cx| view.open_run_popup(Popup::History, window, cx))))
@@ -483,11 +489,11 @@ impl MatrixWindow {
                 .on_click(cx.listener(|view, _, window, cx| view.browse_run(window, cx))))
             .child(button("run-variables", "+", &self.run_state.controls[1], 372., 25., 14.)
                 .on_click(cx.listener(|view, _, window, cx| view.open_run_popup(Popup::Variables, window, cx))))
-            .child(button("run-confirm", "运行", &self.run_button_focus[0], 124., 60., 50.)
+            .child(button("run-confirm", localization::current_dialog_control("Run", 1).unwrap_or("Run"), &self.run_button_focus[0], 124., 60., 50.)
                 .on_click(cx.listener(|view, _, window, cx| view.confirm_run(window, cx))))
-            .child(button("run-save", "保存...", &self.run_state.controls[2], 177., 60., 50.)
+            .child(button("run-save", localization::current_dialog_control("Run", 1904).unwrap_or("Save..."), &self.run_state.controls[2], 177., 60., 50.)
                 .on_click(cx.listener(|view, _, window, cx| view.show_run_save(window, cx))))
-            .child(button("run-cancel", "取消", &self.run_button_focus[1], 230., 60., 50.)
+            .child(button("run-cancel", localization::current_dialog_control("Run", 2).unwrap_or("Cancel"), &self.run_button_focus[1], 230., 60., 50.)
                 .on_click(cx.listener(|view, _, window, cx| view.cancel_run(window, cx))))
             .when(!self.run_message.is_empty(), |dialog| dialog.child(div().id("run-error").role(Role::Alert).absolute().left(px(16.)).top(px(73.)).w(px(660.)).text_color(rgb(0xb00000)).text_size(px(11.)).child(self.run_message.clone())))
             .into_any_element())

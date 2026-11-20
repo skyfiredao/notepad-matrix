@@ -1819,6 +1819,61 @@ C, C++, Java, C#, Objective-C, PHP, JavaScript, JSP, CSS, Perl, Rust, PowerShell
 Hvis du velger avansert modus, men ikke redigerer filer på de nevnte språkene, vil innrykket forbli i grunnleggende modus."/>
 			<!-- Don't translate "Global override" and "Default Style" -->
 			<global-override-tip value="Enabling &quot;Global override&quot; here will override that parameter in all language styles. What you probably really want is to use the &quot;Default Style&quot; settings instead"/>
+			<matrix-close value="Lukk"/>
+			<matrix-retry value="Prøv igjen"/>
+			<matrix-cancelled value="Avbrutt"/>
+			<matrix-read-only value="Skrivebeskyttet"/>
+			<matrix-find-status-details value="Statusdetaljer"/>
+			<matrix-find-backward-unavailable value="Baklengssøk med regulære uttrykk er deaktivert"/>
+			<matrix-hash-select-files value="Velg filer"/>
+			<matrix-hash-calculating value="Beregner fingeravtrykk…"/>
+			<matrix-hash-selection-failed value="Kunne ikke velge filer: $ERROR$"/>
+			<matrix-hash-read-failed value="Kan ikke lese følgende filer:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Lukk feilmeldingen"/>
+			<matrix-hash-file-paths value="Filbaner (skrivebeskyttet)"/>
+			<matrix-hash-digest-result value="Beregnet fingeravtrykk (skrivebeskyttet)"/>
+			<matrix-hash-source-text value="Kildetekst for fingeravtrykk"/>
+			<matrix-hash-selection-composition value="Beregning av fingeravtrykk for merket tekst under aktiv tekstkomponering er ikke implementert ennå"/>
+			<matrix-hash-selection-read-failed value="Kan ikke lese merket tekst: $ERROR$"/>
+			<matrix-window-activation-failed value="Kan ikke bytte til den valgte filen"/>
+			<matrix-window-selection-unavailable value="Den valgte filen er lukket eller kan ikke aktiveres"/>
+			<matrix-incremental-position value="Flytt linjen for inkrementelt søk"/>
+			<matrix-find-progress-bar value="Fremdriftsindikator"/>
+			<matrix-find-previous-search value="Vis forrige søk"/>
+			<matrix-find-resize-results value="Endre størrelsen på søkeresultatene"/>
+			<matrix-find-results-summary value="Søkeresultat - ($INT_REPLACE$ treff)"/>
+			<matrix-udl-allow-code2-close value="Tillat slutt på kodeblokk 2"/>
+			<matrix-udl-allow-code2-middle value="Tillat midtdel i kodeblokk 2"/>
+			<matrix-udl-allow-code2-open value="Tillat start på kodeblokk 2"/>
+			<matrix-udl-allow-comment-fold-close value="Tillat slutt på sammenlegging av kommentarer"/>
+			<matrix-udl-allow-comment-fold-middle value="Tillat midtdel i sammenlegging av kommentarer"/>
+			<matrix-udl-allow-comment-fold-open value="Tillat start på sammenlegging av kommentarer"/>
+			<matrix-udl-choose-json value="Velg en JSON-fil med en UDL-definisjon"/>
+			<matrix-udl-close value="Lukk brukerdefinert språk"/>
+			<matrix-udl-close-styler value="Lukk stildialogen"/>
+			<matrix-udl-colors value="Farger"/>
+			<matrix-udl-dark-mode-language value="Språk for mørk modus"/>
+			<matrix-udl-definition-exported value="Definisjonen er eksportert"/>
+			<matrix-udl-definitions-saved value="Definisjonene er lagret"/>
+			<matrix-udl-enable-font value="Bruk skrifttype"/>
+			<matrix-udl-error value="Feil i brukerdefinert språk: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-filoperasjonen mislyktes: $ERROR$"/>
+			<matrix-udl-file-progress value="Filoperasjon pågår…"/>
+			<matrix-udl-import-rejected value="Importen ble avvist: $ERROR$"/>
+			<matrix-udl-imported value="Antall importerte språk: $COUNT$"/>
+			<matrix-udl-live-edits value="Brukerdefinert språk — endringer brukes umiddelbart bare i dokumenter som bruker dette språket"/>
+			<matrix-udl-loading value="Laster definisjoner…"/>
+			<matrix-udl-memory-only value="Definisjonene finnes bare i minnet (ingen konfigurasjonsmappe)"/>
+			<matrix-udl-missing-ids value="Manglende ID-er for brukerdefinerte språk: $IDS$. Dokumentteksten og de lagrede språkidentitetene er bevart. Gjenopprett definisjonene eller velg uttrykkelig et annet språk i Språk-menyen."/>
+			<matrix-udl-open-panel-disconnected value="UDL-åpningsdialogen ble frakoblet: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Vil du fjerne denne navngitte definisjonen? Eksisterende dokumenter beholder teksten og bytter til det brukerdefinerte språket uten navn."/>
+			<matrix-udl-retry-file value="Prøv UDL-filoperasjonen igjen"/>
+			<matrix-udl-save-panel-disconnected value="UDL-lagringsdialogen ble frakoblet: $ERROR$"/>
+			<matrix-udl-unavailable value="Definisjonene er utilgjengelige; rett udl.json og prøv igjen."/>
+			<matrix-udl-use-background value="Bruk bakgrunnsfarge"/>
+			<matrix-udl-use-foreground value="Bruk forgrunnsfarge"/>
+			<matrix-udl-working-copy value="Brukerdefinert (arbeidskopi)"/>
+			<discover-file-candidates-title value="Finner aktuelle filer…"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

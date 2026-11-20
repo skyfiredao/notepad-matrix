@@ -926,5 +926,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<matrix-find-resize-results value="Ndrysho madhësinë e rezultateve të kërkimit"/>
+			<common-ok value="OK"/>
+			<common-cancel value="Anulo"/>
+			<common-name value="Emri"/>
+			<discover-file-candidates-title value="Duke zbuluar skedarë të mundshëm…"/>
+			<matrix-close value="Mbyll"/>
+			<matrix-retry value="Provo përsëri"/>
+			<matrix-cancelled value="U anulua"/>
+			<matrix-read-only value="Vetëm për lexim"/>
+			<matrix-find-status-details value="Hollësitë e gjendjes"/>
+			<matrix-find-backward-unavailable value="Kërkimi prapa me shprehje të rregullta është çaktivizuar"/>
+			<matrix-hash-select-files value="Zgjidh skedarë"/>
+			<matrix-hash-calculating value="Duke llogaritur gjurmën…"/>
+			<matrix-hash-selection-failed value="Zgjedhja e skedarëve dështoi: $ERROR$"/>
+			<matrix-hash-read-failed value="Skedarët vijues nuk mund të lexohen:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Mbyll mesazhin e gabimit"/>
+			<matrix-hash-file-paths value="Shtigjet e skedarëve (vetëm për lexim)"/>
+			<matrix-hash-digest-result value="Gjurmë e llogaritur (vetëm për lexim)"/>
+			<matrix-hash-source-text value="Teksti burimor i gjurmës"/>
+			<matrix-hash-selection-composition value="Llogaritja e gjurmës së përzgjedhjes gjatë kompozimit aktiv të tekstit nuk është zbatuar ende"/>
+			<matrix-hash-selection-read-failed value="Përzgjedhja nuk mund të lexohet: $ERROR$"/>
+			<matrix-window-activation-failed value="Nuk mund të kalohet te skedari i zgjedhur"/>
+			<matrix-window-selection-unavailable value="Skedari i zgjedhur është mbyllur ose nuk mund të aktivizohet"/>
+			<matrix-incremental-position value="Zhvendos shiritin e kërkimit rritës"/>
+			<matrix-find-progress-bar value="Shiriti i ecurisë"/>
+			<matrix-find-previous-search value="Shfaq kërkimin e mëparshëm"/>
+			<matrix-find-results-summary value="Rezultatet e kërkimit - ($INT_REPLACE$ përputhje)"/>
+			<matrix-udl-allow-code2-close value="Lejo mbylljen e kodit 2"/>
+			<matrix-udl-allow-code2-middle value="Lejo mesin e kodit 2"/>
+			<matrix-udl-allow-code2-open value="Lejo hapjen e kodit 2"/>
+			<matrix-udl-allow-comment-fold-close value="Lejo mbylljen e palosjes së komentit"/>
+			<matrix-udl-allow-comment-fold-middle value="Lejo mesin e palosjes së komentit"/>
+			<matrix-udl-allow-comment-fold-open value="Lejo hapjen e palosjes së komentit"/>
+			<matrix-udl-choose-json value="Zgjidh një skedar JSON me përkufizim UDL"/>
+			<matrix-udl-close value="Mbyll gjuhën e përcaktuar nga përdoruesi"/>
+			<matrix-udl-close-styler value="Mbyll dialogun e stilit"/>
+			<matrix-udl-colors value="Ngjyrat"/>
+			<matrix-udl-dark-mode-language value="Gjuha për mënyrën e errët"/>
+			<matrix-udl-definition-exported value="Përkufizimi u eksportua"/>
+			<matrix-udl-definitions-saved value="Përkufizimet u ruajtën"/>
+			<matrix-udl-enable-font value="Aktivizo shkrimin"/>
+			<matrix-udl-error value="Gabim në gjuhën e përcaktuar nga përdoruesi: $ERROR$"/>
+			<matrix-udl-file-failed value="Veprimi me skedarin UDL dështoi: $ERROR$"/>
+			<matrix-udl-file-progress value="Veprim me skedarin në vijim…"/>
+			<matrix-udl-import-rejected value="Importimi u refuzua: $ERROR$"/>
+			<matrix-udl-imported value="Gjuhë të importuara: $COUNT$"/>
+			<matrix-udl-live-edits value="Gjuha e përcaktuar nga përdoruesi — ndryshimet zbatohen menjëherë vetëm në dokumentet që përdorin këtë gjuhë"/>
+			<matrix-udl-loading value="Duke ngarkuar përkufizimet…"/>
+			<matrix-udl-memory-only value="Përkufizimet janë vetëm në kujtesë (nuk ka dosje konfigurimi)"/>
+			<matrix-udl-missing-ids value="Mungojnë ID-të e gjuhëve të përcaktuara nga përdoruesi: $IDS$. Teksti i dokumenteve dhe identitetet e ruajtura të gjuhëve janë ruajtur. Rikthe përkufizimet ose zgjidh shprehimisht një gjuhë tjetër."/>
+			<matrix-udl-open-panel-disconnected value="Paneli i hapjes së UDL u shkëput: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Të hiqet ky përkufizim me emër? Dokumentet ekzistuese ruajnë tekstin dhe kalojnë te gjuha pa emër e përcaktuar nga përdoruesi."/>
+			<matrix-udl-retry-file value="Provo përsëri veprimin me skedarin UDL"/>
+			<matrix-udl-save-panel-disconnected value="Paneli i ruajtjes së UDL u shkëput: $ERROR$"/>
+			<matrix-udl-unavailable value="Përkufizimet nuk janë të disponueshme; korrigjo udl.json dhe provo përsëri."/>
+			<matrix-udl-use-background value="Përdor sfondin"/>
+			<matrix-udl-use-foreground value="Përdor planin e parë"/>
+			<matrix-udl-working-copy value="Përcaktuar nga përdoruesi (kopje pune)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

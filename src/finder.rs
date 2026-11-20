@@ -964,7 +964,10 @@ pub(crate) fn stream_document(
     if scope.is_empty() { return Ok(()); }
     let mut pending = FoundLines::new(&doc.bytes, control.one_per_line);
     let mut first = true;
-    let result = crate::search::visit_literal_ranges_in_bytes_with_state(&doc.bytes, query, scope, options, state, |range| {
+    let cancel = control.cancel;
+    let result = crate::search::visit_literal_ranges_in_bytes_cancellable_with_state(&doc.bytes, query, scope, options, state,
+        || cancel.load(std::sync::atomic::Ordering::Relaxed), |range| {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) { return false; }
         pending.push(range);
         control.hits += 1;
         if pending.size > 1024 * 1024 {
@@ -1095,11 +1098,12 @@ impl<'a> FoundLines<'a> {
         let join = self.one_per_line && self.previous_line == Some(line)
             && (preview.original_length < 2048 || highlight.end < 2048);
         if self.lines.is_empty() { self.join_previous = join; }
+        self.size += std::mem::size_of::<Range<usize>>() + std::mem::size_of::<Range<ByteOffset>>();
         if join && let Some(previous) = self.lines.last_mut() {
             previous.highlights.push(highlight);
             previous.ranges.push(range);
         } else {
-            if !join { self.size += preview.caption.len() + 2; }
+            self.size += std::mem::size_of::<FoundLine>() + preview.caption.len() + 2;
             self.lines.push(FoundLine { number: line + 1, caption: preview.caption.clone(),
                 highlights: vec![highlight], ranges: vec![range] });
         }

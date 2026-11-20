@@ -522,5 +522,65 @@
 				<Item id="2" name="Kanselleer"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="OK"/>
+			<common-cancel value="Kanselleer"/>
+			<common-name value="Naam"/>
+			<discover-file-candidates-title value="Spoor kandidaat-lêers op..."/>
+			<matrix-close value="Maak Toe"/>
+			<matrix-retry value="Probeer weer"/>
+			<matrix-cancelled value="Gekanselleer"/>
+			<matrix-read-only value="Lees Alleenlik"/>
+			<matrix-find-status-details value="Statusbesonderhede"/>
+			<matrix-find-resize-results value="Verander die grootte van soekresultate"/>
+			<matrix-find-backward-unavailable value="Agteruit soek met reëlmatige uitdrukkings is gedeaktiveer"/>
+			<matrix-hash-select-files value="Kies lêers"/>
+			<matrix-hash-calculating value="Bereken hutswaarde…"/>
+			<matrix-hash-selection-failed value="Lêerkeuse het misluk: $ERROR$"/>
+			<matrix-hash-read-failed value="Kan nie die volgende lêers lees nie:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Maak fout toe"/>
+			<matrix-hash-file-paths value="Lêerpaaie (lees alleenlik)"/>
+			<matrix-hash-digest-result value="Hutsresultaat (lees alleenlik)"/>
+			<matrix-hash-source-text value="Bronteks vir hutswaarde"/>
+			<matrix-hash-selection-composition value="Verhutsing van die keuse tydens aktiewe tekssamestelling is nog nie geïmplementeer nie"/>
+			<matrix-hash-selection-read-failed value="Kan nie die keuse lees nie: $ERROR$"/>
+			<matrix-window-activation-failed value="Kan nie na die gekose lêer oorskakel nie"/>
+			<matrix-window-selection-unavailable value="Die gekose lêer is gesluit of kan nie geaktiveer word nie"/>
+			<matrix-incremental-position value="Skuif die inkrementele soekbalk"/>
+			<matrix-find-progress-bar value="Vorderingsbalk"/>
+			<matrix-find-previous-search value="Wys vorige soektog"/>
+			<matrix-find-results-summary value="Soekresultate - ($INT_REPLACE$ treffers)"/>
+			<matrix-udl-allow-code2-close value="Laat kode 2 se sluiting toe"/>
+			<matrix-udl-allow-code2-middle value="Laat kode 2 se middel toe"/>
+			<matrix-udl-allow-code2-open value="Laat kode 2 se opening toe"/>
+			<matrix-udl-allow-comment-fold-close value="Laat opmerkingvou se sluiting toe"/>
+			<matrix-udl-allow-comment-fold-middle value="Laat opmerkingvou se middel toe"/>
+			<matrix-udl-allow-comment-fold-open value="Laat opmerkingvou se opening toe"/>
+			<matrix-udl-choose-json value="Kies 'n JSON-lêer met UDL-definisies"/>
+			<matrix-udl-close value="Maak gebruiker gedefinieerde taal toe"/>
+			<matrix-udl-close-styler value="Maak stylredigeerder toe"/>
+			<matrix-udl-colors value="Kleure"/>
+			<matrix-udl-dark-mode-language value="Donkermodustaal"/>
+			<matrix-udl-definition-exported value="Definisie uitgevoer"/>
+			<matrix-udl-definitions-saved value="Definisies gestoor"/>
+			<matrix-udl-enable-font value="Aktiveer lettertipe"/>
+			<matrix-udl-error value="Fout met gebruiker gedefinieerde taal: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-lêerbewerking het misluk: $ERROR$"/>
+			<matrix-udl-file-progress value="Lêerbewerking is aan die gang…"/>
+			<matrix-udl-import-rejected value="Invoer geweier: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ taal/tale ingevoer"/>
+			<matrix-udl-live-edits value="Gebruiker gedefinieerde taal — wysigings geld dadelik net vir dokumente wat hierdie taal gebruik"/>
+			<matrix-udl-loading value="Laai definisies…"/>
+			<matrix-udl-memory-only value="Definisies is net in die geheue (geen konfigurasiegids nie)"/>
+			<matrix-udl-missing-ids value="Gebruiker gedefinieerde taal-ID's ontbreek: $IDS$. Dokumentteks en gestoorde taalidentiteite is behou. Herstel die definisies of kies uitdruklik 'n ander taal."/>
+			<matrix-udl-open-panel-disconnected value="UDL-oopmaakpaneel ontkoppel: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Verwyder hierdie benoemde definisie? Bestaande dokumente behou hul teks en skakel oor na die onbenoemde gebruiker gedefinieerde taal."/>
+			<matrix-udl-retry-file value="Probeer UDL-lêerbewerking weer"/>
+			<matrix-udl-save-panel-disconnected value="UDL-stoorpaneel ontkoppel: $ERROR$"/>
+			<matrix-udl-unavailable value="Definisies onbeskikbaar; korrigeer udl.json en probeer weer."/>
+			<matrix-udl-use-background value="Gebruik agtergrond"/>
+			<matrix-udl-use-foreground value="Gebruik voorgrond"/>
+			<matrix-udl-working-copy value="Gebruiker gedefinieerde (werkskopie)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

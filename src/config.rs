@@ -12,6 +12,12 @@ pub struct ConfigStore {
 impl ConfigStore {
     pub fn under_home(home: &Path) -> Self {
         Self {
+            root: crate::config_directory::active_root(home),
+        }
+    }
+
+    pub(crate) fn under_default_home(home: &Path) -> Self {
+        Self {
             root: home.join(".notepad-matrix"),
         }
     }

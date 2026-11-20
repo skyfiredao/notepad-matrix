@@ -522,5 +522,65 @@
 				<Item id="2" name="Откажи"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<matrix-find-resize-results value="Промени ја големината на резултатите од пребарувањето"/>
+			<common-ok value="Во ред"/>
+			<common-cancel value="Откажи"/>
+			<common-name value="Име"/>
+			<discover-file-candidates-title value="Откривање можни датотеки…"/>
+			<matrix-close value="Затвори"/>
+			<matrix-retry value="Обиди се повторно"/>
+			<matrix-cancelled value="Откажано"/>
+			<matrix-read-only value="Само за читање"/>
+			<matrix-find-status-details value="Податоци за состојбата"/>
+			<matrix-find-backward-unavailable value="Пребарувањето наназад со регуларни изрази е оневозможено"/>
+			<matrix-hash-select-files value="Избери датотеки"/>
+			<matrix-hash-calculating value="Пресметување хеш…"/>
+			<matrix-hash-selection-failed value="Изборот на датотеки не успеа: $ERROR$"/>
+			<matrix-hash-read-failed value="Не може да се прочитаат следниве датотеки:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Затвори ја пораката за грешка"/>
+			<matrix-hash-file-paths value="Патеки до датотеките (само за читање)"/>
+			<matrix-hash-digest-result value="Добиен хеш (само за читање)"/>
+			<matrix-hash-source-text value="Изворен текст за хеширање"/>
+			<matrix-hash-selection-composition value="Хеширањето на изборот при активно составување текст сè уште не е имплементирано"/>
+			<matrix-hash-selection-read-failed value="Не може да се прочита изборот: $ERROR$"/>
+			<matrix-window-activation-failed value="Не може да се премине на избраната датотека"/>
+			<matrix-window-selection-unavailable value="Избраната датотека е затворена или не може да се активира"/>
+			<matrix-incremental-position value="Премести ја лентата за постепено пребарување"/>
+			<matrix-find-progress-bar value="Лента за напредок"/>
+			<matrix-find-previous-search value="Прикажи го претходното пребарување"/>
+			<matrix-find-results-summary value="Резултати од пребарувањето - ($INT_REPLACE$ совпаѓања)"/>
+			<matrix-udl-allow-code2-close value="Дозволи затворање на код 2"/>
+			<matrix-udl-allow-code2-middle value="Дозволи средина на код 2"/>
+			<matrix-udl-allow-code2-open value="Дозволи отворање на код 2"/>
+			<matrix-udl-allow-comment-fold-close value="Дозволи крај на собирањето коментари"/>
+			<matrix-udl-allow-comment-fold-middle value="Дозволи средина на собирањето коментари"/>
+			<matrix-udl-allow-comment-fold-open value="Дозволи почеток на собирањето коментари"/>
+			<matrix-udl-choose-json value="Избери JSON датотека со UDL дефиниција"/>
+			<matrix-udl-close value="Затвори го јазикот дефиниран од корисникот"/>
+			<matrix-udl-close-styler value="Затвори го уредувачот на стилови"/>
+			<matrix-udl-colors value="Бои"/>
+			<matrix-udl-dark-mode-language value="Јазик за темен режим"/>
+			<matrix-udl-definition-exported value="Дефиницијата е извезена"/>
+			<matrix-udl-definitions-saved value="Дефинициите се зачувани"/>
+			<matrix-udl-enable-font value="Овозможи фонт"/>
+			<matrix-udl-error value="Грешка во јазик дефиниран од корисникот: $ERROR$"/>
+			<matrix-udl-file-failed value="Операцијата со UDL датотеката не успеа: $ERROR$"/>
+			<matrix-udl-file-progress value="Операција со датотека во тек…"/>
+			<matrix-udl-import-rejected value="Увозот е одбиен: $ERROR$"/>
+			<matrix-udl-imported value="Увезени јазици: $COUNT$"/>
+			<matrix-udl-live-edits value="Јазик дефиниран од корисникот — измените веднаш се применуваат само на документите што го користат овој јазик"/>
+			<matrix-udl-loading value="Вчитување на дефинициите…"/>
+			<matrix-udl-memory-only value="Дефинициите се само во меморијата (нема папка за поставки)"/>
+			<matrix-udl-missing-ids value="Недостасуваат ID на јазици дефинирани од корисникот: $IDS$. Текстот на документите и зачуваните идентитети на јазиците се задржани. Вратете ги дефинициите или изречно изберете друг јазик."/>
+			<matrix-udl-open-panel-disconnected value="Панелот за отворање UDL е исклучен: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Да се отстрани оваа именувана дефиниција? Постојните документи го задржуваат текстот и преминуваат на неименуваниот јазик дефиниран од корисникот."/>
+			<matrix-udl-retry-file value="Повтори ја операцијата со UDL датотеката"/>
+			<matrix-udl-save-panel-disconnected value="Панелот за зачувување UDL е исклучен: $ERROR$"/>
+			<matrix-udl-unavailable value="Дефинициите не се достапни; поправете ја udl.json и обидете се повторно."/>
+			<matrix-udl-use-background value="Користи позадина"/>
+			<matrix-udl-use-foreground value="Користи боја на текстот"/>
+			<matrix-udl-working-copy value="Дефинирано од корисникот (работна копија)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

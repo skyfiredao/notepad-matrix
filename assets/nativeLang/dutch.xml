@@ -1765,6 +1765,60 @@ Ga alleen door als u de risico's begrijpt."/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-close value="Sluiten"/>
+			<matrix-retry value="Opnieuw proberen"/>
+			<matrix-cancelled value="Geannuleerd"/>
+			<matrix-read-only value="Alleen-lezen"/>
+			<matrix-find-status-details value="Statusdetails"/>
+			<matrix-find-resize-results value="Grootte van zoekresultaten wijzigen"/>
+			<matrix-find-backward-unavailable value="Achteruit zoeken met reguliere expressies is uitgeschakeld"/>
+			<matrix-hash-select-files value="Bestanden selecteren"/>
+			<matrix-hash-calculating value="Hashwaarde berekenen…"/>
+			<matrix-hash-selection-failed value="Bestandsselectie mislukt: $ERROR$"/>
+			<matrix-hash-read-failed value="De volgende bestanden kunnen niet worden gelezen:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Foutmelding sluiten"/>
+			<matrix-hash-file-paths value="Bestandspaden (alleen-lezen)"/>
+			<matrix-hash-digest-result value="Berekende hashwaarde (alleen-lezen)"/>
+			<matrix-hash-source-text value="Brontekst voor hashwaarde"/>
+			<matrix-hash-selection-composition value="Hashberekening van de selectie tijdens actieve tekstcompositie is nog niet geïmplementeerd"/>
+			<matrix-hash-selection-read-failed value="De selectie kan niet worden gelezen: $ERROR$"/>
+			<matrix-window-activation-failed value="Kan niet naar het geselecteerde bestand overschakelen"/>
+			<matrix-window-selection-unavailable value="Het geselecteerde bestand is gesloten of kan niet worden geactiveerd"/>
+			<matrix-incremental-position value="Incrementele zoekbalk verplaatsen"/>
+			<matrix-find-progress-bar value="Voortgangsbalk"/>
+			<matrix-find-previous-search value="Vorige zoekopdracht tonen"/>
+			<matrix-find-results-summary value="Zoekresultaten - ($INT_REPLACE$ treffers)"/>
+			<matrix-udl-allow-code2-close value="Eindmarkering voor samenvouwen van code 2 toestaan"/>
+			<matrix-udl-allow-code2-middle value="Middenmarkering voor samenvouwen van code 2 toestaan"/>
+			<matrix-udl-allow-code2-open value="Beginmarkering voor samenvouwen van code 2 toestaan"/>
+			<matrix-udl-allow-comment-fold-close value="Eindmarkering voor samenvouwen van commentaar toestaan"/>
+			<matrix-udl-allow-comment-fold-middle value="Middenmarkering voor samenvouwen van commentaar toestaan"/>
+			<matrix-udl-allow-comment-fold-open value="Beginmarkering voor samenvouwen van commentaar toestaan"/>
+			<matrix-udl-choose-json value="Een UDL-definitiebestand in JSON-formaat kiezen"/>
+			<matrix-udl-close value="Aangepaste syntaxismarkering sluiten"/>
+			<matrix-udl-close-styler value="Opmaak sluiten"/>
+			<matrix-udl-colors value="Kleuren"/>
+			<matrix-udl-dark-mode-language value="Taal voor donkere modus"/>
+			<matrix-udl-definition-exported value="Definitie geëxporteerd"/>
+			<matrix-udl-definitions-saved value="Definities opgeslagen"/>
+			<matrix-udl-enable-font value="Lettertype inschakelen"/>
+			<matrix-udl-error value="Fout in aangepaste taal: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-bestandsbewerking mislukt: $ERROR$"/>
+			<matrix-udl-file-progress value="Bestandsbewerking bezig…"/>
+			<matrix-udl-import-rejected value="Import geweigerd: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ talen geïmporteerd"/>
+			<matrix-udl-live-edits value="Aangepaste taal — wijzigingen worden direct toegepast, alleen op documenten die deze taal gebruiken"/>
+			<matrix-udl-loading value="Definities laden…"/>
+			<matrix-udl-memory-only value="Definities staan alleen in het geheugen (geen configuratiemap)"/>
+			<matrix-udl-missing-ids value="Ontbrekende ID’s van aangepaste talen: $IDS$. Documenttekst en opgeslagen taalidentiteiten zijn behouden. Herstel de definities of selecteer uitdrukkelijk een andere taal."/>
+			<matrix-udl-open-panel-disconnected value="Verbinding met UDL-openingspaneel verbroken: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Deze benoemde definitie verwijderen? Bestaande documenten behouden hun tekst en schakelen over naar de naamloze aangepaste taal."/>
+			<matrix-udl-retry-file value="UDL-bestandsbewerking opnieuw proberen"/>
+			<matrix-udl-save-panel-disconnected value="Verbinding met UDL-opslagpaneel verbroken: $ERROR$"/>
+			<matrix-udl-unavailable value="Definities niet beschikbaar; corrigeer udl.json en probeer opnieuw."/>
+			<matrix-udl-use-background value="Achtergrondkleur gebruiken"/>
+			<matrix-udl-use-foreground value="Voorgrondkleur gebruiken"/>
+			<matrix-udl-working-copy value="Aangepaste taal (werkkopie)"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are place holders, don't translate these place holders. -->
 			<word-chars-list-tip value="Hiermee kan een extra teken aan de huidige woordtekenlijst worden toegevoegd. Deze lijst bepaalt wat als woord wordt gezien bij dubbelklikken op een selectie en bij het zoeken met de optie &quot;Alleen volledige woorden&quot; aangevinkt."/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 

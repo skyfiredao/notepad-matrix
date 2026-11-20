@@ -905,6 +905,66 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<matrix-find-resize-results value="Ŝanĝu la grandecon de la serĉrezultoj"/>
+			<common-ok value="Bone"/>
+			<common-cancel value="Rezignu"/>
+			<common-name value="Nomo"/>
+			<discover-file-candidates-title value="Serĉado de eblaj dosieroj…"/>
+			<matrix-close value="Fermu"/>
+			<matrix-retry value="Reprovu"/>
+			<matrix-cancelled value="Nuligita"/>
+			<matrix-read-only value="Nurlega"/>
+			<matrix-find-status-details value="Detaloj pri stato"/>
+			<matrix-find-backward-unavailable value="Retroa serĉado per regulaj esprimoj estas malŝaltita"/>
+			<matrix-hash-select-files value="Elektu dosierojn"/>
+			<matrix-hash-calculating value="Kalkulado de haketaĵo…"/>
+			<matrix-hash-selection-failed value="Elektado de dosieroj malsukcesis: $ERROR$"/>
+			<matrix-hash-read-failed value="Ne eblas legi la jenajn dosierojn:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Fermu erarmesaĝon"/>
+			<matrix-hash-file-paths value="Dosierindikoj (nurlegaj)"/>
+			<matrix-hash-digest-result value="Rezulta haketaĵo (nurlega)"/>
+			<matrix-hash-source-text value="Fonta teksto de haketaĵo"/>
+			<matrix-hash-selection-composition value="Haketado de elekto dum aktiva tekstokomponado ankoraŭ ne estas realigita"/>
+			<matrix-hash-selection-read-failed value="Ne eblas legi la elekton: $ERROR$"/>
+			<matrix-window-activation-failed value="Ne eblas ŝalti al la elektita dosiero"/>
+			<matrix-window-selection-unavailable value="La elektita dosiero estas fermita aŭ ne aktivebligebla"/>
+			<matrix-incremental-position value="Movu la breton de laŭpaŝa serĉo"/>
+			<matrix-find-progress-bar value="Progresbreto"/>
+			<matrix-find-previous-search value="Montru la antaŭan serĉon"/>
+			<matrix-find-results-summary value="Serĉrezultoj - ($INT_REPLACE$ trafoj)"/>
+			<matrix-udl-allow-code2-close value="Permesu fermon de kodo 2"/>
+			<matrix-udl-allow-code2-middle value="Permesu mezon de kodo 2"/>
+			<matrix-udl-allow-code2-open value="Permesu malfermon de kodo 2"/>
+			<matrix-udl-allow-comment-fold-close value="Permesu fermon de komentofaldo"/>
+			<matrix-udl-allow-comment-fold-middle value="Permesu mezon de komentofaldo"/>
+			<matrix-udl-allow-comment-fold-open value="Permesu malfermon de komentofaldo"/>
+			<matrix-udl-choose-json value="Elektu JSON-dosieron de UDL-difino"/>
+			<matrix-udl-close value="Fermu propre difinitan lingvaĵon"/>
+			<matrix-udl-close-styler value="Fermu stildefinon"/>
+			<matrix-udl-colors value="Koloroj"/>
+			<matrix-udl-dark-mode-language value="Lingvaĵo por malhela reĝimo"/>
+			<matrix-udl-definition-exported value="Difino eksportita"/>
+			<matrix-udl-definitions-saved value="Difinoj konservitaj"/>
+			<matrix-udl-enable-font value="Ŝaltu tiparon"/>
+			<matrix-udl-error value="Eraro de propre difinita lingvaĵo: $ERROR$"/>
+			<matrix-udl-file-failed value="Operacio pri UDL-dosiero malsukcesis: $ERROR$"/>
+			<matrix-udl-file-progress value="Dosieroperacio progresas…"/>
+			<matrix-udl-import-rejected value="Importo rifuzita: $ERROR$"/>
+			<matrix-udl-imported value="Importitaj lingvaĵoj: $COUNT$"/>
+			<matrix-udl-live-edits value="Propre difinita lingvaĵo — ŝanĝoj tuj aplikiĝas nur al dokumentoj uzantaj ĉi tiun lingvaĵon"/>
+			<matrix-udl-loading value="Ŝargado de difinoj…"/>
+			<matrix-udl-memory-only value="Difinoj estas nur en memoro (neniu agorda dosierujo)"/>
+			<matrix-udl-missing-ids value="Mankas identigiloj de propre difinitaj lingvaĵoj: $IDS$. Dokumentoteksto kaj konservitaj lingvaĵaj identecoj estas retenitaj. Restarigu la difinojn aŭ eksplicite elektu alian lingvaĵon."/>
+			<matrix-udl-open-panel-disconnected value="La malferma panelo de UDL estas malkonektita: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Ĉu forigi ĉi tiun nomitan difinon? Ekzistantaj dokumentoj konservos sian tekston kaj ŝanĝiĝos al la sennoma propre difinita lingvaĵo."/>
+			<matrix-udl-retry-file value="Reprovu la operacion pri UDL-dosiero"/>
+			<matrix-udl-save-panel-disconnected value="La konserva panelo de UDL estas malkonektita: $ERROR$"/>
+			<matrix-udl-unavailable value="Difinoj ne disponeblas; korektu udl.json kaj reprovu."/>
+			<matrix-udl-use-background value="Uzu fonon"/>
+			<matrix-udl-use-foreground value="Uzu unuan planon"/>
+			<matrix-udl-working-copy value="Propre difinita (laborkopio)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>
 <!--
@@ -945,4 +1005,3 @@ Mi ne volas plue enuigis vin (demando: se vi ne volas enui, kial vi estas legant
 Amike,
 Francesco
 -->
-

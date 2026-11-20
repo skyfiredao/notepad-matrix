@@ -1176,6 +1176,7 @@ Kenderc'hel ganti?"/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Adventañ disoc’hoù ar c’hlask"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are place holders, don't translate these place holders -->
 			<word-chars-list-tip value="An dra-se a ro an aotre deoc'h da enklozañ arouezioù ouzhpenn e-barzh arouezioù ar ger-red pa glikit doubl evit diuzañ pe e klaskit gant an dibarzh enaouet &quot;Ger klok hepken&quot;."/>
 			<word-chars-list-warning-begin value="Taolit evezh: "/>
@@ -1247,6 +1248,60 @@ Klask en holl restroù paneve exe, obj &amp;&amp; log:
 			<summary-nbsel1 value=" arouezioù diuzet ("/>
 			<summary-nbsel2 value=" oktedoù) e "/>
 			<summary-nbrange value=" pladigennoù"/>
+			<discover-file-candidates-title value="O klask restroù danvez…"/>
+			<matrix-close value="Serriñ"/>
+			<matrix-retry value="Klask en-dro"/>
+			<matrix-cancelled value="Nullet"/>
+			<matrix-read-only value="Lenn hepken"/>
+			<matrix-find-status-details value="Munudoù ar stad"/>
+			<matrix-find-backward-unavailable value="Diweredekaet eo ar c’hlask war-gil gant jedadennoù reoliek"/>
+			<matrix-hash-select-files value="Diuzañ restroù"/>
+			<matrix-hash-calculating value="O jediñ ar roudenn…"/>
+			<matrix-hash-selection-failed value="C’hwitet eo diuzañ ar restroù: $ERROR$"/>
+			<matrix-hash-read-failed value="N’haller ket lenn ar restroù-mañ:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Serriñ ar fazi"/>
+			<matrix-hash-file-paths value="Hentoù ar restroù (lenn hepken)"/>
+			<matrix-hash-digest-result value="Disoc’h ar roudenn (lenn hepken)"/>
+			<matrix-hash-source-text value="Testenn orin ar roudenn"/>
+			<matrix-hash-selection-composition value="N’eo ket bet kefloueret c’hoazh jediñ roudenn an diuzad e-pad aozañ oberiant an destenn"/>
+			<matrix-hash-selection-read-failed value="N’haller ket lenn an diuzad: $ERROR$"/>
+			<matrix-window-activation-failed value="N’haller ket mont d’ar restr diuzet"/>
+			<matrix-window-selection-unavailable value="Serret eo ar restr diuzet pe n’haller ket he gweredekaat"/>
+			<matrix-incremental-position value="Dilec’hiañ ar varrenn klask tamm-ha-tamm"/>
+			<matrix-find-progress-bar value="Barrenn araokaat"/>
+			<matrix-find-previous-search value="Diskouez ar c’hlask kent"/>
+			<matrix-find-results-summary value="Disoc’hoù ar c’hlask - ($INT_REPLACE$ kenglotadenn)"/>
+			<matrix-udl-allow-code2-close value="Aotren serriñ ar c’hod 2"/>
+			<matrix-udl-allow-code2-middle value="Aotren kreiz ar c’hod 2"/>
+			<matrix-udl-allow-code2-open value="Aotren digeriñ ar c’hod 2"/>
+			<matrix-udl-allow-comment-fold-close value="Aotren serriñ pleg an evezhiadenn"/>
+			<matrix-udl-allow-comment-fold-middle value="Aotren kreiz pleg an evezhiadenn"/>
+			<matrix-udl-allow-comment-fold-open value="Aotren digeriñ pleg an evezhiadenn"/>
+			<matrix-udl-choose-json value="Dibabit ur restr despizañ UDL e JSON"/>
+			<matrix-udl-close value="Serriñ ar yezh despizet gant an arveriad"/>
+			<matrix-udl-close-styler value="Serriñ kefluniadur ar stiloù"/>
+			<matrix-udl-colors value="Livioù"/>
+			<matrix-udl-dark-mode-language value="Yezh ar mod teñval"/>
+			<matrix-udl-definition-exported value="Despizadur ezporzhiet"/>
+			<matrix-udl-definitions-saved value="Despizadurioù enrollet"/>
+			<matrix-udl-enable-font value="Gweredekaat an nodrezh"/>
+			<matrix-udl-error value="Fazi er yezh despizet gant an arveriad: $ERROR$"/>
+			<matrix-udl-file-failed value="C’hwitet eo oberiadenn ar restr UDL: $ERROR$"/>
+			<matrix-udl-file-progress value="Oberiadenn ar restr war ar stern…"/>
+			<matrix-udl-import-rejected value="Enporzhiañ nac’het: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ yezh enporzhiet"/>
+			<matrix-udl-live-edits value="Yezh despizet gant an arveriad — ar c’hemmoù a vez arloet diouzhtu d’an teulioù a implij ar yezh-mañ hepken"/>
+			<matrix-udl-loading value="O kargañ an despizadurioù…"/>
+			<matrix-udl-memory-only value="Er vemor hepken emañ an despizadurioù (n’eus kavlec’hiad kefluniañ ebet)"/>
+			<matrix-udl-missing-ids value="Mankout a ra IDoù yezhoù despizet gant an arveriad: $IDS$. Miret eo bet testenn an teulioù hag identelezhioù ar yezhoù enrollet. Assavit an despizadurioù pe dibabit splann ur yezh all."/>
+			<matrix-udl-open-panel-disconnected value="Digennasket eo panell digeriñ UDL: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Dilemel an despizadur anvet-mañ? Mirout a ra an teulioù a zo anezho o zestenn ha tremen a reont d’ar yezh dianv despizet gant an arveriad."/>
+			<matrix-udl-retry-file value="Klask en-dro oberiadenn ar restr UDL"/>
+			<matrix-udl-save-panel-disconnected value="Digennasket eo panell enrollañ UDL: $ERROR$"/>
+			<matrix-udl-unavailable value="N’eo ket hegerz an despizadurioù; reizhit udl.json ha klaskit en-dro."/>
+			<matrix-udl-use-background value="Implijout an drekleur"/>
+			<matrix-udl-use-foreground value="Implijout ar rakleur"/>
+			<matrix-udl-working-copy value="Despizet gant an arveriad (eilskrid labour)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

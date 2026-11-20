@@ -1,6 +1,6 @@
 use super::preferences_surface::{
     Commit, FieldSpec, Page, pref_group, pref_indicator, pref_label, pref_label_colour,
-    pref_label_right, pref_value_label, source_rect, value_at,
+    pref_label_right, pref_value_label, source_rect, value_at, horizontal_px,
 };
 use super::*;
 use super::dialog_font::px;
@@ -574,7 +574,7 @@ impl MatrixWindow {
                 self.scope_editor_pane(previous);
             }
         }
-        self.restart_appearance_caret(int_setting(settings, "Caret.blinkRate", 600), window, cx);
+        self.restart_appearance_caret(int_setting(settings, "Caret.blinkRate", 500), window, cx);
         if self
             .preferences
             .appearance
@@ -595,7 +595,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn appearance_caret_visible(&self) -> bool {
-        let period = self.pref_int("Caret.blinkRate", 600);
+        let period = self.pref_int("Caret.blinkRate", 500);
         period == 0
             || (self
                 .preferences
@@ -997,7 +997,7 @@ impl MatrixWindow {
             .track_focus(&focus)
             .flex()
             .items_center()
-            .gap(px(3.))
+            .gap(horizontal_px(3.))
             .text_size(px(12.))
             .line_height(px(14.))
             .text_color(rgb(palette.text))
@@ -1160,7 +1160,7 @@ impl MatrixWindow {
             };
             div()
                 .relative()
-                .w(px(805.))
+                .w(horizontal_px(805.))
                 .h(px(358.75))
                 .children(elements)
                 .into_any_element()
@@ -1188,16 +1188,18 @@ impl MatrixWindow {
                 188.,
                 cx,
             ),
-            group(if chinese { "菜单字体" } else { "Menu font" }, 236., 12., 212., 87.),
+            group(if chinese { "菜单字体" } else { "Menu font" }, 236., 12., 212., 53.),
             label_right(if chinese { "字体：" } else { "Font:" }, 242., 29., 27.),
             self.appearance_choice("MenuFont.fontName", fonts.iter().map(|name| (name.clone().into(), name.clone())).collect(),
                 menu_surface::DEFAULT_FONT_NAME.into(), true, 274., 27., 166., cx),
-            label_right(if chinese { "字号：" } else { "Size:" }, 242., 52., 27.),
+            label_right(if chinese { "字号：" } else { "Size:" }, 242., 48., 27.),
             self.appearance_choice("MenuFont.size", (8..=24).map(|size: i64| (size.into(), size.to_string())).collect(),
-                menu_surface::DEFAULT_FONT_SIZE.into(), true, 274., 50., 48., cx),
-            label(if chinese { "即时生效" } else { "Applies immediately" }, 242., 75., 198.),
-            group(if chinese { "Matrix 彩蛋" } else { "Matrix" }, 236., 110., 212., 47.),
-            self.appearance_check("pref-matrix-lock", if chinese { "Matrix 锁屏保护" } else { "Matrix screen lock" }, "Matrix.lockScreen", false, false, true, 242., 122., 200., cx),
+                menu_surface::DEFAULT_FONT_SIZE.into(), true, 274., 46., 48., cx),
+            group(crate::localization::localized_string(&self.native_locale(), "ConfigDirectoryTitle").unwrap_or("Configuration directory"), 236., 71., 212., 35.),
+            source_rect(242. * SCALE, 83. * SCALE, 200. * SCALE, 35.)
+                .child(self.render_config_directory_preferences(cx)).into_any_element(),
+            group(if chinese { "Matrix 彩蛋" } else { "Matrix" }, 236., 112., 212., 41.),
+            self.appearance_check("pref-matrix-lock", if chinese { "Matrix 锁屏保护" } else { "Matrix screen lock" }, "Matrix.lockScreen", false, false, true, 242., 124., 200., cx),
             label_right(if chinese { "样式：" } else { "Style:" }, 242., 140., 36.),
             self.appearance_choice("Matrix.style", vec![("matrix".into(), "Matrix".into()), ("terminal".into(), if chinese { "伪终端" } else { "Simulated terminal" }.into())], "matrix".into(), true, 284., 137., 156., cx),
             group("菜单栏", 12., 64., 212., 50.),
@@ -1541,7 +1543,7 @@ impl MatrixWindow {
 
     fn appearance_editing1(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let frame = self.pref_int("ScintillaPrimaryView.currentLineIndicator", 1) == 2;
-        let blink = self.pref_int("Caret.blinkRate", 600);
+        let blink = self.pref_int("Caret.blinkRate", 500);
         let mut elements = vec![
             group("当前行指示器", 11., 3., 150., 74.),
             source_rect(30. * SCALE, 60. * SCALE, 37. * SCALE, 8. * SCALE)
@@ -1582,7 +1584,7 @@ impl MatrixWindow {
                 .into_iter()
                 .map(|(value, text)| (value.into(), text.into()))
                 .collect(),
-                1.into(),
+                2.into(),
                 true,
                 73.,
                 97.,

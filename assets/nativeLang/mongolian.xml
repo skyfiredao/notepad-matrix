@@ -898,5 +898,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="ЗА"/>
+			<common-cancel value="Цуцлах"/>
+			<common-name value="Нэр"/>
+			<discover-file-candidates-title value="Тохирох файлуудыг илрүүлж байна..."/>
+			<matrix-close value="Хаах"/>
+			<matrix-retry value="Дахин оролдох"/>
+			<matrix-cancelled value="Цуцлагдсан"/>
+			<matrix-read-only value="Зөвхөн унших"/>
+			<matrix-find-status-details value="Төлөвийн дэлгэрэнгүй"/>
+			<matrix-find-resize-results value="Хайлтын үр дүнгийн хэмжээг өөрчлөх"/>
+			<matrix-find-backward-unavailable value="Тогтмол илэрхийллээр хойш хайхыг идэвхгүй болгосон"/>
+			<matrix-hash-select-files value="Файл сонгох"/>
+			<matrix-hash-calculating value="Хэш тооцоолж байна…"/>
+			<matrix-hash-selection-failed value="Файл сонгож чадсангүй: $ERROR$"/>
+			<matrix-hash-read-failed value="Дараах файлуудыг уншиж чадсангүй:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Алдааг хаах"/>
+			<matrix-hash-file-paths value="Файлын замууд (зөвхөн унших)"/>
+			<matrix-hash-digest-result value="Хэшийн үр дүн (зөвхөн унших)"/>
+			<matrix-hash-source-text value="Хэш тооцоолох эх текст"/>
+			<matrix-hash-selection-composition value="Текстийг идэвхтэй нийлүүлэн оруулж байх үед сонголтын хэш тооцоолохыг хараахан хэрэгжүүлээгүй"/>
+			<matrix-hash-selection-read-failed value="Сонгосон хэсгийг уншиж чадсангүй: $ERROR$"/>
+			<matrix-window-activation-failed value="Сонгосон файл руу шилжиж чадсангүй"/>
+			<matrix-window-selection-unavailable value="Сонгосон файл хаалттай эсвэл идэвхжүүлэх боломжгүй"/>
+			<matrix-incremental-position value="Алхамчилсан хайлтын мөрийг зөөх"/>
+			<matrix-find-progress-bar value="Явцын мөр"/>
+			<matrix-find-previous-search value="Өмнөх хайлтыг харуулах"/>
+			<matrix-find-results-summary value="Хайлтын үр дүн - ($INT_REPLACE$ тохирол)"/>
+			<matrix-udl-allow-code2-close value="Код 2-ын хаалтыг зөвшөөрөх"/>
+			<matrix-udl-allow-code2-middle value="Код 2-ын дунд хэсгийг зөвшөөрөх"/>
+			<matrix-udl-allow-code2-open value="Код 2-ын нээлтийг зөвшөөрөх"/>
+			<matrix-udl-allow-comment-fold-close value="Сэтгэгдлийн эвхэлтийн хаалтыг зөвшөөрөх"/>
+			<matrix-udl-allow-comment-fold-middle value="Сэтгэгдлийн эвхэлтийн дунд хэсгийг зөвшөөрөх"/>
+			<matrix-udl-allow-comment-fold-open value="Сэтгэгдлийн эвхэлтийн нээлтийг зөвшөөрөх"/>
+			<matrix-udl-choose-json value="UDL тодорхойлолтын JSON файл сонгох"/>
+			<matrix-udl-close value="Хэрэглэгчийн тодорхойлсон хэлийг хаах"/>
+			<matrix-udl-close-styler value="Загвар тохируулагчийг хаах"/>
+			<matrix-udl-colors value="Өнгөнүүд"/>
+			<matrix-udl-dark-mode-language value="Харанхуй горимын хэл"/>
+			<matrix-udl-definition-exported value="Тодорхойлолтыг экспортолсон"/>
+			<matrix-udl-definitions-saved value="Тодорхойлолтуудыг хадгалсан"/>
+			<matrix-udl-enable-font value="Үсгийн хэвийг идэвхжүүлэх"/>
+			<matrix-udl-error value="Хэрэглэгчийн тодорхойлсон хэлний алдаа: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL файлын үйлдэл амжилтгүй: $ERROR$"/>
+			<matrix-udl-file-progress value="Файлын үйлдэл хийгдэж байна…"/>
+			<matrix-udl-import-rejected value="Импортыг татгалзсан: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ хэл импортолсон"/>
+			<matrix-udl-live-edits value="Хэрэглэгчийн тодорхойлсон хэл — засварууд зөвхөн энэ хэлийг ашиглаж буй баримтуудад шууд үйлчилнэ"/>
+			<matrix-udl-loading value="Тодорхойлолтуудыг ачаалж байна…"/>
+			<matrix-udl-memory-only value="Тодорхойлолтууд зөвхөн санах ойд байна (тохиргооны хавтас алга)"/>
+			<matrix-udl-missing-ids value="Хэрэглэгчийн тодорхойлсон хэлний таних тэмдгүүд алга: $IDS$. Баримтын текст болон хадгалсан хэлний таних мэдээллийг хэвээр үлдээсэн. Тодорхойлолтуудыг сэргээх эсвэл өөр хэлийг зориуд сонгоно уу."/>
+			<matrix-udl-open-panel-disconnected value="UDL нээх самбарын холболт тасарсан: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Энэ нэртэй тодорхойлолтыг устгах уу? Одоо байгаа баримтууд текстээ хадгалж, хэрэглэгчийн тодорхойлсон нэргүй хэл рүү шилжинэ."/>
+			<matrix-udl-retry-file value="UDL файлын үйлдлийг дахин оролдох"/>
+			<matrix-udl-save-panel-disconnected value="UDL хадгалах самбарын холболт тасарсан: $ERROR$"/>
+			<matrix-udl-unavailable value="Тодорхойлолтууд боломжгүй байна; udl.json файлыг засаж дахин оролдоно уу."/>
+			<matrix-udl-use-background value="Дэвсгэр ашиглах"/>
+			<matrix-udl-use-foreground value="Наад давхарга ашиглах"/>
+			<matrix-udl-working-copy value="Хэрэглэгчийн тодорхойлсон (ажлын хуулбар)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

@@ -1122,6 +1122,7 @@ Ingabe ufuna ukuqala i-Notepad ++ kwimodi ye-Administrator?"/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Shintsha usayizi wemiphumela yokusesha"/>
 			<!-- $INT_REPLACE$  and $STR_REPLACE$ are a place holders, don't translate these place holders -->
 			<word-chars-list-tip value="Lokhu kukuvumela ukuba uhlanganise uhlamvu olwengeziwe kumagama abalingiswa bamanje ngenkathi uchofoza kabili ukukhethwa noma ukucinga nge &quot; Ukulinganisa igama lonke kuphela &quot; inketho ihloliwe."/>
 			<word-chars-list-warning-begin value="Qaphela: "/>
@@ -1165,6 +1166,63 @@ Ingabe ufuna ukuqala i-Notepad ++ kwimodi ye-Administrator?"/>
 			<finder-copy value="Kopisha"/>
 			<finder-select-all value="Khetha konke"/>
 			<finder-clear-all value="Sula konke"/>
+			<common-ok value="KULUNGILE"/>
+			<common-cancel value="Khansela"/>
+			<common-name value="Igama"/>
+			<discover-file-candidates-title value="Kutholwa amafayela angase afaneleke…"/>
+			<matrix-close value="Vala"/>
+			<matrix-retry value="Zama futhi"/>
+			<matrix-cancelled value="Kukhanseliwe"/>
+			<matrix-read-only value="Funda kuphela"/>
+			<matrix-find-status-details value="Imininingwane yesimo"/>
+			<matrix-find-backward-unavailable value="Ukusesha emuva ngezisho ezivamile kukhutshaziwe"/>
+			<matrix-hash-select-files value="Khetha amafayela"/>
+			<matrix-hash-calculating value="Kubalwa isigxivizo…"/>
+			<matrix-hash-selection-failed value="Ukukhetha amafayela kuhlulekile: $ERROR$"/>
+			<matrix-hash-read-failed value="Ayikwazi ukufunda amafayela alandelayo:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Vala iphutha"/>
+			<matrix-hash-file-paths value="Izindlela zamafayela (funda kuphela)"/>
+			<matrix-hash-digest-result value="Umphumela wesigxivizo (funda kuphela)"/>
+			<matrix-hash-source-text value="Umbhalo womthombo wesigxivizo"/>
+			<matrix-hash-selection-composition value="Ukubala isigxivizo sokukhethiwe ngesikhathi kuhlanganiswa umbhalo akukafezwa"/>
+			<matrix-hash-selection-read-failed value="Ayikwazi ukufunda okukhethiwe: $ERROR$"/>
+			<matrix-window-activation-failed value="Ayikwazi ukushintshela efayeleni elikhethiwe"/>
+			<matrix-window-selection-unavailable value="Ifayela elikhethiwe livaliwe noma alikwazi ukwenziwa lisebenze"/>
+			<matrix-incremental-position value="Hambisa ibha yokusesha okwandayo"/>
+			<matrix-find-progress-bar value="Ibha yokuqhubeka"/>
+			<matrix-find-previous-search value="Bonisa ukusesha kwangaphambilini"/>
+			<matrix-find-results-summary value="Imiphumela yokusesha - ($INT_REPLACE$ okufanayo)"/>
+			<matrix-udl-allow-code2-close value="Vumela ukuvalwa kwekhodi 2"/>
+			<matrix-udl-allow-code2-middle value="Vumela ingxenye emaphakathi yekhodi 2"/>
+			<matrix-udl-allow-code2-open value="Vumela ukuvulwa kwekhodi 2"/>
+			<matrix-udl-allow-comment-fold-close value="Vumela ukuvalwa kokugoqwa kwamazwana"/>
+			<matrix-udl-allow-comment-fold-middle value="Vumela ingxenye emaphakathi yokugoqwa kwamazwana"/>
+			<matrix-udl-allow-comment-fold-open value="Vumela ukuvulwa kokugoqwa kwamazwana"/>
+			<matrix-udl-choose-json value="Khetha ifayela le-JSON lencazelo ye-UDL"/>
+			<matrix-udl-close value="Vala ulimi oluchazwe umsebenzisi"/>
+			<matrix-udl-close-styler value="Vala isilungisi sesitayela"/>
+			<matrix-udl-colors value="Imibala"/>
+			<matrix-udl-dark-mode-language value="Ulimi lwemodi emnyama"/>
+			<matrix-udl-definition-exported value="Incazelo ithunyelwe ngaphandle"/>
+			<matrix-udl-definitions-saved value="Izincazelo zilondoloziwe"/>
+			<matrix-udl-enable-font value="Vumela ifonti"/>
+			<matrix-udl-error value="Iphutha lolimi oluchazwe umsebenzisi: $ERROR$"/>
+			<matrix-udl-file-failed value="Umsebenzi wefayela le-UDL uhlulekile: $ERROR$"/>
+			<matrix-udl-file-progress value="Umsebenzi wefayela uyaqhubeka…"/>
+			<matrix-udl-import-rejected value="Ukungenisa kwenqatshiwe: $ERROR$"/>
+			<matrix-udl-imported value="Kungeniswe izilimi ezingu-$COUNT$"/>
+			<matrix-udl-live-edits value="Ulimi oluchazwe umsebenzisi — ukuhlela kusebenza ngokushesha kuphela kumadokhumende asebenzisa lolu limi"/>
+			<matrix-udl-loading value="Kulayishwa izincazelo…"/>
+			<matrix-udl-memory-only value="Izincazelo zisememori kuphela (alukho uhla lwemibhalo lokulungiselela)"/>
+			<matrix-udl-missing-ids value="Izihlonzi zezilimi ezichazwe umsebenzisi azikho: $IDS$. Umbhalo wamadokhumende kanye nobunikazi bezilimi obulondoloziwe kugciniwe. Buyisela izincazelo noma ukhethe ngokucacile olunye ulimi."/>
+			<matrix-udl-open-panel-disconnected value="Iphaneli yokuvula ye-UDL inqanyuliwe: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Susa le ncazelo enegama? Amadokhumende akhona agcina umbhalo wawo futhi ashintshele olimini oluchazwe umsebenzisi olungenagama."/>
+			<matrix-udl-retry-file value="Zama futhi umsebenzi wefayela le-UDL"/>
+			<matrix-udl-save-panel-disconnected value="Iphaneli yokulondoloza ye-UDL inqanyuliwe: $ERROR$"/>
+			<matrix-udl-unavailable value="Izincazelo azitholakali; lungisa udl.json bese uzama futhi."/>
+			<matrix-udl-use-background value="Sebenzisa ingemuva"/>
+			<matrix-udl-use-foreground value="Sebenzisa ingaphambili"/>
+			<matrix-udl-working-copy value="Okuchazwe umsebenzisi (ikhophi yokusebenza)"/>
 		</MiscStrings>
 
 	</Native-Langue>

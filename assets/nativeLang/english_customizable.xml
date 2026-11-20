@@ -1756,6 +1756,61 @@ Proceed only if you understand the risks."/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<discover-file-candidates-title value="Discovering file candidates..."/>
+			<matrix-close value="Close"/>
+			<matrix-retry value="Retry"/>
+			<matrix-cancelled value="Cancelled"/>
+			<matrix-read-only value="Read Only"/>
+			<matrix-find-status-details value="Status details"/>
+			<matrix-find-resize-results value="Resize search results"/>
+			<matrix-find-backward-unavailable value="Backward regular expression search is disabled"/>
+			<matrix-hash-select-files value="Select files"/>
+			<matrix-hash-calculating value="Calculating digest…"/>
+			<matrix-hash-selection-failed value="File selection failed: $ERROR$"/>
+			<matrix-hash-read-failed value="Unable to read the following files:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Dismiss error"/>
+			<matrix-hash-file-paths value="File paths (read only)"/>
+			<matrix-hash-digest-result value="Digest result (read only)"/>
+			<matrix-hash-source-text value="Digest source text"/>
+			<matrix-hash-selection-composition value="Selection hashing during active composition is not implemented yet"/>
+			<matrix-hash-selection-read-failed value="Unable to read selection: $ERROR$"/>
+			<matrix-window-activation-failed value="Unable to switch to the selected file"/>
+			<matrix-window-selection-unavailable value="The selected file is closed or cannot be activated"/>
+			<matrix-incremental-position value="Move incremental search bar"/>
+			<matrix-find-progress-bar value="Progress Bar"/>
+			<matrix-find-previous-search value="Show previous search"/>
+			<matrix-find-results-summary value="Search results - ($INT_REPLACE$ hits)"/>
+			<matrix-udl-allow-code2-close value="Allow code 2 close"/>
+			<matrix-udl-allow-code2-middle value="Allow code 2 middle"/>
+			<matrix-udl-allow-code2-open value="Allow code 2 open"/>
+			<matrix-udl-allow-comment-fold-close value="Allow comment fold close"/>
+			<matrix-udl-allow-comment-fold-middle value="Allow comment fold middle"/>
+			<matrix-udl-allow-comment-fold-open value="Allow comment fold open"/>
+			<matrix-udl-choose-json value="Choose a JSON UDL definition file"/>
+			<matrix-udl-close value="Close User Defined Language"/>
+			<matrix-udl-close-styler value="Close Styler"/>
+			<matrix-udl-colors value="Colors"/>
+			<matrix-udl-dark-mode-language value="Dark mode language"/>
+			<matrix-udl-definition-exported value="Definition exported"/>
+			<matrix-udl-definitions-saved value="Definitions saved"/>
+			<matrix-udl-enable-font value="Enable font"/>
+			<matrix-udl-error value="User-defined language error: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL file operation failed: $ERROR$"/>
+			<matrix-udl-file-progress value="File operation in progress…"/>
+			<matrix-udl-import-rejected value="Import rejected: $ERROR$"/>
+			<matrix-udl-imported value="Imported $COUNT$ language(s)"/>
+			<matrix-udl-live-edits value="User Defined Language — edits apply live only to documents using this language"/>
+			<matrix-udl-loading value="Loading definitions…"/>
+			<matrix-udl-memory-only value="Definitions are in memory only (no configuration directory)"/>
+			<matrix-udl-missing-ids value="Missing user-defined language ID(s): $IDS$. Document text and saved language identities were preserved. Restore the definitions or explicitly select another Language."/>
+			<matrix-udl-open-panel-disconnected value="UDL Open panel disconnected: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Remove this named definition? Existing documents keep their text and switch to the unnamed User-Defined language."/>
+			<matrix-udl-retry-file value="Retry UDL file operation"/>
+			<matrix-udl-save-panel-disconnected value="UDL Save panel disconnected: $ERROR$"/>
+			<matrix-udl-unavailable value="Definitions unavailable; correct udl.json and retry."/>
+			<matrix-udl-use-background value="Use background"/>
+			<matrix-udl-use-foreground value="Use foreground"/>
+			<matrix-udl-working-copy value="User Defined (working copy)"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are place holders, don't translate these place holders. -->
 			<word-chars-list-tip value="This allows you to include additional character into current word characters while double clicking for selection or searching with &quot;Match whole word only&quot; option checked."/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 

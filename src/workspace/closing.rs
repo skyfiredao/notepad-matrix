@@ -56,6 +56,17 @@ fn automatic_disposition(
 }
 
 impl CloseBatch {
+    pub fn dirty_count(&self, workspace: &Workspace) -> usize {
+        match &self.scope {
+            Scope::Selected(targets) => targets.iter().filter(|(_, id)| workspace.buffers().iter().any(|buffer| buffer.id() == *id && buffer.is_modified())).count(),
+            _ => self.pending.iter().filter(|id| workspace.buffers().iter().any(|buffer| buffer.id() == **id && buffer.is_modified())).count(),
+        }
+    }
+
+    pub fn uses_global_prompt_count(&self) -> bool {
+        matches!(self.scope, Scope::All { .. }) || !self.cancel_automatic
+    }
+
     pub fn prompt_view(&self, id: BufferId) -> ViewId {
         match &self.scope {
             Scope::Selected(targets) => targets

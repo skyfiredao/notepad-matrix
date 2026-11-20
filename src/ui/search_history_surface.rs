@@ -179,13 +179,14 @@ impl MatrixWindow {
                 }
             }
             Err(error) => {
-                let message = format!("Search history could not be saved: {error}");
+                let message = crate::localization::Text::resource("matrix-search-history-save-error", "Search history could not be saved: $ERROR$")
+                    .replace("$ERROR$", error.to_string());
                 let owner = cx.weak_entity();
                 cx.defer(move |cx| {
                     if let Err(error) = owner.update(cx, |owner, cx| {
-                        owner.notify_editor_error(message.clone(), cx)
+                        owner.notify_localized_editor_error(message.clone(), cx)
                     }) {
-                        eprintln!("{message}; error report lost its window: {error}");
+                        eprintln!("search history error report lost its window: {error}");
                     }
                 });
             }
@@ -360,7 +361,15 @@ impl MatrixWindow {
                     .id(format!("search-history-button-{key}"))
                     .debug_selector(move || format!("search-history-button-{key}"))
                     .role(Role::Button)
-                    .aria_label(format!("{key} history"))
+                    .aria_label({
+                        let (id, fallback) = match field {
+                            Field::Find => ("matrix-search-history-find", "Find history"),
+                            Field::Replace => ("matrix-search-history-replace", "Replace history"),
+                            Field::Filter => ("matrix-search-history-filter", "Filter history"),
+                            Field::Directory => ("matrix-search-history-directory", "Directory history"),
+                        };
+                        crate::localization::Text::resource(id, fallback).render(&self.native_locale())
+                    })
                     .absolute()
                     .right(px(1.))
                     .top(px(1.))

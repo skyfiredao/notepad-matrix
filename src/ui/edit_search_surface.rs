@@ -169,11 +169,11 @@ impl MatrixWindow {
                 self.editor_changed(result, window, cx);
                 let (status, message) = if found.wrapped {
                     if backwards {
-                        (find_surface::FindStatus::TopReached, "查找: 已到达文档最顶部，找到从底部开始的第一个匹配项。")
+                        (find_surface::FindStatus::TopReached, crate::localization::Text::resource("find-status-top-reached", "Find: Reached document beginning, first occurrence from the bottom found."))
                     } else {
-                        (find_surface::FindStatus::EndReached, "查找: 已到达文档最底部，找到从顶部开始的第一个匹配项。")
+                        (find_surface::FindStatus::EndReached, crate::localization::Text::resource("find-status-end-reached", "Find: Reached document end, first occurrence from the top found."))
                     }
-                } else { (find_surface::FindStatus::NoMessage, "") };
+                } else { (find_surface::FindStatus::NoMessage, "".into()) };
                 self.set_find_status(status, message);
             }
             Ok(None) => self.set_find_not_found(&query),

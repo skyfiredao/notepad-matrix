@@ -1756,6 +1756,7 @@ Oceedpray onlyyay ifyay youyay understandyay ethay isksray."/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Esizeray earchsay esultsray"/>
 			<!-- $INT_REPLACE$  and $STR_REPLACE$ are a place holders, don't translate these place holders -->
 			<word-chars-list-tip value="Isthay allowsyay youyay otay includeyay additionalyay aracterchay intoyay urrentcay ordway aracterschay ilewhay oubleday ickingclay orfay electionsay oryay earchingsay ithway Atch&quot;may olewhay ordway only&quot;yay optionyay eckedchay."/>
 
@@ -1954,6 +1955,59 @@ Ifyay youyay electsay advancedyay odemay utbay oday otnay edityay ilesfay inyay 
 			<networkpathwarning-serverwhitelist-tip value="Utspay ethay erversay ofyay ethay urrentcay ilefay intoyay Notepad++ serverWhiteList.xml.
 
 Orfay oremay infoyay, ickclay onyay isthay uttonbay otay openyay ebsiteway ithway elevantray Useryay Anualmay ectionsay."/>
+			<matrix-close value="Oseclay"/>
+			<matrix-retry value="Etryray"/>
+			<matrix-cancelled value="Ancelledcay"/>
+			<matrix-read-only value="Eadray Onlyyay"/>
+			<matrix-find-status-details value="Atusstay etailsday"/>
+			<matrix-find-backward-unavailable value="Ackwardbay egularray expressionyay earchsay isyay isabledday"/>
+			<matrix-hash-select-files value="Electsay ilesfay"/>
+			<matrix-hash-calculating value="Alculatingcay igestday…"/>
+			<matrix-hash-selection-failed value="Ilefay electionsay ailedfay: $ERROR$"/>
+			<matrix-hash-read-failed value="Unableyay otay eadray ethay ollowingfay ilesfay:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Ismissday erroryay"/>
+			<matrix-hash-file-paths value="Ilefay athspay (eadray onlyyay)"/>
+			<matrix-hash-digest-result value="Igestday esultray (eadray onlyyay)"/>
+			<matrix-hash-source-text value="Igestday ourcesay exttay"/>
+			<matrix-hash-selection-composition value="Electionsay ashinghay uringday activeyay ompositioncay isyay otnay implementedyay etyay"/>
+			<matrix-hash-selection-read-failed value="Unableyay otay eadray electionsay: $ERROR$"/>
+			<matrix-window-activation-failed value="Unableyay otay itchsway otay ethay electedsay ilefay"/>
+			<matrix-window-selection-unavailable value="Ethay electedsay ilefay isyay osedclay oryay annotcay ebay activatedyay"/>
+			<matrix-incremental-position value="Ovemay incrementalyay earchsay arbay"/>
+			<matrix-find-progress-bar value="Ogresspray Arbay"/>
+			<matrix-find-previous-search value="Owshay eviouspray earchsay"/>
+			<matrix-find-results-summary value="Earchsay esultsray - ($INT_REPLACE$ itshay)"/>
+			<matrix-udl-allow-code2-close value="Allowyay odecay 2 oseclay"/>
+			<matrix-udl-allow-code2-middle value="Allowyay odecay 2 iddlemay"/>
+			<matrix-udl-allow-code2-open value="Allowyay odecay 2 openyay"/>
+			<matrix-udl-allow-comment-fold-close value="Allowyay ommentcay oldfay oseclay"/>
+			<matrix-udl-allow-comment-fold-middle value="Allowyay ommentcay oldfay iddlemay"/>
+			<matrix-udl-allow-comment-fold-open value="Allowyay ommentcay oldfay openyay"/>
+			<matrix-udl-choose-json value="Oosechay ayay JSON UDL efinitionday ilefay"/>
+			<matrix-udl-close value="Oseclay Useryay Efinedday Anguagelay"/>
+			<matrix-udl-close-styler value="Oseclay Ylerstay"/>
+			<matrix-udl-colors value="Olorscay"/>
+			<matrix-udl-dark-mode-language value="Arkday odemay anguagelay"/>
+			<matrix-udl-definition-exported value="Efinitionday exportedyay"/>
+			<matrix-udl-definitions-saved value="Efinitionsday avedsay"/>
+			<matrix-udl-enable-font value="Enableyay ontfay"/>
+			<matrix-udl-error value="Useryay-efinedday anguagelay erroryay: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ilefay operationyay ailedfay: $ERROR$"/>
+			<matrix-udl-file-progress value="Ilefay operationyay inyay ogresspray…"/>
+			<matrix-udl-import-rejected value="Importyay ejectedray: $ERROR$"/>
+			<matrix-udl-imported value="Importedyay $COUNT$ anguagelay(say)"/>
+			<matrix-udl-live-edits value="Useryay Efinedday Anguagelay — editsyay applyyay ivelay onlyyay otay ocumentsday usingyay isthay anguagelay"/>
+			<matrix-udl-loading value="Oadinglay efinitionsday…"/>
+			<matrix-udl-memory-only value="Efinitionsday areyay inyay emorymay onlyyay (onay onfigurationcay irectoryday)"/>
+			<matrix-udl-missing-ids value="Issingmay useryay-efinedday anguagelay ID(say): $IDS$. Ocumentday exttay andyay avedsay anguagelay identitiesyay ereway reservedpray. Estoreray ethay efinitionsday oryay explicitlyyay electsay anotheryay Anguagelay."/>
+			<matrix-udl-open-panel-disconnected value="UDL Openyay anelpay isconnectedday: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Emoveray isthay amednay efinitionday? Existingyay ocumentsday eepkay eirthay exttay andyay itchsway otay ethay unnamedyay Useryay-Efinedday anguagelay."/>
+			<matrix-udl-retry-file value="Etryray UDL ilefay operationyay"/>
+			<matrix-udl-save-panel-disconnected value="UDL Avesay anelpay isconnectedday: $ERROR$"/>
+			<matrix-udl-unavailable value="Efinitionsday unavailableyay; orrectcay udl.json andyay etryray."/>
+			<matrix-udl-use-background value="Useyay ackgroundbay"/>
+			<matrix-udl-use-foreground value="Useyay oregroundfay"/>
+			<matrix-udl-working-copy value="Useryay Efinedday (orkingway opycay)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

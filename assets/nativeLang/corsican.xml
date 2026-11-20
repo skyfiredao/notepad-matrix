@@ -1792,6 +1792,7 @@ Cuntinuate solu s’è vo capite i risichi."/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Ridimensiunà i risultati di ricerca"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are place holders, don't translate these place holders. -->
 			<word-chars-list-tip value="Què permette d’include caratteri addiziunali in i caratteri di parolle currente quandu ci hè un doppiu cliccu per selezziunà o una ricerca cù l’ozzione « Parolla sana deve currisponde » selezziunata."/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 
@@ -1982,6 +1983,59 @@ S’è vo selezziunate u modu espertu ma ùn mudificate micca i schedarii in i l
 			<networkpathwarning-serverwhitelist-tip value="Aghjunghje u servitore di u schedariu attuale in serverWhiteList.xml di Notepad++.
 
 Per sapene di più, cliccu nant’à stu buttone per apre u situ web è fighjà a sezzione chì currisponde in u manuale di l’utilizatore."/>
+			<matrix-close value="Chjode"/>
+			<matrix-retry value="Pruvà torna"/>
+			<matrix-cancelled value="Abbandunatu"/>
+			<matrix-read-only value="Lettura sola"/>
+			<matrix-find-status-details value="Dettagli di u statu"/>
+			<matrix-find-backward-unavailable value="A ricerca in daretu cù spressioni regulare hè disattivata"/>
+			<matrix-hash-select-files value="Selezziunà i schedarii"/>
+			<matrix-hash-calculating value="Calculu di l’impronta…"/>
+			<matrix-hash-selection-failed value="Fiascu di a selezzione di schedarii : $ERROR$"/>
+			<matrix-hash-read-failed value="Impussibule di leghje sti schedarii :&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Chjode l’errore"/>
+			<matrix-hash-file-paths value="Chjassi di i schedarii (lettura sola)"/>
+			<matrix-hash-digest-result value="Risultatu di l’impronta (lettura sola)"/>
+			<matrix-hash-source-text value="Testu d’urigine di l’impronta"/>
+			<matrix-hash-selection-composition value="U calculu di l’impronta di a selezzione durante a cumpusizione attiva ùn hè ancu messu in ballu"/>
+			<matrix-hash-selection-read-failed value="Impussibule di leghje a selezzione : $ERROR$"/>
+			<matrix-window-activation-failed value="Impussibule di passà à u schedariu selezziunatu"/>
+			<matrix-window-selection-unavailable value="U schedariu selezziunatu hè chjosu o ùn pò esse attivatu"/>
+			<matrix-incremental-position value="Spiazzà a barra di ricerca incrementale"/>
+			<matrix-find-progress-bar value="Barra di prugressu"/>
+			<matrix-find-previous-search value="Affissà a ricerca precedente"/>
+			<matrix-find-results-summary value="Risultati di ricerca - ($INT_REPLACE$ currispundenze)"/>
+			<matrix-udl-allow-code2-close value="Permette a chjusura di u codice 2"/>
+			<matrix-udl-allow-code2-middle value="Permette u mezu di u codice 2"/>
+			<matrix-udl-allow-code2-open value="Permette l’apertura di u codice 2"/>
+			<matrix-udl-allow-comment-fold-close value="Permette a chjusura di a piegatura di cummenti"/>
+			<matrix-udl-allow-comment-fold-middle value="Permette u mezu di a piegatura di cummenti"/>
+			<matrix-udl-allow-comment-fold-open value="Permette l’apertura di a piegatura di cummenti"/>
+			<matrix-udl-choose-json value="Sceglie un schedariu JSON di definizione UDL"/>
+			<matrix-udl-close value="Chjode a lingua definita da l’utilizatore"/>
+			<matrix-udl-close-styler value="Chjode a cunfigurazione di i stili"/>
+			<matrix-udl-colors value="Culori"/>
+			<matrix-udl-dark-mode-language value="Lingua di u modu scuru"/>
+			<matrix-udl-definition-exported value="Definizione espurtata"/>
+			<matrix-udl-definitions-saved value="Definizioni arregistrate"/>
+			<matrix-udl-enable-font value="Attivà a grafia"/>
+			<matrix-udl-error value="Errore di lingua definita da l’utilizatore : $ERROR$"/>
+			<matrix-udl-file-failed value="Fiascu di l’operazione nant’à u schedariu UDL : $ERROR$"/>
+			<matrix-udl-file-progress value="Operazione nant’à u schedariu in corsu…"/>
+			<matrix-udl-import-rejected value="Impurtazione ricusata : $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ lingue impurtate"/>
+			<matrix-udl-live-edits value="Lingua definita da l’utilizatore — e mudifiche s’appiecheghjanu subitu solu à i ducumenti chì impieganu sta lingua"/>
+			<matrix-udl-loading value="Caricamentu di e definizioni…"/>
+			<matrix-udl-memory-only value="E definizioni sò solu in memoria (nisun cartulare di cunfigurazione)"/>
+			<matrix-udl-missing-ids value="Identificatori di lingue definite da l’utilizatore assenti : $IDS$. U testu di i ducumenti è l’identità di e lingue arregistrate sò stati cunservati. Ristabilisce e definizioni o selezziunà esplicitamente un’altra lingua."/>
+			<matrix-udl-open-panel-disconnected value="Pannellu d’apertura UDL scunnettu : $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Caccià sta definizione cù nome ? I ducumenti esistenti cunservanu u so testu è passanu à a lingua definita da l’utilizatore senza nome."/>
+			<matrix-udl-retry-file value="Pruvà torna l’operazione nant’à u schedariu UDL"/>
+			<matrix-udl-save-panel-disconnected value="Pannellu d’arregistramentu UDL scunnettu : $ERROR$"/>
+			<matrix-udl-unavailable value="Definizioni indispunibule ; currege udl.json è pruvà torna."/>
+			<matrix-udl-use-background value="Impiegà u fondu"/>
+			<matrix-udl-use-foreground value="Impiegà u primu pianu"/>
+			<matrix-udl-working-copy value="Definita da l’utilizatore (copia di travagliu)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

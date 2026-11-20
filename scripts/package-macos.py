@@ -15,6 +15,7 @@ TARGET = 'aarch64-apple-darwin'
 SANDBOX_ENTITLEMENTS = {
     'com.apple.security.app-sandbox': True,
     'com.apple.security.files.user-selected.read-write': True,
+    'com.apple.security.files.bookmarks.app-scope': True,
     'com.apple.security.print': True,
 }
 

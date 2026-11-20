@@ -1242,6 +1242,7 @@ Continue?"/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Athraigh méid na dtorthaí cuardaigh"/>
 			<!-- $INT_REPLACE$  and $STR_REPLACE$ are a place holders, don't translate these place holders -->
 			<word-chars-list-tip value="This allows you to include additional character into current word characters while double clicking for selection or searching with &quot;Match whole word only&quot; option checked."/>
 			<word-chars-list-warning-begin value="Be aware: "/>
@@ -1328,6 +1329,60 @@ Find in all files except exe, obj &amp;&amp; log:
 			<find-result-title-info-extra value=" - Line Filter Mode: only display the filtered results"/>
 			<find-result-hits value="($INT_REPLACE$ hits)"/>
 			<find-regex-zero-length-match value="zero length match"/>
+			<discover-file-candidates-title value="Comhaid fhéideartha á n-aimsiú…"/>
+			<matrix-close value="Dún"/>
+			<matrix-retry value="Bain triail eile as"/>
+			<matrix-cancelled value="Cealaithe"/>
+			<matrix-read-only value="Inléite amháin"/>
+			<matrix-find-status-details value="Sonraí stádais"/>
+			<matrix-find-backward-unavailable value="Tá cuardach siar le sloinn rialta díchumasaithe"/>
+			<matrix-hash-select-files value="Roghnaigh comhaid"/>
+			<matrix-hash-calculating value="Achoimre á ríomh…"/>
+			<matrix-hash-selection-failed value="Theip ar roghnú na gcomhad: $ERROR$"/>
+			<matrix-hash-read-failed value="Ní féidir na comhaid seo a léamh:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Dún an earráid"/>
+			<matrix-hash-file-paths value="Conairí comhad (inléite amháin)"/>
+			<matrix-hash-digest-result value="Toradh na hachoimre (inléite amháin)"/>
+			<matrix-hash-source-text value="Téacs foinseach na hachoimre"/>
+			<matrix-hash-selection-composition value="Níl haisiú an roghnúcháin le linn cumadóireacht ghníomhach téacs curtha i bhfeidhm fós"/>
+			<matrix-hash-selection-read-failed value="Ní féidir an roghnúchán a léamh: $ERROR$"/>
+			<matrix-window-activation-failed value="Ní féidir athrú go dtí an comhad roghnaithe"/>
+			<matrix-window-selection-unavailable value="Tá an comhad roghnaithe dúnta nó ní féidir é a ghníomhachtú"/>
+			<matrix-incremental-position value="Bog an barra cuardaigh incrimintigh"/>
+			<matrix-find-progress-bar value="Barra dul chun cinn"/>
+			<matrix-find-previous-search value="Taispeáin an cuardach roimhe seo"/>
+			<matrix-find-results-summary value="Torthaí cuardaigh - ($INT_REPLACE$ amas)"/>
+			<matrix-udl-allow-code2-close value="Ceadaigh dúnadh cóid 2"/>
+			<matrix-udl-allow-code2-middle value="Ceadaigh lár cóid 2"/>
+			<matrix-udl-allow-code2-open value="Ceadaigh oscailt cóid 2"/>
+			<matrix-udl-allow-comment-fold-close value="Ceadaigh dúnadh fillte nóta tráchta"/>
+			<matrix-udl-allow-comment-fold-middle value="Ceadaigh lár fillte nóta tráchta"/>
+			<matrix-udl-allow-comment-fold-open value="Ceadaigh oscailt fillte nóta tráchta"/>
+			<matrix-udl-choose-json value="Roghnaigh comhad sainmhínithe UDL i bhformáid JSON"/>
+			<matrix-udl-close value="Dún an Teanga Shainithe ag an Úsáideoir"/>
+			<matrix-udl-close-styler value="Dún an cumraitheoir stíle"/>
+			<matrix-udl-colors value="Dathanna"/>
+			<matrix-udl-dark-mode-language value="Teanga sa mhód dorcha"/>
+			<matrix-udl-definition-exported value="Sainmhíniú easpórtáilte"/>
+			<matrix-udl-definitions-saved value="Sainmhínithe sábháilte"/>
+			<matrix-udl-enable-font value="Cumasaigh cló"/>
+			<matrix-udl-error value="Earráid teanga sainithe ag an úsáideoir: $ERROR$"/>
+			<matrix-udl-file-failed value="Theip ar oibríocht comhaid UDL: $ERROR$"/>
+			<matrix-udl-file-progress value="Oibríocht comhaid ar siúl…"/>
+			<matrix-udl-import-rejected value="Diúltaíodh don iompórtáil: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ teanga iompórtáilte"/>
+			<matrix-udl-live-edits value="Teanga Shainithe ag an Úsáideoir — cuirtear athruithe i bhfeidhm láithreach ar dhoiciméid a úsáideann an teanga seo amháin"/>
+			<matrix-udl-loading value="Sainmhínithe á lódáil…"/>
+			<matrix-udl-memory-only value="Tá na sainmhínithe sa chuimhne amháin (níl aon chomhadlann chumraíochta ann)"/>
+			<matrix-udl-missing-ids value="Aitheantóirí teangacha sainithe ag an úsáideoir ar iarraidh: $IDS$. Caomhnaíodh téacs na ndoiciméad agus céannachtaí na dteangacha sábháilte. Athchóirigh na sainmhínithe nó roghnaigh teanga eile go sainráite."/>
+			<matrix-udl-open-panel-disconnected value="Dícheanglaíodh painéal Oscailte UDL: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="An bhfuil fonn ort an sainmhíniú ainmnithe seo a bhaint? Coinneoidh na doiciméid atá ann a dtéacs agus athróidh siad go dtí an teanga gan ainm atá sainithe ag an úsáideoir."/>
+			<matrix-udl-retry-file value="Bain triail eile as oibríocht comhaid UDL"/>
+			<matrix-udl-save-panel-disconnected value="Dícheanglaíodh painéal Sábhála UDL: $ERROR$"/>
+			<matrix-udl-unavailable value="Níl na sainmhínithe ar fáil; ceartaigh udl.json agus bain triail eile as."/>
+			<matrix-udl-use-background value="Úsáid an cúlra"/>
+			<matrix-udl-use-foreground value="Úsáid an tulra"/>
+			<matrix-udl-working-copy value="Sainithe ag an úsáideoir (cóip oibre)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

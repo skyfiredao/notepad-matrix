@@ -1,4 +1,5 @@
 use super::*;
+use crate::localization;
 use super::dialog_font::px;
 
 pub(super) fn dimensions() -> gpui::Size<gpui::Pixels> {
@@ -139,11 +140,15 @@ impl MatrixWindow {
 
     pub(super) fn render_goto(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !self.goto_visible { return None; }
+        self.goto.current.update(cx, |field, cx| field.set_label(
+            localization::current_dialog_control("GoToLine", 2004).unwrap_or("You are here:"), cx));
+        self.goto_input.update(cx, |field, cx| field.set_label(
+            localization::current_dialog_control("GoToLine", 2005).unwrap_or("You want to go to:"), cx));
         Some(div()
             .id("goto-dialog")
             .debug_selector(|| "goto-dialog".into())
             .role(Role::Dialog)
-            .aria_label("转至...")
+            .aria_label(localization::dialog_title(&self.native_locale(), "GoToLine").unwrap_or("Go to..."))
             .key_context("MatrixGoTo")
             .tab_group()
             .on_action(cx.listener(|view, action: &GoToMode, window, cx| {
@@ -172,10 +177,10 @@ impl MatrixWindow {
                 cx.stop_propagation();
             }))
             .size_full().relative().bg(rgb(0xffffff)).text_color(rgb(0x202020)).font_family(dialog_font::font_family()).text_size(px(13.))
-            .children([(false, "goto-line", "行(L)", 14.), (true, "goto-offset", "偏移量(O)", 172.)]
-                .into_iter().map(|(offset, id, label, left)| {
+            .children([(false, "goto-line", 2007, "Line", 14.), (true, "goto-offset", 2008, "Offset", 172.)]
+                .into_iter().map(|(offset, id, source_id, label, left)| {
                     let index = usize::from(offset);
-                    find_surface::radio(id, label, self.goto.offset == offset)
+                    find_surface::radio(id, localization::current_dialog_control("GoToLine", source_id).unwrap_or(label), self.goto.offset == offset)
                         .track_focus(&self.goto.mode_focus[index].clone().tab_stop(self.goto.offset == offset))
                         .absolute().left(px(left)).top(px(9.)).w(px(140.))
                         .on_click(cx.listener(move |view, _, window, cx| view.set_goto_mode(offset, window, cx)))
@@ -189,19 +194,19 @@ impl MatrixWindow {
                             cx.stop_propagation();
                         }))
                 }))
-            .child(div().absolute().left(px(14.)).top(px(44.)).child("当前位置:"))
+            .child(div().absolute().left(px(14.)).top(px(44.)).child(localization::current_dialog_control("GoToLine", 2004).unwrap_or("You are here:")))
             .child(div().absolute().left(px(182.)).top(px(42.)).w(px(124.)).child(self.goto.current.clone()))
-            .child(div().absolute().left(px(14.)).top(px(70.)).child("目标位置:"))
+            .child(div().absolute().left(px(14.)).top(px(70.)).child(localization::current_dialog_control("GoToLine", 2005).unwrap_or("You want to go to:")))
             .child(div().absolute().left(px(182.)).top(px(67.)).w(px(124.)).child(self.goto_input.clone()))
-            .child(div().absolute().left(px(14.)).top(px(96.)).child("截止位置:"))
+            .child(div().absolute().left(px(14.)).top(px(96.)).child(localization::current_dialog_control("GoToLine", 2006).unwrap_or("You can't go further than:")))
             .child(div().id("goto-limit").absolute().left(px(186.)).top(px(96.)).child(self.goto.limit.to_string()))
-            .child(find_surface::button("goto-confirm", "定位(G)", 65.).right(px(12.)).w(px(123.)).h(px(25.))
+            .child(find_surface::button("goto-confirm", localization::current_dialog_control("GoToLine", 1).unwrap_or("Go"), 65.).right(px(12.)).w(px(123.)).h(px(25.))
                 .focusable().tab_index(3)
                 .on_click(cx.listener(|view, _, window, cx| view.confirm_goto(window, cx)))
                 .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, window, cx| {
                     if event.keystroke.key == "space" { view.confirm_goto(window, cx); cx.stop_propagation(); }
                 })))
-            .child(find_surface::button("goto-cancel", "关闭(C)", 96.).right(px(12.)).w(px(123.)).h(px(25.))
+            .child(find_surface::button("goto-cancel", localization::current_dialog_control("GoToLine", 2).unwrap_or("I'm going nowhere"), 96.).right(px(12.)).w(px(123.)).h(px(25.))
                 .focusable().tab_index(4)
                 .on_click(cx.listener(|view, _, window, cx| {
                     view.clear_goto(window, cx);

@@ -12,6 +12,7 @@ pub(super) struct Field {
     horizontal: Pixels,
     layout: Option<Layout>,
     dark: bool,
+    locale: String,
     error: Option<String>,
 }
 
@@ -35,7 +36,7 @@ impl Field {
         let mut state = EditorSession::new("");
         state.set_read_only(read_only);
         Self { state, focus: cx.focus_handle().tab_stop(true), selector, read_only, first_line: 0,
-            horizontal: px(0.), layout: None, dark: false, error: None }
+            horizontal: px(0.), layout: None, dark: false, locale: String::new(), error: None }
     }
 
     pub(super) fn text(&self) -> String { self.state.committed_text() }
@@ -51,6 +52,10 @@ impl Field {
 
     pub(super) fn set_dark(&mut self, dark: bool, cx: &mut Context<Self>) {
         if self.dark != dark { self.dark = dark; cx.notify(); }
+    }
+
+    pub(super) fn set_locale(&mut self, locale: &str, cx: &mut Context<Self>) {
+        if self.locale != locale { self.locale = locale.to_owned(); cx.notify(); }
     }
 
     fn changed(&mut self, result: Result<(), crate::editor::EditError>, window: &mut Window, cx: &mut Context<Self>) {
@@ -199,9 +204,12 @@ impl Render for Field {
         let read_only = self.read_only;
         let entity = cx.entity();
         let paint_entity = entity.clone();
+        let (label_key, fallback) = if selector == "hash-files-paths" { ("matrix-hash-file-paths", "File paths (read only)") }
+            else if read_only { ("matrix-hash-digest-result", "Digest result (read only)") }
+            else { ("matrix-hash-source-text", "Digest source text") };
+        let label = crate::localization::localized_string(&self.locale, label_key).unwrap_or(fallback);
         div().id(selector).debug_selector(move || selector.into())
-            .role(Role::TextInput).aria_label(if selector == "hash-files-paths" { "文件路径（只读）" }
-                else if read_only { "摘要结果（只读）" } else { "摘要源文本" })
+            .role(Role::TextInput).aria_label(label)
             .aria_value(self.state.display_text()).track_focus(&self.focus)
             .a11y_synthetic_children(move |builder| { if read_only { builder.parent_node().set_read_only(); } })
             .key_context("MatrixTextField").w_full().h(px(96.)).border_1()

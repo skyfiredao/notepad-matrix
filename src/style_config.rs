@@ -399,6 +399,19 @@ impl ThemeEntry {
         let mut definition = languages::catalog().map_err(|error| invalid(error.to_string()))?.themes().theme(dark).clone();
         if let Some(style) = definition.global_styles.iter_mut().find(|style| style.id == 32) {
             style.attributes.insert("fontSize".into(), "16".into());
+            style.attributes.insert("fontName".into(), "Menlo".into());
+        }
+        if !dark {
+            for (name, attribute, value) in [
+                ("Caret colour", "fgColor", "000000"),
+                ("Current line background colour", "bgColor", "FBFCD9"),
+            ] {
+                if let Some(style) = definition.global_styles.iter_mut().find(|style| {
+                    style.attributes.get("name").is_some_and(|value| value == name)
+                }) {
+                    style.attributes.insert(attribute.into(), value.into());
+                }
+            }
         }
         let filename = if dark { "themes/DarkModeDefault.xml" } else { "stylers.xml" }.to_owned();
         let mut lexers = Node { name: "LexerStyles".into(), ..Node::default() };

@@ -927,5 +927,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<matrix-find-resize-results value="ਖੋਜ ਨਤੀਜਿਆਂ ਦਾ ਆਕਾਰ ਬਦਲੋ"/>
+			<common-ok value="ਠੀਕ ਹੈ"/>
+			<common-cancel value="ਰੱਦ ਕਰੋ"/>
+			<common-name value="ਨਾਮ"/>
+			<discover-file-candidates-title value="ਸੰਭਾਵੀ ਫਾਈਲਾਂ ਲੱਭੀਆਂ ਜਾ ਰਹੀਆਂ ਹਨ…"/>
+			<matrix-close value="ਬੰਦ ਕਰੋ"/>
+			<matrix-retry value="ਮੁੜ ਕੋਸ਼ਿਸ਼ ਕਰੋ"/>
+			<matrix-cancelled value="ਰੱਦ ਕੀਤਾ"/>
+			<matrix-read-only value="ਕੇਵਲ ਪੜ੍ਹਨ ਲਈ"/>
+			<matrix-find-status-details value="ਸਥਿਤੀ ਦੇ ਵੇਰਵੇ"/>
+			<matrix-find-backward-unavailable value="ਨਿਯਮਤ ਸਮੀਕਰਨਾਂ ਨਾਲ ਪਿੱਛੇ ਵੱਲ ਖੋਜ ਬੰਦ ਹੈ"/>
+			<matrix-hash-select-files value="ਫਾਈਲਾਂ ਚੁਣੋ"/>
+			<matrix-hash-calculating value="ਹੈਸ਼ ਦੀ ਗਣਨਾ ਹੋ ਰਹੀ ਹੈ…"/>
+			<matrix-hash-selection-failed value="ਫਾਈਲਾਂ ਦੀ ਚੋਣ ਅਸਫਲ ਰਹੀ: $ERROR$"/>
+			<matrix-hash-read-failed value="ਇਹ ਫਾਈਲਾਂ ਪੜ੍ਹੀਆਂ ਨਹੀਂ ਜਾ ਸਕੀਆਂ:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="ਗਲਤੀ ਸੁਨੇਹਾ ਬੰਦ ਕਰੋ"/>
+			<matrix-hash-file-paths value="ਫਾਈਲ ਮਾਰਗ (ਕੇਵਲ ਪੜ੍ਹਨ ਲਈ)"/>
+			<matrix-hash-digest-result value="ਹੈਸ਼ ਨਤੀਜਾ (ਕੇਵਲ ਪੜ੍ਹਨ ਲਈ)"/>
+			<matrix-hash-source-text value="ਹੈਸ਼ ਦਾ ਸਰੋਤ ਪਾਠ"/>
+			<matrix-hash-selection-composition value="ਸਰਗਰਮ ਪਾਠ ਰਚਨਾ ਦੌਰਾਨ ਚੁਣੇ ਪਾਠ ਦਾ ਹੈਸ਼ ਬਣਾਉਣਾ ਹਾਲੇ ਲਾਗੂ ਨਹੀਂ ਕੀਤਾ ਗਿਆ"/>
+			<matrix-hash-selection-read-failed value="ਚੁਣਿਆ ਪਾਠ ਪੜ੍ਹਿਆ ਨਹੀਂ ਜਾ ਸਕਿਆ: $ERROR$"/>
+			<matrix-window-activation-failed value="ਚੁਣੀ ਫਾਈਲ ਉੱਤੇ ਨਹੀਂ ਜਾ ਸਕੇ"/>
+			<matrix-window-selection-unavailable value="ਚੁਣੀ ਫਾਈਲ ਬੰਦ ਹੈ ਜਾਂ ਸਰਗਰਮ ਨਹੀਂ ਕੀਤੀ ਜਾ ਸਕਦੀ"/>
+			<matrix-incremental-position value="ਵਧਦੀ ਖੋਜ ਪੱਟੀ ਨੂੰ ਖਿਸਕਾਓ"/>
+			<matrix-find-progress-bar value="ਤਰੱਕੀ ਪੱਟੀ"/>
+			<matrix-find-previous-search value="ਪਿਛਲੀ ਖੋਜ ਦਿਖਾਓ"/>
+			<matrix-find-results-summary value="ਖੋਜ ਨਤੀਜੇ - ($INT_REPLACE$ ਮੇਲ)"/>
+			<matrix-udl-allow-code2-close value="ਕੋਡ 2 ਦਾ ਬੰਦ ਚਿੰਨ੍ਹ ਮਨਜ਼ੂਰ ਕਰੋ"/>
+			<matrix-udl-allow-code2-middle value="ਕੋਡ 2 ਦਾ ਵਿਚਕਾਰਲਾ ਚਿੰਨ੍ਹ ਮਨਜ਼ੂਰ ਕਰੋ"/>
+			<matrix-udl-allow-code2-open value="ਕੋਡ 2 ਦਾ ਸ਼ੁਰੂ ਚਿੰਨ੍ਹ ਮਨਜ਼ੂਰ ਕਰੋ"/>
+			<matrix-udl-allow-comment-fold-close value="ਟਿੱਪਣੀ ਸਮੇਟਣ ਦਾ ਬੰਦ ਚਿੰਨ੍ਹ ਮਨਜ਼ੂਰ ਕਰੋ"/>
+			<matrix-udl-allow-comment-fold-middle value="ਟਿੱਪਣੀ ਸਮੇਟਣ ਦਾ ਵਿਚਕਾਰਲਾ ਚਿੰਨ੍ਹ ਮਨਜ਼ੂਰ ਕਰੋ"/>
+			<matrix-udl-allow-comment-fold-open value="ਟਿੱਪਣੀ ਸਮੇਟਣ ਦਾ ਸ਼ੁਰੂ ਚਿੰਨ੍ਹ ਮਨਜ਼ੂਰ ਕਰੋ"/>
+			<matrix-udl-choose-json value="JSON UDL ਪਰਿਭਾਸ਼ਾ ਫਾਈਲ ਚੁਣੋ"/>
+			<matrix-udl-close value="ਵਰਤੋਂਕਾਰ ਵੱਲੋਂ ਪਰਿਭਾਸ਼ਿਤ ਭਾਸ਼ਾ ਬੰਦ ਕਰੋ"/>
+			<matrix-udl-close-styler value="ਸ਼ੈਲੀ ਸੰਰਚਨਾਕਾਰ ਬੰਦ ਕਰੋ"/>
+			<matrix-udl-colors value="ਰੰਗ"/>
+			<matrix-udl-dark-mode-language value="ਹਨੇਰੇ ਢੰਗ ਦੀ ਭਾਸ਼ਾ"/>
+			<matrix-udl-definition-exported value="ਪਰਿਭਾਸ਼ਾ ਨਿਰਯਾਤ ਕੀਤੀ"/>
+			<matrix-udl-definitions-saved value="ਪਰਿਭਾਸ਼ਾਵਾਂ ਸੰਭਾਲੀਆਂ"/>
+			<matrix-udl-enable-font value="ਫੌਂਟ ਚਾਲੂ ਕਰੋ"/>
+			<matrix-udl-error value="ਵਰਤੋਂਕਾਰ ਵੱਲੋਂ ਪਰਿਭਾਸ਼ਿਤ ਭਾਸ਼ਾ ਦੀ ਗਲਤੀ: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ਫਾਈਲ ਕਾਰਵਾਈ ਅਸਫਲ ਰਹੀ: $ERROR$"/>
+			<matrix-udl-file-progress value="ਫਾਈਲ ਕਾਰਵਾਈ ਜਾਰੀ ਹੈ…"/>
+			<matrix-udl-import-rejected value="ਆਯਾਤ ਰੱਦ ਕੀਤਾ: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ ਭਾਸ਼ਾਵਾਂ ਆਯਾਤ ਕੀਤੀਆਂ"/>
+			<matrix-udl-live-edits value="ਵਰਤੋਂਕਾਰ ਵੱਲੋਂ ਪਰਿਭਾਸ਼ਿਤ ਭਾਸ਼ਾ — ਸੋਧਾਂ ਤੁਰੰਤ ਕੇਵਲ ਇਸ ਭਾਸ਼ਾ ਵਾਲੇ ਦਸਤਾਵੇਜ਼ਾਂ ਉੱਤੇ ਲਾਗੂ ਹੁੰਦੀਆਂ ਹਨ"/>
+			<matrix-udl-loading value="ਪਰਿਭਾਸ਼ਾਵਾਂ ਲੋਡ ਹੋ ਰਹੀਆਂ ਹਨ…"/>
+			<matrix-udl-memory-only value="ਪਰਿਭਾਸ਼ਾਵਾਂ ਕੇਵਲ ਮੈਮੋਰੀ ਵਿੱਚ ਹਨ (ਕੋਈ ਸੰਰਚਨਾ ਡਾਇਰੈਕਟਰੀ ਨਹੀਂ)"/>
+			<matrix-udl-missing-ids value="ਵਰਤੋਂਕਾਰ ਵੱਲੋਂ ਪਰਿਭਾਸ਼ਿਤ ਭਾਸ਼ਾਵਾਂ ਦੇ ID ਗੁੰਮ ਹਨ: $IDS$। ਦਸਤਾਵੇਜ਼ਾਂ ਦਾ ਪਾਠ ਅਤੇ ਸੰਭਾਲੀਆਂ ਭਾਸ਼ਾਵਾਂ ਦੀਆਂ ਪਛਾਣਾਂ ਬਰਕਰਾਰ ਹਨ। ਪਰਿਭਾਸ਼ਾਵਾਂ ਮੁੜ ਬਹਾਲ ਕਰੋ ਜਾਂ ਸਪਸ਼ਟ ਤੌਰ ਉੱਤੇ ਕੋਈ ਹੋਰ ਭਾਸ਼ਾ ਚੁਣੋ।"/>
+			<matrix-udl-open-panel-disconnected value="UDL ਖੋਲ੍ਹਣ ਵਾਲੇ ਪੈਨਲ ਦਾ ਸੰਪਰਕ ਟੁੱਟ ਗਿਆ: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="ਕੀ ਇਹ ਨਾਮ ਵਾਲੀ ਪਰਿਭਾਸ਼ਾ ਹਟਾਉਣੀ ਹੈ? ਮੌਜੂਦਾ ਦਸਤਾਵੇਜ਼ ਆਪਣਾ ਪਾਠ ਰੱਖਦੇ ਹਨ ਅਤੇ ਬਿਨਾਂ ਨਾਮ ਵਾਲੀ ਵਰਤੋਂਕਾਰ ਵੱਲੋਂ ਪਰਿਭਾਸ਼ਿਤ ਭਾਸ਼ਾ ਉੱਤੇ ਬਦਲ ਜਾਂਦੇ ਹਨ।"/>
+			<matrix-udl-retry-file value="UDL ਫਾਈਲ ਕਾਰਵਾਈ ਮੁੜ ਕਰੋ"/>
+			<matrix-udl-save-panel-disconnected value="UDL ਸੰਭਾਲਣ ਵਾਲੇ ਪੈਨਲ ਦਾ ਸੰਪਰਕ ਟੁੱਟ ਗਿਆ: $ERROR$"/>
+			<matrix-udl-unavailable value="ਪਰਿਭਾਸ਼ਾਵਾਂ ਉਪਲਬਧ ਨਹੀਂ; udl.json ਠੀਕ ਕਰੋ ਅਤੇ ਮੁੜ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"/>
+			<matrix-udl-use-background value="ਪਿਛੋਕੜ ਵਰਤੋ"/>
+			<matrix-udl-use-foreground value="ਅਗਲਾ ਭਾਗ ਵਰਤੋ"/>
+			<matrix-udl-working-copy value="ਵਰਤੋਂਕਾਰ ਵੱਲੋਂ ਪਰਿਭਾਸ਼ਿਤ (ਕੰਮਕਾਜੀ ਨਕਲ)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

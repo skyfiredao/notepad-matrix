@@ -97,6 +97,7 @@ fn entry_label<'a>(filename: &str, entry: &'a MenuEntry, configured: bool) -> &'
                 "view-tab-menu" => "view-tab", "view-project-panels" => "view-project",
                 "view-browser-menu" => "view-currentFileIn", "view-fold-level" => "view-collapseLevel",
                 "view-unfold-level" => "view-uncollapseLevel", "encoding-character-sets" => "encoding-characterSets",
+                "language-user-defined-language" => "language-userDefinedLanguage",
                 "encoding-arabic" => "encoding-arabic", "encoding-baltic" => "encoding-baltic",
                 "encoding-celtic" => "encoding-celtic", "encoding-cyrillic" => "encoding-cyrillic",
                 "encoding-central-european" => "encoding-centralEuropean", "encoding-chinese" => "encoding-chinese",
@@ -1250,6 +1251,9 @@ pub(super) fn render(
                 .top(if anchor.is_some() { top - anchor_top } else { top })
                 .w(width)
                 .h(height)
+                .font_family(metrics.family.clone())
+                .text_size(metrics.size)
+                .line_height(metrics.line_height)
                 .flex()
                 .flex_col()
                 .border_1()

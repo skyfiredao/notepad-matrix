@@ -277,5 +277,65 @@
 				</Operator>
 			</UserDefine>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="ٹھیک ہے"/>
+			<common-cancel value="منسوخ کريں"/>
+			<common-name value="نام"/>
+			<discover-file-candidates-title value="ممکنہ فائلیں تلاش کی جا رہی ہیں..."/>
+			<matrix-close value="بند کریں"/>
+			<matrix-retry value="دوبارہ کوشش کریں"/>
+			<matrix-cancelled value="منسوخ ہو گیا"/>
+			<matrix-read-only value="صرف پڑھنے کے لیے"/>
+			<matrix-find-status-details value="حالت کی تفصیلات"/>
+			<matrix-find-resize-results value="تلاش کے نتائج کا سائز بدلیں"/>
+			<matrix-find-backward-unavailable value="باقاعدہ عبارت سے پیچھے کی طرف تلاش غیر فعال ہے"/>
+			<matrix-hash-select-files value="فائلیں منتخب کریں"/>
+			<matrix-hash-calculating value="ہیش کا حساب لگایا جا رہا ہے…"/>
+			<matrix-hash-selection-failed value="فائلوں کا انتخاب ناکام ہوا: $ERROR$"/>
+			<matrix-hash-read-failed value="درج ذیل فائلیں پڑھی نہیں جا سکیں:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="خرابی بند کریں"/>
+			<matrix-hash-file-paths value="فائلوں کے راستے (صرف پڑھنے کے لیے)"/>
+			<matrix-hash-digest-result value="ہیش کا نتیجہ (صرف پڑھنے کے لیے)"/>
+			<matrix-hash-source-text value="ہیش کا ماخذ متن"/>
+			<matrix-hash-selection-composition value="متن کی فعال ترکیب کے دوران انتخاب کا ہیش بنانا ابھی نافذ نہیں ہوا"/>
+			<matrix-hash-selection-read-failed value="منتخب حصہ پڑھا نہیں جا سکا: $ERROR$"/>
+			<matrix-window-activation-failed value="منتخب فائل پر منتقل نہیں ہو سکا"/>
+			<matrix-window-selection-unavailable value="منتخب فائل بند ہے یا فعال نہیں کی جا سکتی"/>
+			<matrix-incremental-position value="تدریجی تلاش کی پٹی منتقل کریں"/>
+			<matrix-find-progress-bar value="پیش رفت کی پٹی"/>
+			<matrix-find-previous-search value="پچھلی تلاش دکھائیں"/>
+			<matrix-find-results-summary value="تلاش کے نتائج - ($INT_REPLACE$ مماثلتیں)"/>
+			<matrix-udl-allow-code2-close value="کوڈ 2 کے اختتام کی اجازت دیں"/>
+			<matrix-udl-allow-code2-middle value="کوڈ 2 کے درمیان کی اجازت دیں"/>
+			<matrix-udl-allow-code2-open value="کوڈ 2 کے آغاز کی اجازت دیں"/>
+			<matrix-udl-allow-comment-fold-close value="تبصرے کی تہہ بندی کے اختتام کی اجازت دیں"/>
+			<matrix-udl-allow-comment-fold-middle value="تبصرے کی تہہ بندی کے درمیان کی اجازت دیں"/>
+			<matrix-udl-allow-comment-fold-open value="تبصرے کی تہہ بندی کے آغاز کی اجازت دیں"/>
+			<matrix-udl-choose-json value="UDL تعریف کی JSON فائل منتخب کریں"/>
+			<matrix-udl-close value="صارف کی متعین کردہ زبان بند کریں"/>
+			<matrix-udl-close-styler value="انداز کا مدیر بند کریں"/>
+			<matrix-udl-colors value="رنگ"/>
+			<matrix-udl-dark-mode-language value="تاریک وضع کی زبان"/>
+			<matrix-udl-definition-exported value="تعریف برآمد ہو گئی"/>
+			<matrix-udl-definitions-saved value="تعریفیں محفوظ ہو گئیں"/>
+			<matrix-udl-enable-font value="خط فعال کریں"/>
+			<matrix-udl-error value="صارف کی متعین کردہ زبان میں خرابی: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL فائل کی کارروائی ناکام ہوئی: $ERROR$"/>
+			<matrix-udl-file-progress value="فائل کی کارروائی جاری ہے…"/>
+			<matrix-udl-import-rejected value="درآمد مسترد ہو گئی: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ زبانیں درآمد ہوئیں"/>
+			<matrix-udl-live-edits value="صارف کی متعین کردہ زبان — ترامیم صرف یہ زبان استعمال کرنے والی دستاویزات پر فوراً لاگو ہوتی ہیں"/>
+			<matrix-udl-loading value="تعریفیں لوڈ ہو رہی ہیں…"/>
+			<matrix-udl-memory-only value="تعریفیں صرف یادداشت میں ہیں (ترتیبات کی ڈائریکٹری نہیں ہے)"/>
+			<matrix-udl-missing-ids value="صارف کی متعین کردہ زبان کے شناخت کنندے موجود نہیں: $IDS$۔ دستاویز کا متن اور زبان کی محفوظ شناختیں برقرار ہیں۔ تعریفیں بحال کریں یا واضح طور پر کوئی دوسری زبان منتخب کریں۔"/>
+			<matrix-udl-open-panel-disconnected value="UDL کھولنے کے پینل کا رابطہ منقطع ہوا: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="کیا یہ نام والی تعریف ہٹائیں؟ موجودہ دستاویزات اپنا متن برقرار رکھیں گی اور صارف کی متعین کردہ بے نام زبان پر منتقل ہو جائیں گی۔"/>
+			<matrix-udl-retry-file value="UDL فائل کی کارروائی دوبارہ آزمائیں"/>
+			<matrix-udl-save-panel-disconnected value="UDL محفوظ کرنے کے پینل کا رابطہ منقطع ہوا: $ERROR$"/>
+			<matrix-udl-unavailable value="تعریفیں دستیاب نہیں؛ udl.json درست کریں اور دوبارہ کوشش کریں۔"/>
+			<matrix-udl-use-background value="پس منظر استعمال کریں"/>
+			<matrix-udl-use-foreground value="پیش منظر استعمال کریں"/>
+			<matrix-udl-working-copy value="صارف کی متعین کردہ (کام کی نقل)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

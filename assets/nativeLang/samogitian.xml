@@ -220,5 +220,65 @@
 				</Operator>
 			</UserDefine>
 		</Dialog>
+		<MiscStrings>
+			<matrix-find-resize-results value="Eaishkuojema rezultatu diidi keistea"/>
+			<common-ok value="Geraa"/>
+			<common-cancel value="atshaukt'"/>
+			<common-name value="Vard's"/>
+			<discover-file-candidates-title value="Eaishkuomaa tinkontys failaa…"/>
+			<matrix-close value="Ozhadariitea"/>
+			<matrix-retry value="Veina karta bandiitea"/>
+			<matrix-cancelled value="Atshaukt's"/>
+			<matrix-read-only value="Tik skaitiimou"/>
+			<matrix-find-status-details value="Bouvema smolkmenas"/>
+			<matrix-find-backward-unavailable value="Reishkeaniu eaishkuojems atgal atjongt's"/>
+			<matrix-hash-select-files value="Failos pasereinktea"/>
+			<matrix-hash-calculating value="Skaitiuojams kontrolenis kuods…"/>
+			<matrix-hash-selection-failed value="Failu pasereinktea napaviika: $ERROR$"/>
+			<matrix-hash-read-failed value="Shitu failu paskaitytea napaviikst:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Klaidas praneshemaa ozhdariitea"/>
+			<matrix-hash-file-paths value="Failu kelee (tik skaitiimou)"/>
+			<matrix-hash-digest-result value="Kontrolenis kuods (tik skaitiimou)"/>
+			<matrix-hash-source-text value="Teekst's kontrolenem kuodou"/>
+			<matrix-hash-selection-composition value="Pazhiimieta teeksta kontrolenis kuods aktyviaa renkont teeksta dar neskaitiuojams"/>
+			<matrix-hash-selection-read-failed value="Pazhiimieta teeksta paskaitytea napaviikst: $ERROR$"/>
+			<matrix-window-activation-failed value="Ea pasereinkta faila pereitea napaviikst"/>
+			<matrix-window-selection-unavailable value="Pasereinkts fail's ozhdariits arba juo aktyvoutea napaviikst"/>
+			<matrix-incremental-position value="Nuosekliuojema eaishkuojema jousta perkeltea"/>
+			<matrix-find-progress-bar value="Eigas jousta"/>
+			<matrix-find-previous-search value="Boovusia eaishkuojema ruodiitea"/>
+			<matrix-find-results-summary value="Eaishkuojema rezultataa - ($INT_REPLACE$ radiniu)"/>
+			<matrix-udl-allow-code2-close value="Leistea kuoda 2 ozhdariima"/>
+			<matrix-udl-allow-code2-middle value="Leistea kuoda 2 viedori"/>
+			<matrix-udl-allow-code2-open value="Leistea kuoda 2 atdariima"/>
+			<matrix-udl-allow-comment-fold-close value="Leistea komentaru lankstiima ozhdariima"/>
+			<matrix-udl-allow-comment-fold-middle value="Leistea komentaru lankstiima viedori"/>
+			<matrix-udl-allow-comment-fold-open value="Leistea komentaru lankstiima atdariima"/>
+			<matrix-udl-choose-json value="Pasereinktea JSON faila so UDL apeapriezhemo"/>
+			<matrix-udl-close value="Ozhdariitea vartuotuoja apeapriezhta kaalba"/>
+			<matrix-udl-close-styler value="Ozhdariitea stealiaus nuostatas"/>
+			<matrix-udl-colors value="Spalvas"/>
+			<matrix-udl-dark-mode-language value="Kaalb' tamsiajam rezhimou"/>
+			<matrix-udl-definition-exported value="Apeapriezhems eashveazht's"/>
+			<matrix-udl-definitions-saved value="Apeapriezhemaa eashsauguotea"/>
+			<matrix-udl-enable-font value="Shreaphta ejongtea"/>
+			<matrix-udl-error value="Vartuotuoja apeapriezhtuos kaalbuos klaida: $ERROR$"/>
+			<matrix-udl-file-failed value="Veiksms so UDL failo napaviika: $ERROR$"/>
+			<matrix-udl-file-progress value="Veakduoms veiksms so failo…"/>
+			<matrix-udl-import-rejected value="Eakealems atmests: $ERROR$"/>
+			<matrix-udl-imported value="Eakealta kaalbu: $COUNT$"/>
+			<matrix-udl-live-edits value="Vartuotuoja apeapriezhta kaalb' — pakeitemaa tuojau galio tik dokumentams, katree nauduoj shita kaalba"/>
+			<matrix-udl-loading value="Apeapriezhemaa eakealamea…"/>
+			<matrix-udl-memory-only value="Apeapriezhemaa iir tik atmeentie (nuostatu aplonka nier)"/>
+			<matrix-udl-missing-ids value="Truukst vartuotuoja apeapriezhtu kaalbu ID: $IDS$. Dokumentu teekst's ear eashsauguotas kaalbu tapatybes paliktas. Atstatitea apeapriezhemos arba aishkiai pasereinkitea keata kaalba."/>
+			<matrix-udl-open-panel-disconnected value="UDL atdariima skydelis atjongt's: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Naikintea shita varda torinti apeapriezhema? Esontys dokumentaa paliks sava teeksta ear pereis ea bevarde vartuotuoja kaalba."/>
+			<matrix-udl-retry-file value="Veiksma so UDL failo veina karta bandiitea"/>
+			<matrix-udl-save-panel-disconnected value="UDL sauguojema skydelis atjongt's: $ERROR$"/>
+			<matrix-udl-unavailable value="Apeapriezhemaa napasekiamie; pataisykitea udl.json ear veina karta bandiikitea."/>
+			<matrix-udl-use-background value="Fuona nauduotea"/>
+			<matrix-udl-use-foreground value="Teeksta spalva nauduotea"/>
+			<matrix-udl-working-copy value="Apeapriezht's Vartuotuoja (darba kuopeje)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

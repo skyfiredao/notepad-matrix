@@ -743,5 +743,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="හරි"/>
+			<common-cancel value="අවලංගුකරන්න"/>
+			<common-name value="නම"/>
+			<discover-file-candidates-title value="ගැළපිය හැකි ගොනු සොයමින්..."/>
+			<matrix-close value="වසන්න"/>
+			<matrix-retry value="නැවත උත්සාහ කරන්න"/>
+			<matrix-cancelled value="අවලංගු කරන ලදි"/>
+			<matrix-read-only value="කියවීමට පමණි"/>
+			<matrix-find-status-details value="තත්ත්ව විස්තර"/>
+			<matrix-find-backward-unavailable value="නිත්‍ය ප්‍රකාශන මගින් පසුපසට සෙවීම අක්‍රිය කර ඇත"/>
+			<matrix-hash-select-files value="ගොනු තෝරන්න"/>
+			<matrix-hash-calculating value="හැෂ් අගය ගණනය කරමින්…"/>
+			<matrix-hash-selection-failed value="ගොනු තේරීම අසාර්ථක විය: $ERROR$"/>
+			<matrix-hash-read-failed value="පහත ගොනු කියවිය නොහැකි විය:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="දෝෂ පණිවිඩය වසන්න"/>
+			<matrix-hash-file-paths value="ගොනු මාර්ග (කියවීමට පමණි)"/>
+			<matrix-hash-digest-result value="හැෂ් ප්‍රතිඵලය (කියවීමට පමණි)"/>
+			<matrix-hash-source-text value="හැෂ් සඳහා මූලාශ්‍ර පෙළ"/>
+			<matrix-hash-selection-composition value="ආදාන සංයෝජනය සක්‍රියව තිබියදී තෝරාගත් පෙළේ හැෂ් අගය ගණනය කිරීම තවම ක්‍රියාත්මක කර නැත"/>
+			<matrix-hash-selection-read-failed value="තෝරාගත් පෙළ කියවිය නොහැකි විය: $ERROR$"/>
+			<matrix-window-activation-failed value="තෝරාගත් ගොනුවට මාරු විය නොහැකි විය"/>
+			<matrix-window-selection-unavailable value="තෝරාගත් ගොනුව වසා ඇත හෝ සක්‍රිය කළ නොහැක"/>
+			<matrix-incremental-position value="පියවරෙන් පියවර සෙවුම් තීරුව ගෙනයන්න"/>
+			<matrix-find-progress-bar value="ප්‍රගති තීරුව"/>
+			<matrix-find-previous-search value="පෙර සෙවීම පෙන්වන්න"/>
+			<matrix-find-results-summary value="සෙවුම් ප්‍රතිඵල - (ගැළපීම් $INT_REPLACE$)"/>
+			<matrix-udl-allow-code2-close value="කේත 2 අවසානයට ඉඩ දෙන්න"/>
+			<matrix-udl-allow-code2-middle value="කේත 2 මැද කොටසට ඉඩ දෙන්න"/>
+			<matrix-udl-allow-code2-open value="කේත 2 ආරම්භයට ඉඩ දෙන්න"/>
+			<matrix-udl-allow-comment-fold-close value="විවරණ නැමීමේ අවසානයට ඉඩ දෙන්න"/>
+			<matrix-udl-allow-comment-fold-middle value="විවරණ නැමීමේ මැද කොටසට ඉඩ දෙන්න"/>
+			<matrix-udl-allow-comment-fold-open value="විවරණ නැමීමේ ආරම්භයට ඉඩ දෙන්න"/>
+			<matrix-udl-choose-json value="JSON ආකෘතියේ UDL නිර්වචන ගොනුවක් තෝරන්න"/>
+			<matrix-udl-close value="පරිශීලක නිර්වචිත භාෂාව වසන්න"/>
+			<matrix-udl-close-styler value="ශෛලී සකසනය වසන්න"/>
+			<matrix-udl-colors value="වර්ණ"/>
+			<matrix-udl-dark-mode-language value="අඳුරු ප්‍රකාර භාෂාව"/>
+			<matrix-udl-definition-exported value="නිර්වචනය අපනයනය කරන ලදි"/>
+			<matrix-udl-definitions-saved value="නිර්වචන සුරකින ලදි"/>
+			<matrix-udl-enable-font value="අකුරු රටාව සක්‍රිය කරන්න"/>
+			<matrix-udl-error value="පරිශීලක නිර්වචිත භාෂා දෝෂය: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ගොනු මෙහෙයුම අසාර්ථක විය: $ERROR$"/>
+			<matrix-udl-file-progress value="ගොනු මෙහෙයුම සිදු වෙමින් පවතී…"/>
+			<matrix-udl-import-rejected value="ආයාතය ප්‍රතික්ෂේප කරන ලදි: $ERROR$"/>
+			<matrix-udl-imported value="භාෂා $COUNT$ක් ආයාත කරන ලදි"/>
+			<matrix-udl-live-edits value="පරිශීලක නිර්වචිත භාෂාව — සංස්කරණ වහාම අදාළ වන්නේ මෙම භාෂාව භාවිතා කරන ලේඛනවලට පමණි"/>
+			<matrix-udl-loading value="නිර්වචන පූරණය කරමින්…"/>
+			<matrix-udl-memory-only value="නිර්වචන මතකයේ පමණක් ඇත (වින්‍යාස නාමාවලියක් නැත)"/>
+			<matrix-udl-missing-ids value="පරිශීලක නිර්වචිත භාෂා හැඳුනුම් අස්ථානගත වී ඇත: $IDS$. ලේඛන පෙළ සහ සුරැකි භාෂා අනන්‍යතා රඳවා ඇත. නිර්වචන ප්‍රතිස්ථාපනය කරන්න හෝ පැහැදිලිව වෙනත් භාෂාවක් තෝරන්න."/>
+			<matrix-udl-open-panel-disconnected value="UDL විවෘත කිරීමේ පැනලයේ සම්බන්ධතාව බිඳී ඇත: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="මෙම නම් කළ නිර්වචනය ඉවත් කරන්නද? පවතින ලේඛනවල පෙළ රඳවාගෙන නම් නොකළ පරිශීලක නිර්වචිත භාෂාවට මාරු වේ."/>
+			<matrix-udl-retry-file value="UDL ගොනු මෙහෙයුම නැවත උත්සාහ කරන්න"/>
+			<matrix-udl-save-panel-disconnected value="UDL සුරැකීමේ පැනලයේ සම්බන්ධතාව බිඳී ඇත: $ERROR$"/>
+			<matrix-udl-unavailable value="නිර්වචන නොමැත; udl.json නිවැරදි කර නැවත උත්සාහ කරන්න."/>
+			<matrix-udl-use-background value="පසුබිම භාවිතා කරන්න"/>
+			<matrix-udl-use-foreground value="පෙරබිම භාවිතා කරන්න"/>
+			<matrix-udl-working-copy value="පරිශීලක නිර්වචිත (වැඩ පිටපත)"/>
+			<matrix-find-resize-results value="සෙවුම් ප්‍රතිඵලවල ප්‍රමාණය වෙනස් කරන්න"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

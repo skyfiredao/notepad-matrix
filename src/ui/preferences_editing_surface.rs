@@ -1,6 +1,6 @@
 use super::*;
 use super::dialog_font::px;
-use super::preferences_surface::{Commit, FieldSpec, Page, pref_group, pref_label, pref_label_right, pref_label_center, pref_indicator};
+use super::preferences_surface::{Commit, FieldSpec, Page, pref_group, pref_label, pref_label_right, pref_label_center, pref_indicator, horizontal_px};
 use serde_json::{Value, json};
 use crate::editor::EditError;
 
@@ -375,10 +375,6 @@ impl MatrixWindow {
         cx.notify();
     }
 
-    pub(super) fn editing_find_monospaced(&self) -> bool {
-        self.preferences.editing.find_monospaced.unwrap_or(false)
-    }
-
     pub(super) fn editing_delimiter_selection(&self, position: ByteOffset) -> Result<Option<Selection>, EditError> {
         let left = u8::try_from(self.pref_int("delimiterSelection.leftmostDelimiter", 40)).unwrap_or(40);
         let right = u8::try_from(self.pref_int("delimiterSelection.rightmostDelimiter", 41)).unwrap_or(41);
@@ -406,7 +402,7 @@ impl MatrixWindow {
         let focus = self.preference_control_focus(id, cx).tab_stop(true);
         let keyboard = value.clone();
         preferences_surface::source_rect(x * SCALE, y * SCALE, w * SCALE, 10. * SCALE).id(id)
-            .h(px(10. * SCALE)).text_size(px(12.)).line_height(px(14.)).flex().items_center().gap(px(3.))
+            .h(px(10. * SCALE)).text_size(px(12.)).line_height(px(14.)).flex().items_center().gap(horizontal_px(3.))
             .when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse()).role(Role::RadioButton)
             .aria_label(text.to_owned()).aria_toggled(selected.into())
             .track_focus(&focus)
@@ -430,12 +426,12 @@ impl MatrixWindow {
             .border_1().border_color(rgb(0x808080)).bg(rgb(0xffffff)).text_size(px(12.)).line_height(px(14.))
             .child(div().id(format!("{id}-rows")).absolute().inset_0()
                 .when(overflowing, |element| {
-                    if crate::localization::current_preference_rtl() { element.left(px(17.)) } else { element.right(px(17.)) }
+                    if crate::localization::current_preference_rtl() { element.left(horizontal_px(17.)) } else { element.right(horizontal_px(17.)) }
                 })
                 .overflow_y_scroll().track_scroll(&scroll).children(rows)
                 .on_scroll(cx.listener(|_, _, _, cx| cx.notify())))
             .when(overflowing, |element| element.child(
-                div().id(format!("{id}-scrollbar")).absolute().top_0().bottom_0().w(px(17.))
+                div().id(format!("{id}-scrollbar")).absolute().top_0().bottom_0().w(horizontal_px(17.))
                     .when(crate::localization::current_preference_rtl(), |element| element.left_0())
                     .when(!crate::localization::current_preference_rtl(), |element| element.right_0())
                     .role(Role::ScrollBar).aria_orientation(gpui::accesskit::Orientation::Vertical)
@@ -464,11 +460,11 @@ impl MatrixWindow {
                         let track = (height - 34.).max(0.);
                         let thumb = (track * height / (height + maximum).max(1.)).max(17.).min(track);
                         let start = 17. + if maximum > 0. { -dialog_font::logical(painted_scroll.offset().y) / maximum * (track - thumb) } else { 0. };
-                        window.paint_quad(gpui::fill(gpui::Bounds::new(bounds.origin + gpui::point(px(1.), px(start)), size(px(15.), px(thumb))), rgb(0xcdcdcd)));
+                        window.paint_quad(gpui::fill(gpui::Bounds::new(bounds.origin + gpui::point(horizontal_px(1.), px(start)), size(horizontal_px(15.), px(thumb))), rgb(0xcdcdcd)));
                         for row in 0..4 {
                             let width = 1. + row as f32 * 2.;
                             for y in [6. + row as f32, height - 7. - row as f32] {
-                                window.paint_quad(gpui::fill(gpui::Bounds::new(bounds.origin + gpui::point(px((17. - width) / 2.), px(y)), size(px(width), px(1.))), rgb(0x606060)));
+                                window.paint_quad(gpui::fill(gpui::Bounds::new(bounds.origin + gpui::point(horizontal_px((17. - width) / 2.), px(y)), size(horizontal_px(width), px(1.))), rgb(0x606060)));
                             }
                         }
                     }).size_full())
@@ -557,7 +553,7 @@ impl MatrixWindow {
             Page::Printing => self.edit_printing(window, cx),
             _ => Vec::new(),
         };
-        div().relative().w(px(805.)).h(px(358.75)).children(children)
+        div().relative().w(horizontal_px(805.)).h(px(358.75)).children(children)
             .on_mouse_move(cx.listener(|view, event, _, cx| view.edit_list_scroll_move(event, cx)))
             .on_mouse_up(MouseButton::Left, cx.listener(|view, _, _, _| { view.preferences.editing.list_scroll_grab = None; }))
             .on_mouse_up_out(MouseButton::Left, cx.listener(|view, _, _, _| { view.preferences.editing.list_scroll_grab = None; }))
@@ -619,7 +615,7 @@ impl MatrixWindow {
                     (mask & (1i64 << (language.id % 8)) != 0) == disabled
                 }).map(|language| {
                     let id = language.id;
-                    div().id(format!("{list_id}-{id}")).w_full().h(px(14.)).flex_shrink_0().px(px(2.))
+                    div().id(format!("{list_id}-{id}")).w_full().h(px(14.)).flex_shrink_0().px(horizontal_px(2.))
                         .role(Role::ListBoxOption).aria_label(language.label.clone()).aria_selected((selected == Some(id)).into())
                         .bg(if selected == Some(id) { rgb(0x0078d7) } else { rgb(0xffffff) })
                         .text_color(if selected == Some(id) { rgb(0xffffff) } else { rgb(0x202020) })
@@ -665,7 +661,7 @@ impl MatrixWindow {
         }
         let rows = items.into_iter().enumerate().map(|(index, (name, text))| {
             let chosen = name.as_deref() == selected;
-            div().id(format!("pref-indent-language-{index}")).w_full().h(px(14.)).flex_shrink_0().px(px(2.))
+            div().id(format!("pref-indent-language-{index}")).w_full().h(px(14.)).flex_shrink_0().px(horizontal_px(2.))
                 .role(Role::ListBoxOption).aria_label(text.clone()).aria_selected(chosen.into())
                 .bg(if chosen { rgb(0x0078d7) } else { rgb(0xffffff) })
                 .text_color(if chosen { rgb(0xffffff) } else { rgb(0x202020) }).child(text)
@@ -681,7 +677,7 @@ impl MatrixWindow {
             let text = crate::localization::current_preference_control(6510).unwrap_or("Use default value");
             let focus = self.preference_control_focus("pref-indent-default", cx).tab_stop(true);
             controls.push(preferences_surface::source_rect(28. * SCALE, 99. * SCALE, 238. * SCALE, 10. * SCALE).id("pref-indent-default")
-                .text_size(px(12.)).line_height(px(14.)).flex().items_center().gap(px(3.))
+                .text_size(px(12.)).line_height(px(14.)).flex().items_center().gap(horizontal_px(3.))
                 .when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
                 .role(Role::CheckBox).aria_label(text).aria_toggled(inherited.into())
                 .track_focus(&focus)
@@ -732,7 +728,7 @@ impl MatrixWindow {
         let text = crate::localization::current_preference_control(6808).unwrap_or("Enable auto-completion on each input");
         let focus = self.preference_control_focus("pref-completion-enable", cx).tab_stop(true);
         controls.push(preferences_surface::source_rect(20. * SCALE, 18. * SCALE, 250. * SCALE, 10. * SCALE).id("pref-completion-enable")
-            .text_size(px(12.)).line_height(px(14.)).flex().items_center().gap(px(3.))
+            .text_size(px(12.)).line_height(px(14.)).flex().items_center().gap(horizontal_px(3.))
             .when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
             .role(Role::CheckBox).aria_label(text).aria_toggled(enabled.into())
             .track_focus(&focus)
@@ -900,7 +896,7 @@ impl MatrixWindow {
         let variable_label = crate::localization::current_preference_combo(6724, variable).unwrap_or(PRINT_VARIABLES[variable].1);
         let variable_focus = self.preference_control_focus("pref-print-variable", cx).tab_stop(true);
         controls.push(preferences_surface::source_rect(244. * SCALE, 14. * SCALE, 122. * SCALE, 13. * SCALE).id("pref-print-variable")
-            .h(px(23.)).px(px(3.)).border_1().border_color(rgb(0x808080)).bg(rgb(0xe1e1e1)).text_size(px(12.)).line_height(px(14.)).role(Role::ComboBox)
+            .h(px(23.)).px(horizontal_px(3.)).border_1().border_color(rgb(0x808080)).bg(rgb(0xe1e1e1)).text_size(px(12.)).line_height(px(14.)).role(Role::ComboBox)
             .aria_label(crate::localization::current_preference_control(6725).unwrap_or("Variable")).flex().items_center().justify_between().when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse()).child(variable_label).child("▾")
             .track_focus(&variable_focus)
             .on_click(cx.listener(move |view, _, window, cx| { variable_focus.focus(window, cx); view.preferences.editing.print_variable_open = !view.preferences.editing.print_variable_open; cx.notify(); }))
@@ -949,7 +945,7 @@ impl MatrixWindow {
                 controls.push(preferences_surface::source_rect(x * SCALE, (y + 39.) * SCALE, (if bold { 47. } else { 50. }) * SCALE, 10. * SCALE).id(id)
                     .role(Role::CheckBox).aria_label(text).aria_toggled(checked.into()).text_size(px(12.)).line_height(px(14.))
                     .track_focus(&focus)
-                    .flex().items_center().gap(px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
+                    .flex().items_center().gap(horizontal_px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
                     .child(pref_indicator(checked, false, true)).child(text)
                     .on_click(cx.listener(move |view, _, window, cx| {
                         focus.focus(window, cx);
@@ -975,7 +971,7 @@ impl MatrixWindow {
         if self.preferences.editing.print_variable_open {
             let rows = PRINT_VARIABLES.into_iter().enumerate().map(|(index, (_, text))| {
                 let text = crate::localization::current_preference_combo(6724, index).unwrap_or(text);
-                div().id(format!("pref-print-variable-{index}")).w_full().h(px(14.)).px(px(3.))
+                div().id(format!("pref-print-variable-{index}")).w_full().h(px(14.)).px(horizontal_px(3.))
                     .bg(if index == variable { rgb(0x0078d7) } else { rgb(0xffffff) })
                     .text_color(if index == variable { rgb(0xffffff) } else { rgb(0x202020) }).child(text)
                     .on_click(cx.listener(move |view, _, _, cx| { view.preferences.editing.print_variable = index; view.preferences.editing.print_variable_open = false; cx.notify(); }))
@@ -1040,7 +1036,7 @@ impl MatrixWindow {
         preferences_surface::source_rect(20. * SCALE, 20. * SCALE, 420. * SCALE, 10. * SCALE).id(id)
             .role(Role::CheckBox).aria_label(text).aria_toggled(checked.into()).track_focus(&focus)
             .text_size(px(12.)).line_height(px(14.)).text_color(rgb(self.preferences_render_palette().text))
-            .flex().items_center().gap(px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
+            .flex().items_center().gap(horizontal_px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
             .child(pref_indicator(checked, false, true)).child(text)
             .on_click(cx.listener(move |view, _, window, cx| { focus.focus(window, cx); view.edit_toggle_compact_language(window, cx); }))
             .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, window, cx| {

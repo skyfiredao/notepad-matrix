@@ -1182,6 +1182,7 @@ ContextMenu.xML परिमार्जन गरेपछि प्रभा�
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="खोज नतिजाहरूको आकार बदल्नुहोस्"/>
 			<!-- $INT_REPLACE$  and $STR_REPLACE$ are a place holders, don't translate these place holders -->
 			<word-chars-list-tip value="यसले तपाईंलाई हालको शब्द क्यारेक्टरहरूमा अतिरिक्त चरित्र समावेश गर्न अनुमति दिन्छ जबकि छनौटको लागि डबल क्लिक गर्दा वा सम्पूर्ण शब्द मात्र मिलान विकल्पको साथ खोजी गर्दा।"/>
 			<word-chars-list-warning-begin value="सावधान हुनु: "/>
@@ -1254,6 +1255,61 @@ ContextMenu.xML परिमार्जन गरेपछि प्रभा�
 			<summary-nbsel1 value=" चयनित पात्रहरू ("/>
 			<summary-nbsel2 value=" बाइट्स) मा "/>
 			<summary-nbrange value=" दायरा"/>
+			<common-name value="नाम"/>
+			<discover-file-candidates-title value="सम्भावित फाइलहरू खोजिँदै छ…"/>
+			<matrix-close value="बन्द गर्नुहोस्"/>
+			<matrix-retry value="फेरि प्रयास गर्नुहोस्"/>
+			<matrix-cancelled value="रद्द गरियो"/>
+			<matrix-read-only value="पढ्न मात्र मिल्ने"/>
+			<matrix-find-status-details value="स्थितिको विवरण"/>
+			<matrix-find-backward-unavailable value="नियमित अभिव्यक्तिद्वारा पछाडितिर खोज्ने सुविधा निष्क्रिय छ"/>
+			<matrix-hash-select-files value="फाइलहरू छान्नुहोस्"/>
+			<matrix-hash-calculating value="ह्यास गणना हुँदै छ…"/>
+			<matrix-hash-selection-failed value="फाइल चयन असफल भयो: $ERROR$"/>
+			<matrix-hash-read-failed value="यी फाइलहरू पढ्न सकिएन:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="त्रुटि सन्देश बन्द गर्नुहोस्"/>
+			<matrix-hash-file-paths value="फाइल मार्गहरू (पढ्न मात्र मिल्ने)"/>
+			<matrix-hash-digest-result value="ह्यास नतिजा (पढ्न मात्र मिल्ने)"/>
+			<matrix-hash-source-text value="ह्यासको स्रोत पाठ"/>
+			<matrix-hash-selection-composition value="सक्रिय पाठ संयोजनका बेला चयनको ह्यास गणना गर्ने सुविधा अझै कार्यान्वयन भएको छैन"/>
+			<matrix-hash-selection-read-failed value="चयन पढ्न सकिएन: $ERROR$"/>
+			<matrix-window-activation-failed value="छानिएको फाइलमा जान सकिएन"/>
+			<matrix-window-selection-unavailable value="छानिएको फाइल बन्द छ वा सक्रिय गर्न सकिँदैन"/>
+			<matrix-incremental-position value="क्रमिक खोज पट्टी सार्नुहोस्"/>
+			<matrix-find-progress-bar value="प्रगति पट्टी"/>
+			<matrix-find-previous-search value="अघिल्लो खोज देखाउनुहोस्"/>
+			<matrix-find-results-summary value="खोज नतिजाहरू - ($INT_REPLACE$ मिलान)"/>
+			<matrix-udl-allow-code2-close value="कोड 2 को बन्द चिन्ह अनुमति दिनुहोस्"/>
+			<matrix-udl-allow-code2-middle value="कोड 2 को बीचको चिन्ह अनुमति दिनुहोस्"/>
+			<matrix-udl-allow-code2-open value="कोड 2 को सुरुआत चिन्ह अनुमति दिनुहोस्"/>
+			<matrix-udl-allow-comment-fold-close value="टिप्पणी खुम्च्याउने अन्त्य चिन्ह अनुमति दिनुहोस्"/>
+			<matrix-udl-allow-comment-fold-middle value="टिप्पणी खुम्च्याउने बीचको चिन्ह अनुमति दिनुहोस्"/>
+			<matrix-udl-allow-comment-fold-open value="टिप्पणी खुम्च्याउने सुरुआत चिन्ह अनुमति दिनुहोस्"/>
+			<matrix-udl-choose-json value="JSON UDL परिभाषा फाइल छान्नुहोस्"/>
+			<matrix-udl-close value="प्रयोगकर्ताद्वारा परिभाषित भाषा बन्द गर्नुहोस्"/>
+			<matrix-udl-close-styler value="शैली कन्फिगरेटर बन्द गर्नुहोस्"/>
+			<matrix-udl-colors value="रङहरू"/>
+			<matrix-udl-dark-mode-language value="अँध्यारो मोडको भाषा"/>
+			<matrix-udl-definition-exported value="परिभाषा निर्यात गरियो"/>
+			<matrix-udl-definitions-saved value="परिभाषाहरू सुरक्षित गरियो"/>
+			<matrix-udl-enable-font value="फन्ट सक्रिय गर्नुहोस्"/>
+			<matrix-udl-error value="प्रयोगकर्ताद्वारा परिभाषित भाषाको त्रुटि: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL फाइल कार्य असफल भयो: $ERROR$"/>
+			<matrix-udl-file-progress value="फाइल कार्य हुँदै छ…"/>
+			<matrix-udl-import-rejected value="आयात अस्वीकार गरियो: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ भाषा आयात गरियो"/>
+			<matrix-udl-live-edits value="प्रयोगकर्ताद्वारा परिभाषित भाषा — सम्पादनहरू यो भाषा प्रयोग गर्ने कागजातहरूमा मात्र तुरुन्तै लागू हुन्छन्"/>
+			<matrix-udl-loading value="परिभाषाहरू लोड हुँदै छन्…"/>
+			<matrix-udl-memory-only value="परिभाषाहरू मेमोरीमा मात्र छन् (कन्फिगरेसन डाइरेक्टरी छैन)"/>
+			<matrix-udl-missing-ids value="प्रयोगकर्ताद्वारा परिभाषित भाषाका ID हरू हराएका छन्: $IDS$। कागजातको पाठ र सुरक्षित गरिएका भाषाका पहिचानहरू जोगाइएका छन्। परिभाषाहरू पुनर्स्थापना गर्नुहोस् वा स्पष्ट रूपमा अर्को भाषा छान्नुहोस्।"/>
+			<matrix-udl-open-panel-disconnected value="UDL खोल्ने प्यानलको जडान टुट्यो: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="यो नाम भएको परिभाषा हटाउने हो? विद्यमान कागजातहरूले आफ्नो पाठ राख्छन् र नाम नभएको प्रयोगकर्ताद्वारा परिभाषित भाषामा बदलिन्छन्।"/>
+			<matrix-udl-retry-file value="UDL फाइल कार्य फेरि प्रयास गर्नुहोस्"/>
+			<matrix-udl-save-panel-disconnected value="UDL सुरक्षित गर्ने प्यानलको जडान टुट्यो: $ERROR$"/>
+			<matrix-udl-unavailable value="परिभाषाहरू उपलब्ध छैनन्; udl.json सच्याएर फेरि प्रयास गर्नुहोस्।"/>
+			<matrix-udl-use-background value="पृष्ठभूमि प्रयोग गर्नुहोस्"/>
+			<matrix-udl-use-foreground value="अग्रभूमि प्रयोग गर्नुहोस्"/>
+			<matrix-udl-working-copy value="प्रयोगकर्ताद्वारा परिभाषित (कार्य प्रति)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

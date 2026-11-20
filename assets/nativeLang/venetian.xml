@@ -1647,6 +1647,7 @@ Nel caso fosse necesaria ƚa funsion de riserca Espresion regoƚare a ritroso, c
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Canbia ƚa dimension dei rixultati de ƚa ricerca"/>
 			<!-- $INT_REPLACE$  and $STR_REPLACE$ are a place holders, don't translate these place holders -->
 			<word-chars-list-tip value="Parmete de includare caràtari xontà inte ƚa ƚista de i caràtari considerà na paròƚa, cuando te fè on dopio clic par seƚesionare, o te efetui na riserca co ƚ&apos;opsion &quot;Soƚo paròƚe intiere&quot; seƚesionà"/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 
@@ -1808,6 +1809,60 @@ Strucare el boton &quot;?&quot; a drita par vèrxere el sito Web con el manuale 
 C, C++, Java, C#, Objective-C, PHP, JavaScript, JSP, CSS, Perl, Rust, PowerShell e JSON.
 
 Se selesioni ƚa modaƚità avansà, ma no te modifeghi i file nei ƚenguagi sopra mensionà, el rientro rimarà in modaƚità base."/>
+			<discover-file-candidates-title value="Ricerca dei file candidati…"/>
+			<matrix-close value="Sara"/>
+			<matrix-retry value="Prova da novo"/>
+			<matrix-cancelled value="Anuƚà"/>
+			<matrix-read-only value="Soƚo letura"/>
+			<matrix-find-status-details value="Detaji del stato"/>
+			<matrix-find-backward-unavailable value="ƚa ricerca indrio co espresion regoƚari ƚa xe dixabiƚità"/>
+			<matrix-hash-select-files value="Seƚesiona i file"/>
+			<matrix-hash-calculating value="Càlcoƚo de l’inpronta…"/>
+			<matrix-hash-selection-failed value="Seƚesion dei file faƚìa: $ERROR$"/>
+			<matrix-hash-read-failed value="No se pol lèxere sti file:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Sara l’eror"/>
+			<matrix-hash-file-paths value="Percorsi dei file (soƚo letura)"/>
+			<matrix-hash-digest-result value="Rixultato de l’inpronta (soƚo letura)"/>
+			<matrix-hash-source-text value="Testo de orìxine de l’inpronta"/>
+			<matrix-hash-selection-composition value="El càlcoƚo de l’inpronta de ƚa seƚesion durante ƚa conpoxision ativa no xe ancora inplementà"/>
+			<matrix-hash-selection-read-failed value="No se pol lèxere ƚa seƚesion: $ERROR$"/>
+			<matrix-window-activation-failed value="No se pol pasare al file seƚesionà"/>
+			<matrix-window-selection-unavailable value="El file seƚesionà el xe sarà o no se pol ativarlo"/>
+			<matrix-incremental-position value="Sposta ƚa bara de ricerca incrementaƚe"/>
+			<matrix-find-progress-bar value="Bara de avansamento"/>
+			<matrix-find-previous-search value="Mostra ƚa ricerca presedente"/>
+			<matrix-find-results-summary value="Rixultati de ƚa ricerca - ($INT_REPLACE$ corispondense)"/>
+			<matrix-udl-allow-code2-close value="Permeti ƚa saradura del còdexe 2"/>
+			<matrix-udl-allow-code2-middle value="Permeti ƚa parte sentraƚe del còdexe 2"/>
+			<matrix-udl-allow-code2-open value="Permeti ƚa vertura del còdexe 2"/>
+			<matrix-udl-allow-comment-fold-close value="Permeti ƚa saradura de ƚa piegadura dei comenti"/>
+			<matrix-udl-allow-comment-fold-middle value="Permeti ƚa parte sentraƚe de ƚa piegadura dei comenti"/>
+			<matrix-udl-allow-comment-fold-open value="Permeti ƚa vertura de ƚa piegadura dei comenti"/>
+			<matrix-udl-choose-json value="Sèji un file JSON de definision UDL"/>
+			<matrix-udl-close value="Sara el ƚenguagio definìo da l’utente"/>
+			<matrix-udl-close-styler value="Sara ƚa configurasion dei stiƚi"/>
+			<matrix-udl-colors value="Coƚori"/>
+			<matrix-udl-dark-mode-language value="ƚenguagio in modaƚità scura"/>
+			<matrix-udl-definition-exported value="Definision esportà"/>
+			<matrix-udl-definitions-saved value="Definision salvà"/>
+			<matrix-udl-enable-font value="Abiƚita el caràtare"/>
+			<matrix-udl-error value="Eror del ƚenguagio definìo da l’utente: $ERROR$"/>
+			<matrix-udl-file-failed value="Operasion sul file UDL faƚìa: $ERROR$"/>
+			<matrix-udl-file-progress value="Operasion sul file in corso…"/>
+			<matrix-udl-import-rejected value="Inportasion refudà: $ERROR$"/>
+			<matrix-udl-imported value="Inportà $COUNT$ ƚenguagi"/>
+			<matrix-udl-live-edits value="ƚenguagio definìo da l’utente — ƚe modifeghe ƚe se àplica subito soƚo ai documenti che dòpara sto ƚenguagio"/>
+			<matrix-udl-loading value="Cargamento de ƚe definision…"/>
+			<matrix-udl-memory-only value="ƚe definision ƚe xe soƚo in memoria (no ghe xe ƚa carteƚa de configurasion)"/>
+			<matrix-udl-missing-ids value="Manca i ID dei ƚenguagi definìi da l’utente: $IDS$. El testo dei documenti e ƚe identità salvà dei ƚenguagi i xe stà conservà. Ripristina ƚe definision o sèji esplicitamente n’altro ƚenguagio."/>
+			<matrix-udl-open-panel-disconnected value="Paneƚo de vertura UDL desconesso: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Cavare sta definision co nome? I documenti existenti i conserva el so testo e i pasa al ƚenguagio definìo da l’utente sensa nome."/>
+			<matrix-udl-retry-file value="Prova da novo l’operasion sul file UDL"/>
+			<matrix-udl-save-panel-disconnected value="Paneƚo de salvatagio UDL desconesso: $ERROR$"/>
+			<matrix-udl-unavailable value="Definision mìa disponìbiƚi; corexi udl.json e prova da novo."/>
+			<matrix-udl-use-background value="Dòpara el sfondo"/>
+			<matrix-udl-use-foreground value="Dòpara el primo pian"/>
+			<matrix-udl-working-copy value="Definìo da l’utente (copia de lavoro)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

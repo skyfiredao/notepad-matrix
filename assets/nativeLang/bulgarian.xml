@@ -1704,6 +1704,60 @@ $STR_REPLACE$
 			</Menu>
 		</FolderAsWorkspace>
 		<MiscStrings>
+			<matrix-find-resize-results value="Преоразмеряване на резултатите от търсенето"/>
+			<matrix-close value="Затваряне"/>
+			<matrix-retry value="Повторен опит"/>
+			<matrix-cancelled value="Отменено"/>
+			<matrix-read-only value="Само за четене"/>
+			<matrix-find-status-details value="Подробности за състоянието"/>
+			<matrix-find-backward-unavailable value="Търсенето назад с регулярни изрази е изключено"/>
+			<matrix-hash-select-files value="Избор на файлове"/>
+			<matrix-hash-calculating value="Изчисляване на хеш…"/>
+			<matrix-hash-selection-failed value="Неуспешен избор на файлове: $ERROR$"/>
+			<matrix-hash-read-failed value="Следните файлове не могат да бъдат прочетени:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Затваряне на съобщението за грешка"/>
+			<matrix-hash-file-paths value="Пътища до файлове (само за четене)"/>
+			<matrix-hash-digest-result value="Получен хеш (само за четене)"/>
+			<matrix-hash-source-text value="Изходен текст за хеширане"/>
+			<matrix-hash-selection-composition value="Хеширането на избрания текст по време на активно съставяне на текст все още не е реализирано"/>
+			<matrix-hash-selection-read-failed value="Избраният текст не може да бъде прочетен: $ERROR$"/>
+			<matrix-window-activation-failed value="Не може да се премине към избрания файл"/>
+			<matrix-window-selection-unavailable value="Избраният файл е затворен или не може да се активира"/>
+			<matrix-incremental-position value="Преместване на лентата за постепенно търсене"/>
+			<matrix-find-progress-bar value="Лента за напредъка"/>
+			<matrix-find-previous-search value="Показване на предишното търсене"/>
+			<matrix-find-results-summary value="Намерени резултати - ($INT_REPLACE$ повторения)"/>
+			<matrix-udl-allow-code2-close value="Разрешаване на затварящ знак за код 2"/>
+			<matrix-udl-allow-code2-middle value="Разрешаване на среден знак за код 2"/>
+			<matrix-udl-allow-code2-open value="Разрешаване на отварящ знак за код 2"/>
+			<matrix-udl-allow-comment-fold-close value="Разрешаване на затварящ знак за свиване на коментар"/>
+			<matrix-udl-allow-comment-fold-middle value="Разрешаване на среден знак за свиване на коментар"/>
+			<matrix-udl-allow-comment-fold-open value="Разрешаване на отварящ знак за свиване на коментар"/>
+			<matrix-udl-choose-json value="Избор на JSON файл с UDL дефиниция"/>
+			<matrix-udl-close value="Затваряне на потребителския език"/>
+			<matrix-udl-close-styler value="Затваряне на настройките на стила"/>
+			<matrix-udl-colors value="Цветове"/>
+			<matrix-udl-dark-mode-language value="Език за тъмен режим"/>
+			<matrix-udl-definition-exported value="Дефиницията е изнесена"/>
+			<matrix-udl-definitions-saved value="Дефинициите са запазени"/>
+			<matrix-udl-enable-font value="Включване на шрифта"/>
+			<matrix-udl-error value="Грешка в потребителски език: $ERROR$"/>
+			<matrix-udl-file-failed value="Неуспешна операция с UDL файл: $ERROR$"/>
+			<matrix-udl-file-progress value="Извършва се операция с файл…"/>
+			<matrix-udl-import-rejected value="Внасянето е отхвърлено: $ERROR$"/>
+			<matrix-udl-imported value="Внесени езици: $COUNT$"/>
+			<matrix-udl-live-edits value="Потребителски език — промените се прилагат веднага само към документи, използващи този език"/>
+			<matrix-udl-loading value="Зареждане на дефинициите…"/>
+			<matrix-udl-memory-only value="Дефинициите са само в паметта (няма папка за настройки)"/>
+			<matrix-udl-missing-ids value="Липсващи ID на потребителски езици: $IDS$. Текстът на документите и запазените идентичности на езиците са съхранени. Възстановете дефинициите или изрично изберете друг език."/>
+			<matrix-udl-open-panel-disconnected value="Панелът за отваряне на UDL е прекъснат: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Да се премахне ли тази именувана дефиниция? Съществуващите документи запазват текста си и преминават към неименувания потребителски език."/>
+			<matrix-udl-retry-file value="Повторен опит за операцията с UDL файл"/>
+			<matrix-udl-save-panel-disconnected value="Панелът за запазване на UDL е прекъснат: $ERROR$"/>
+			<matrix-udl-unavailable value="Дефинициите са недостъпни; поправете udl.json и опитайте отново."/>
+			<matrix-udl-use-background value="Използване на фона"/>
+			<matrix-udl-use-foreground value="Използване на цвета на текста"/>
+			<matrix-udl-working-copy value="Потребителски език (работно копие)"/>
 			<!-- $INT_REPLACE$ и $STR_REPLACE$ са контейнери, не се превеждат -->
 			<!-- Меню "Файл" прозорци за запазване-->
 			<session-save-folder-as-workspace value="&amp;Запис на &quot;Директория като работно място&quot;"/>

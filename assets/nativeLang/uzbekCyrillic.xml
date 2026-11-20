@@ -527,5 +527,65 @@
 				<Item id="2" name="Бекор қилиш"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="OK"/>
+			<common-cancel value="Бекор қилиш"/>
+			<common-name value="Номи"/>
+			<discover-file-candidates-title value="Мос келиши мумкин бўлган файллар қидирилмоқда..."/>
+			<matrix-close value="Ёпиш"/>
+			<matrix-retry value="Қайта уриниш"/>
+			<matrix-cancelled value="Бекор қилинди"/>
+			<matrix-read-only value="Фақат ўқиш"/>
+			<matrix-find-status-details value="Ҳолат тафсилотлари"/>
+			<matrix-find-backward-unavailable value="Мунтазам ифода билан орқага қидириш ўчирилган"/>
+			<matrix-hash-select-files value="Файлларни танлаш"/>
+			<matrix-hash-calculating value="Хеш қиймати ҳисобланмоқда…"/>
+			<matrix-hash-selection-failed value="Файлни танлаш амалга ошмади: $ERROR$"/>
+			<matrix-hash-read-failed value="Қуйидаги файлларни ўқиб бўлмади:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Хато хабарини ёпиш"/>
+			<matrix-hash-file-paths value="Файл йўллари (фақат ўқиш)"/>
+			<matrix-hash-digest-result value="Хеш натижаси (фақат ўқиш)"/>
+			<matrix-hash-source-text value="Хеш учун манба матни"/>
+			<matrix-hash-selection-composition value="Матн киритилиши тузилаётган пайтда танланган матн хешини ҳисоблаш ҳали амалга оширилмаган"/>
+			<matrix-hash-selection-read-failed value="Танланган матнни ўқиб бўлмади: $ERROR$"/>
+			<matrix-window-activation-failed value="Танланган файлга ўтиб бўлмади"/>
+			<matrix-window-selection-unavailable value="Танланган файл ёпилган ёки уни фаоллаштириб бўлмайди"/>
+			<matrix-incremental-position value="Босқичма-босқич қидириш сатрини кўчириш"/>
+			<matrix-find-progress-bar value="Жараён кўрсаткичи"/>
+			<matrix-find-previous-search value="Олдинги қидирувни кўрсатиш"/>
+			<matrix-find-results-summary value="Қидирув натижалари - ($INT_REPLACE$ та мослик)"/>
+			<matrix-udl-allow-code2-close value="2-код ёпилишига рухсат бериш"/>
+			<matrix-udl-allow-code2-middle value="2-код ўрта қисмига рухсат бериш"/>
+			<matrix-udl-allow-code2-open value="2-код очилишига рухсат бериш"/>
+			<matrix-udl-allow-comment-fold-close value="Изоҳни йиғиш ёпилишига рухсат бериш"/>
+			<matrix-udl-allow-comment-fold-middle value="Изоҳни йиғиш ўрта қисмига рухсат бериш"/>
+			<matrix-udl-allow-comment-fold-open value="Изоҳни йиғиш очилишига рухсат бериш"/>
+			<matrix-udl-choose-json value="JSON форматидаги UDL таъриф файлини танлаш"/>
+			<matrix-udl-close value="Фойдаланувчи белгилаган тилни ёпиш"/>
+			<matrix-udl-close-styler value="Услуб созлагичини ёпиш"/>
+			<matrix-udl-colors value="Ранглар"/>
+			<matrix-udl-dark-mode-language value="Қоронғи режим тили"/>
+			<matrix-udl-definition-exported value="Таъриф экспорт қилинди"/>
+			<matrix-udl-definitions-saved value="Таърифлар сақланди"/>
+			<matrix-udl-enable-font value="Шрифтни ёқиш"/>
+			<matrix-udl-error value="Фойдаланувчи белгилаган тил хатоси: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL файл амали бажарилмади: $ERROR$"/>
+			<matrix-udl-file-progress value="Файл амали бажарилмоқда…"/>
+			<matrix-udl-import-rejected value="Импорт рад этилди: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ та тил импорт қилинди"/>
+			<matrix-udl-live-edits value="Фойдаланувчи белгилаган тил — ўзгаришлар фақат шу тилдан фойдаланадиган ҳужжатларга дарҳол қўлланади"/>
+			<matrix-udl-loading value="Таърифлар юкланмоқда…"/>
+			<matrix-udl-memory-only value="Таърифлар фақат хотирада (созламалар каталоги йўқ)"/>
+			<matrix-udl-missing-ids value="Фойдаланувчи белгилаган тил идентификаторлари топилмади: $IDS$. Ҳужжат матни ва сақланган тил идентификаторлари сақлаб қолинди. Таърифларни тикланг ёки бошқа тилни аниқ танланг."/>
+			<matrix-udl-open-panel-disconnected value="UDL очиш панели узилди: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Ушбу номланган таъриф ўчирилсинми? Мавжуд ҳужжатлар матнини сақлаб қолади ва номсиз фойдаланувчи белгилаган тилга ўтади."/>
+			<matrix-udl-retry-file value="UDL файл амалини қайта бажариш"/>
+			<matrix-udl-save-panel-disconnected value="UDL сақлаш панели узилди: $ERROR$"/>
+			<matrix-udl-unavailable value="Таърифлар мавжуд эмас; udl.json файлини тузатинг ва қайта уриниб кўринг."/>
+			<matrix-udl-use-background value="Фон рангидан фойдаланиш"/>
+			<matrix-udl-use-foreground value="Олд рангдан фойдаланиш"/>
+			<matrix-udl-working-copy value="Фойдаланувчи белгилаган (ишчи нусха)"/>
+			<matrix-find-resize-results value="Қидирув натижалари ўлчамини ўзгартириш"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

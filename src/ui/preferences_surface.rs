@@ -7,14 +7,20 @@ use super::text_field::RenderPalette;
 use objc2::{class, msg_send};
 use objc2::runtime::{AnyObject, Bool};
 
-pub(super) fn dimensions() -> gpui::Size<gpui::Pixels> { size(px(1015.), px(411.25)) }
+const HORIZONTAL_SCALE: f32 = 0.8;
+
+pub(super) fn horizontal(value: f32) -> f32 { value * HORIZONTAL_SCALE }
+
+pub(super) fn horizontal_px(value: f32) -> gpui::Pixels { px(horizontal(value)) }
+
+pub(super) fn dimensions() -> gpui::Size<gpui::Pixels> { size(horizontal_px(1015.), px(411.25)) }
 
 pub(super) fn source_x(x: f32, width: f32) -> f32 {
     if crate::localization::current_preference_rtl() { 805. - x - width } else { x }
 }
 
 fn source_position(x: f32, y: f32, width: f32) -> gpui::Div {
-    div().absolute().left(px(source_x(x, width))).top(px(y)).w(px(width))
+    div().absolute().left(horizontal_px(source_x(x, width))).top(px(y)).w(horizontal_px(width))
         .when(crate::localization::current_preference_rtl(), |element| element.text_right())
 }
 
@@ -145,7 +151,7 @@ impl NativeColumnField {
         use objc2::rc::{Allocated, Retained};
         use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
         unsafe {
-            let frame = NSRect::new(NSPoint::new(0., 0.), NSSize::new(dialog_font::native_length(222.), dialog_font::native_length(61.)));
+            let frame = NSRect::new(NSPoint::new(0., 0.), NSSize::new(dialog_font::native_length(f64::from(horizontal(222.))), dialog_font::native_length(61.)));
             let scroll: Allocated<AnyObject> = msg_send![class!(NSScrollView), alloc];
             let scroll: Option<Retained<AnyObject>> = msg_send![scroll, initWithFrame: frame];
             let scroll = scroll.ok_or_else(|| io::Error::other("无法创建列边线滚动区域"))?;
@@ -162,11 +168,11 @@ impl NativeColumnField {
             let _: () = msg_send![&*text, setHorizontallyResizable: false];
             let _: () = msg_send![&*text, setVerticallyResizable: true];
             let _: () = msg_send![&*text, setMinSize: NSSize::new(0., dialog_font::native_length(61.))];
-            let _: () = msg_send![&*text, setMaxSize: NSSize::new(dialog_font::native_length(222.), f64::MAX)];
-            let _: () = msg_send![&*text, setTextContainerInset: NSSize::new(dialog_font::native_length(3.), dialog_font::native_length(2.))];
+            let _: () = msg_send![&*text, setMaxSize: NSSize::new(dialog_font::native_length(f64::from(horizontal(222.))), f64::MAX)];
+            let _: () = msg_send![&*text, setTextContainerInset: NSSize::new(dialog_font::native_length(f64::from(horizontal(3.))), dialog_font::native_length(2.))];
             let container: *mut AnyObject = msg_send![&*text, textContainer];
             let _: () = msg_send![container, setWidthTracksTextView: true];
-            let _: () = msg_send![container, setContainerSize: NSSize::new(dialog_font::native_length(222.), f64::MAX)];
+            let _: () = msg_send![container, setContainerSize: NSSize::new(dialog_font::native_length(f64::from(horizontal(222.))), f64::MAX)];
             let _: () = msg_send![container, setLineBreakMode: 0usize];
             let font = dialog_font::native_font();
             let _: () = msg_send![&*text, setFont: &*font];
@@ -313,7 +319,7 @@ struct SliderDrag {
 }
 impl SliderDrag {
     fn value(self, x: f32) -> i64 {
-        let fraction = ((x / dialog_font::scale() - self.left - 5.) / (self.width - 10.).max(1.)).clamp(0., 1.);
+        let fraction = ((x / dialog_font::scale() / HORIZONTAL_SCALE - self.left - 5.) / (self.width - 10.).max(1.)).clamp(0., 1.);
         let fraction = if self.rtl { 1. - fraction } else { fraction };
         self.min + ((self.max - self.min) as f32 * fraction).round() as i64
     }
@@ -412,7 +418,7 @@ pub(super) fn pref_group(label: &str, x: f32, y: f32, width: f32, height: f32) -
     source_rect(x, y, width, height).bg(rgb(palette.pure_background)).text_color(rgb(palette.text))
         .child(div().absolute().top(px(7.)).left(px(0.)).right(px(0.)).bottom(px(0.)).border_1().border_color(rgb(palette.group_edge())))
         .child(div().absolute().left(px(0.)).right(px(0.)).top(px(0.)).h(px(14.)).flex().justify_center()
-            .child(div().h(px(14.)).px(px(3.)).line_height(px(14.)).bg(rgb(palette.pure_background)).child(label.to_owned()))).into_any_element()
+            .child(div().h(px(14.)).px(horizontal_px(3.)).line_height(px(14.)).bg(rgb(palette.pure_background)).child(label.to_owned()))).into_any_element()
 }
 
 pub(super) fn pref_indicator(checked: bool, radio: bool, enabled: bool) -> AnyElement {
@@ -766,7 +772,7 @@ impl MatrixWindow {
             .a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } })
             .track_focus(&focus)
             .when_some(tooltip, |element, text| element.tooltip(move |_, cx| icon_tooltip::view(text.clone(), palette.dark, cx)))
-            .flex().items_center().gap(px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
+            .flex().items_center().gap(horizontal_px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
             .text_color(rgb(palette.control_text(enabled))).child(pref_indicator(checked, false, enabled)).child(label)
             .on_click(cx.listener(move |view, _, window, cx| { if enabled { focus.focus(window, cx); view.set_preference(path, (!view.pref_bool(path, default)).into(), window, cx); } }))
             .on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, window, cx| {
@@ -787,7 +793,7 @@ impl MatrixWindow {
             .a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } })
             .track_focus(&focus)
             .when_some(tooltip, |element, text| element.tooltip(move |_, cx| icon_tooltip::view(text.clone(), palette.dark, cx)))
-            .flex().items_center().gap(px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
+            .flex().items_center().gap(horizontal_px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
             .text_color(rgb(palette.control_text(enabled))).child(pref_indicator(selected, true, enabled)).child(label)
             .on_click(cx.listener(move |view, _, window, cx| { if enabled { focus.focus(window, cx); view.set_preference(path, value.clone(), window, cx); } }))
             .on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, window, cx| {
@@ -862,7 +868,7 @@ impl MatrixWindow {
         let cursor = options.iter().position(|(value, _)| value == selected).unwrap_or(0);
         let focus = self.preference_control_focus(path, cx).tab_stop(enabled);
         let keyboard_options = options.clone();
-        div().id(format!("pref-choice-{path}")).absolute().left(px(x)).top(px(y)).w(px(width)).h(px(22.))
+        div().id(format!("pref-choice-{path}")).absolute().left(horizontal_px(x)).top(px(y)).w(horizontal_px(width)).h(px(22.))
             .role(Role::ComboBox).aria_label(path).border_1().border_color(rgb(palette.control_edge(enabled))).bg(rgb(if palette.dark { palette.control_background(enabled) } else if enabled { 0xe1e1e1 } else { 0xe9e9e9 }))
             .aria_value(label.clone())
             .a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } })
@@ -871,8 +877,8 @@ impl MatrixWindow {
                 .hover(move |style| style.bg(rgb(palette.hot_background)).border_color(rgb(palette.hot_edge)))
                 .focus(move |style| style.border_color(rgb(palette.hot_edge))))
             .track_focus(&focus).flex().items_center().justify_between().line_height(px(14.)).when(rtl, |element| element.flex_row_reverse().text_right())
-            .child(div().flex_1().min_w(px(0.)).px(px(3.)).child(label))
-            .child(div().w(px(17.)).h_full().flex().items_center().justify_center().text_color(rgb(palette.control_text(enabled))).child("⌄"))
+            .child(div().flex_1().min_w(px(0.)).px(horizontal_px(3.)).child(label))
+            .child(div().w(horizontal_px(17.)).h_full().flex().items_center().justify_center().text_color(rgb(palette.control_text(enabled))).child("⌄"))
             .on_click(cx.listener(move |view, _, window, cx| {
                 if enabled {
                     let scroll = gpui::ScrollHandle::new();
@@ -902,7 +908,7 @@ impl MatrixWindow {
         let fraction = if max > min { (current - min) as f32 / (max - min) as f32 } else { 0. };
         let drag = SliderDrag { path, min, max, left: content_x + x, width, rtl };
         let focus = self.preference_control_focus(path, cx).tab_stop(enabled);
-        let mut element = div().id(format!("pref-slider-{path}")).absolute().left(px(x)).top(px(y)).w(px(width)).h(px(22.))
+        let mut element = div().id(format!("pref-slider-{path}")).absolute().left(horizontal_px(x)).top(px(y)).w(horizontal_px(width)).h(px(22.))
             .role(Role::Slider).aria_label(path).track_focus(&focus)
             .a11y_synthetic_children(move |builder| {
                 let node = builder.parent_node();
@@ -914,7 +920,7 @@ impl MatrixWindow {
             })
             .child(div().absolute().top(px(10.)).w_full().h(px(4.)).border_1().border_color(rgb(if palette.dark { palette.edge } else { 0xd5d5d5 })).bg(rgb(channel))
                 .when(palette.dark && !enabled, |element| element.border_1().border_color(rgb(palette.disabled_edge))))
-            .child(div().absolute().top(px(1.)).left(px((if rtl { 1. - fraction } else { fraction }) * (width - 10.))).w(px(10.)).h(px(21.)).bg(rgb(thumb)))
+            .child(div().absolute().top(px(1.)).left(horizontal_px((if rtl { 1. - fraction } else { fraction }) * (width - 10.))).w(horizontal_px(10.)).h(px(21.)).bg(rgb(thumb)))
             .on_mouse_down(MouseButton::Left, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| {
                 if !enabled { return; } view.preferences.slider = Some(drag);
                 focus.focus(window, cx);
@@ -982,6 +988,7 @@ impl MatrixWindow {
     }
 
     fn choose_preference_color(&mut self, path: &'static str, default: u32, window: &mut Window, cx: &mut Context<Self>) {
+        self.finish_udl_styler_color(cx);
         if !self.finish_preference_color(window, cx) { return; }
         self.finish_style_color(window, cx);
         let value = colorref_to_rgb(self.pref_int(path, i64::from(default)) as u32);
@@ -1029,6 +1036,7 @@ impl MatrixWindow {
             self.preferences.target_control = Some(target.control);
         }
         let page = self.preferences.page;
+        if page != Page::General { self.config_directory.close(); }
         if page == Page::Margins && self.preferences.column_task.is_none() {
             let executor = cx.background_executor().clone();
             self.preferences.column_task = Some(cx.spawn_in(window, async move |view, cx| {
@@ -1092,7 +1100,7 @@ impl MatrixWindow {
         }
         let popup = self.preferences.choice.as_ref().map(|choice| {
             let path = choice.path;
-            div().id("preferences-choice-popup").absolute().left(px(shell_x(201.25, 805.) + choice.x)).top(px((17.5 + choice.y + 23.).min(250.)))
+            div().id("preferences-choice-popup").absolute().left(horizontal_px(shell_x(201.25, 805.) + choice.x)).top(px((17.5 + choice.y + 23.).min(250.)))
                 .role(Role::ListBox).aria_label(path).track_scroll(&choice.scroll)
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .track_focus(&self.preferences.choice_focus)
@@ -1114,10 +1122,10 @@ impl MatrixWindow {
                     if let Some(choice) = &view.preferences.choice { choice.scroll.scroll_to_item(choice.cursor); }
                     cx.notify(); cx.stop_propagation();
                 }))
-                .w(px(choice.width)).max_h(px(150.)).overflow_y_scroll().bg(rgb(palette.background)).text_color(rgb(palette.text)).border_1().border_color(rgb(palette.edge)).occlude()
+                .w(horizontal_px(choice.width)).max_h(px(150.)).overflow_y_scroll().bg(rgb(palette.background)).text_color(rgb(palette.text)).border_1().border_color(rgb(palette.edge)).occlude()
                 .children(choice.options.iter().enumerate().map(|(index, (value, label))| {
                     let selected = index == choice.cursor; let value = value.clone();
-                    div().id(("preference-option", index)).px(px(4.)).h(px(22.)).bg(rgb(if selected { 0x0078d7 } else { palette.background }))
+                    div().id(("preference-option", index)).px(horizontal_px(4.)).h(px(22.)).bg(rgb(if selected { 0x0078d7 } else { palette.background }))
                         .role(Role::ListBoxOption).aria_label(label.clone()).aria_selected(selected)
                         .text_color(rgb(if selected { 0xffffff } else { palette.text })).child(label.clone())
                         .on_click(cx.listener(move |view, _, window, cx| { view.preferences.choice = None; view.set_preference(path, value.clone(), window, cx); }))
@@ -1136,10 +1144,11 @@ impl MatrixWindow {
             .on_mouse_up(MouseButton::Left, cx.listener(|view, _, _, _| view.preferences.slider = None))
             .on_mouse_up_out(MouseButton::Left, cx.listener(|view, _, _, _| view.preferences.slider = None))
             .on_mouse_down(MouseButton::Left, cx.listener(|view, _, _, cx| {
-                if view.preferences.choice.take().is_some() { cx.notify(); }
+                let config_directory_closed = view.config_directory.close();
+                if view.preferences.choice.take().is_some() || config_directory_closed { cx.notify(); }
                 cx.stop_propagation();
             }))
-            .child(div().id("preferences-navigation").absolute().left(px(shell_x(17.5, 175.))).top(px(17.5)).w(px(175.)).h(px(376.25))
+            .child(div().id("preferences-navigation").absolute().left(horizontal_px(shell_x(17.5, 175.))).top(px(17.5)).w(horizontal_px(175.)).h(px(376.25))
                 .role(Role::ListBox).aria_label(title).track_focus(&self.preferences.navigation_focus)
                 .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, window, cx| {
                     let index = Page::ALL.iter().position(|page| *page == view.preferences.page).unwrap_or(0);
@@ -1152,14 +1161,14 @@ impl MatrixWindow {
                  .children(Page::ALL.into_iter().map(|item| {
                     let section = crate::localization::preference_section(item as usize).unwrap_or("");
                     let label = crate::localization::preference_title(&filename, section).unwrap_or(item.label());
-                    div().id(format!("preferences-page-{}", item.label())).h(px(14.)).line_height(px(14.)).px(px(1.))
+                    div().id(format!("preferences-page-{}", item.label())).h(px(14.)).line_height(px(14.)).px(horizontal_px(1.))
                         .role(Role::ListBoxOption).aria_label(label).aria_selected(page == item)
                         .bg(rgb(if page == item { 0x0078d7 } else { palette.softer_background })).text_color(rgb(if page == item { 0xffffff } else { palette.text })).child(label)
                         .on_click(cx.listener(move |view, _, window, cx| {
                             if view.finish_preferences(window, cx) { view.preferences.page = item; view.preferences.target_control = None; view.preferences.navigation_focus.focus(window, cx); cx.notify(); }
                         }))
                 })))
-            .child(div().absolute().left(px(shell_x(201.25, 805.))).top(px(17.5)).w(px(805.)).h(px(358.75)).child(content))
+            .child(div().absolute().left(horizontal_px(shell_x(201.25, 805.))).top(px(17.5)).w(horizontal_px(805.)).h(px(358.75)).child(content))
             .child(self.pref_button("preferences-close", crate::localization::preference_control(&filename, "", 6001).unwrap_or("Close"), true, shell_x(560., 87.5), 376.25, 87.5,
                 |view, window, cx| view.dismiss_floating(floating_windows::DialogKind::Preferences, window, cx), cx))
             .children(popup).into_any_element())

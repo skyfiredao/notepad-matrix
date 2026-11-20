@@ -29,6 +29,7 @@ struct DocumentMapPeek {
     name: String,
     text: ropey::Rope,
     dark: bool,
+    locale: String,
 }
 
 impl Render for DocumentMapPeek {
@@ -41,7 +42,8 @@ impl Render for DocumentMapPeek {
         div()
             .id("document-map-peek")
             .role(Role::Tooltip)
-            .aria_label(format!("Read-only preview of {}", self.name))
+            .aria_label(crate::localization::Text::resource("document-map-read-only-preview-label", "Read-only preview of $NAME$")
+                .replace("$NAME$", self.name.clone()).render(&self.locale))
             .w(px(360.))
             .flex()
             .flex_col()
@@ -50,7 +52,8 @@ impl Render for DocumentMapPeek {
             .border_color(rgb(0x808080))
             .bg(rgb(if self.dark { 0x202020 } else { 0xffffff }))
             .text_color(rgb(if self.dark { 0xd4d4d4 } else { 0x202020 }))
-            .child(div().h(px(24.)).px(px(6.)).child(format!("{} · Preview (read-only)", self.name)))
+            .child(div().h(px(24.)).px(px(6.)).child(crate::localization::Text::resource("document-map-preview-title", "$NAME$ · Preview (read-only)")
+                .replace("$NAME$", self.name.clone()).render(&self.locale)))
             .children((self.first_line..last).map(|index| {
                 let line = miniature_text(self.text.line(index, ropey::LineType::LF_CR).chars(), self.key.tab_width, space_width, 318. + f32::from(font_size), 17.,
                     |ch| f32::from(window.text_system().layout_width(font_id, font_size, ch)), |miniature| {
@@ -295,6 +298,7 @@ impl MatrixWindow {
                     name: self.workspace.active().name(),
                     text: self.editor().display_snapshot(),
                     dark: self.dark,
+                    locale: self.native_locale(),
                 });
                 cx.notify();
             }
@@ -334,9 +338,11 @@ impl MatrixWindow {
         }
         let owner = cx.entity();
         let dark = self.dark;
+        let locale = self.native_locale();
         let focus_colour = self.style_colour("Document map", "fgColor", 0xff8000);
         let frost_colour = self.style_colour("Document map", "bgColor", 0xffffff);
-        let peek = self.document_map.peek.clone().filter(|peek| peek.key == self.document_map_key());
+        let peek = self.document_map.peek.clone().filter(|peek| peek.key == self.document_map_key())
+            .map(|mut peek| { peek.locale = locale.clone(); peek });
         let preview = canvas(
             move |bounds, window, cx| {
                 owner.update(cx, |view, _| {
@@ -463,7 +469,7 @@ impl MatrixWindow {
                 .id("document-map-panel")
                 .debug_selector(|| "document-map-panel".into())
                 .role(Role::Group)
-                .aria_label("Document Map")
+                .aria_label(self.panel_title(crate::panel_layout::PanelId::DocumentMap))
                 .w_full()
                 .flex_shrink_0()
                 .h_full()
@@ -480,7 +486,8 @@ impl MatrixWindow {
                         .debug_selector(|| "document-map-preview".into())
                         .role(Role::Group)
                         .aria_label(
-                            "Document miniature; click or drag to scroll without moving selection",
+                            crate::localization::localized_string(&locale, "document-map-miniature-label")
+                                .unwrap_or("Document miniature; click or drag to scroll without moving selection"),
                         )
                         .flex_1()
                         .min_h(px(0.))

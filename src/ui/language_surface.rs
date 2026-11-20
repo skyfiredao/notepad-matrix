@@ -77,10 +77,11 @@ impl MatrixWindow {
         }
         let language = self.workspace.active().language();
         let revision = self.editor().display_revision();
-        if self.editor_error.as_ref().is_some_and(|error| {
-            error.starts_with("User Defined language ")
-                && error.ends_with("displaying default styling")
-        }) {
+        if self.editor_error.as_ref().is_some_and(|error| matches!(
+            error,
+            crate::localization::Text::Literal(text)
+                if text.starts_with("User Defined language ") && text.ends_with("displaying default styling")
+        )) {
             self.editor_error = None;
         }
         if let crate::syntax::Language::UserDefined(id) = language {
@@ -90,7 +91,7 @@ impl MatrixWindow {
                 self.syntax_cache = Some((revision, language, Vec::new()));
                 self.editor_error = Some(format!(
                     "User Defined language {id} is unavailable; its identity and document are retained, displaying default styling"
-                ));
+                ).into());
                 return;
             };
             if self.udl.syntax_cache.as_ref().is_some_and(|cache| {
@@ -419,7 +420,7 @@ impl MatrixWindow {
 
     pub(super) fn editor_style_profile(&self) -> crate::syntax::StyleAppearance {
         let mut profile = crate::syntax::StyleAppearance::plain(self.dark);
-        profile.font_family = "Helvetica".into();
+        profile.font_family = editor_surface::DEFAULT_EDITOR_FONT_FAMILY.into();
         profile.font_size = f32::from(self.editor_font_size()).round().max(1.) as u32;
         self.style_config
             .appearance(None, 32, self.dark, &profile, self.editor_zoom_delta())

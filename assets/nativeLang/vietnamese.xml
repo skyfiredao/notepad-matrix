@@ -1908,8 +1908,61 @@ Nếu bạn chọn chế độ nâng cao nhưng không sửa tệp viết bằng
 			<max-len-on-save-tip value="Đầu vào của bạn rất dài nên có lẽ sẽ không được lưu ở phiên tiếp theo."/>
 			<goto-setting-tip value="Tìm thiết đặt của bạn ở đây"/>
 			<tabbar-tabcompactlabellen-tip value="Giới hạn độ dài nhìn thấy được của những tên thẻ dài. Nhập vào để áp dụng giá trị được chọn. Khoảng giá trị: 1-257 kí tự (0 thì không xén bớt)."/>
+			<discover-file-candidates-title value="Đang tìm các tệp tiềm năng..."/>
+			<matrix-close value="Đóng"/>
+			<matrix-retry value="Thử lại"/>
+			<matrix-cancelled value="Đã huỷ"/>
+			<matrix-read-only value="Chỉ đọc"/>
+			<matrix-find-status-details value="Chi tiết trạng thái"/>
+			<matrix-find-resize-results value="Đổi kích thước kết quả tìm kiếm"/>
+			<matrix-find-backward-unavailable value="Tìm ngược bằng biểu thức chính quy đang bị vô hiệu hoá"/>
+			<matrix-hash-select-files value="Chọn tệp"/>
+			<matrix-hash-calculating value="Đang tính giá trị băm…"/>
+			<matrix-hash-selection-failed value="Chọn tệp thất bại: $ERROR$"/>
+			<matrix-hash-read-failed value="Không thể đọc các tệp sau:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Đóng lỗi"/>
+			<matrix-hash-file-paths value="Đường dẫn tệp (chỉ đọc)"/>
+			<matrix-hash-digest-result value="Kết quả băm (chỉ đọc)"/>
+			<matrix-hash-source-text value="Văn bản nguồn để băm"/>
+			<matrix-hash-selection-composition value="Chưa hỗ trợ băm phần được chọn khi đang ghép kí tự"/>
+			<matrix-hash-selection-read-failed value="Không thể đọc phần được chọn: $ERROR$"/>
+			<matrix-window-activation-failed value="Không thể chuyển sang tệp được chọn"/>
+			<matrix-window-selection-unavailable value="Tệp được chọn đã đóng hoặc không thể kích hoạt"/>
+			<matrix-incremental-position value="Di chuyển thanh tìm kiếm tăng dần"/>
+			<matrix-find-progress-bar value="Thanh tiến độ"/>
+			<matrix-find-previous-search value="Hiện tìm kiếm trước"/>
+			<matrix-find-results-summary value="Kết quả tìm kiếm - ($INT_REPLACE$ kết quả)"/>
+			<matrix-udl-allow-code2-close value="Cho phép phần đóng của mã 2"/>
+			<matrix-udl-allow-code2-middle value="Cho phép phần giữa của mã 2"/>
+			<matrix-udl-allow-code2-open value="Cho phép phần mở của mã 2"/>
+			<matrix-udl-allow-comment-fold-close value="Cho phép phần đóng gập chú thích"/>
+			<matrix-udl-allow-comment-fold-middle value="Cho phép phần giữa gập chú thích"/>
+			<matrix-udl-allow-comment-fold-open value="Cho phép phần mở gập chú thích"/>
+			<matrix-udl-choose-json value="Chọn tệp định nghĩa UDL dạng JSON"/>
+			<matrix-udl-close value="Đóng ngôn ngữ người dùng tự định nghĩa"/>
+			<matrix-udl-close-styler value="Đóng trình định kiểu"/>
+			<matrix-udl-colors value="Màu sắc"/>
+			<matrix-udl-dark-mode-language value="Ngôn ngữ chế độ tối"/>
+			<matrix-udl-definition-exported value="Đã xuất định nghĩa"/>
+			<matrix-udl-definitions-saved value="Đã lưu các định nghĩa"/>
+			<matrix-udl-enable-font value="Bật phông chữ"/>
+			<matrix-udl-error value="Lỗi ngôn ngữ người dùng tự định nghĩa: $ERROR$"/>
+			<matrix-udl-file-failed value="Thao tác tệp UDL thất bại: $ERROR$"/>
+			<matrix-udl-file-progress value="Đang thao tác với tệp…"/>
+			<matrix-udl-import-rejected value="Nhập bị từ chối: $ERROR$"/>
+			<matrix-udl-imported value="Đã nhập $COUNT$ ngôn ngữ"/>
+			<matrix-udl-live-edits value="Ngôn ngữ người dùng tự định nghĩa — chỉnh sửa có hiệu lực ngay chỉ với tài liệu dùng ngôn ngữ này"/>
+			<matrix-udl-loading value="Đang tải các định nghĩa…"/>
+			<matrix-udl-memory-only value="Các định nghĩa chỉ nằm trong bộ nhớ (không có thư mục cấu hình)"/>
+			<matrix-udl-missing-ids value="Thiếu mã định danh ngôn ngữ người dùng tự định nghĩa: $IDS$. Văn bản tài liệu và định danh ngôn ngữ đã lưu vẫn được giữ nguyên. Hãy khôi phục định nghĩa hoặc chủ động chọn ngôn ngữ khác."/>
+			<matrix-udl-open-panel-disconnected value="Bảng mở UDL đã ngắt kết nối: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Xoá định nghĩa có tên này? Tài liệu hiện có sẽ giữ nguyên văn bản và chuyển sang ngôn ngữ người dùng tự định nghĩa không tên."/>
+			<matrix-udl-retry-file value="Thử lại thao tác tệp UDL"/>
+			<matrix-udl-save-panel-disconnected value="Bảng lưu UDL đã ngắt kết nối: $ERROR$"/>
+			<matrix-udl-unavailable value="Không có định nghĩa; hãy sửa udl.json rồi thử lại."/>
+			<matrix-udl-use-background value="Dùng màu nền"/>
+			<matrix-udl-use-foreground value="Dùng màu tiền cảnh"/>
+			<matrix-udl-working-copy value="Người dùng định nghĩa (bản làm việc)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>
-
-

@@ -8,7 +8,7 @@ pub(super) struct PaneState {
     editor_chrome: editor_surface::EditorChrome,
     editor_bounds: Option<Bounds<gpui::Pixels>>,
     editor_dragging: bool,
-    editor_error: Option<String>,
+    editor_error: Option<crate::localization::Text>,
     editor_painted_revision: Option<crate::input::DisplayRevision>,
     editor_accessibility: Option<(crate::input::DisplayRevision, gpui::SharedString)>,
     editor_top_line: usize,
@@ -57,6 +57,15 @@ impl PaneState {
 }
 
 impl MatrixWindow {
+    pub(super) fn clear_editor_error_source(&mut self, source: &crate::localization::Text) {
+        if self.editor_error.as_ref() == Some(source) {
+            self.editor_error = None;
+        }
+        if self.other_pane.editor_error.as_ref() == Some(source) {
+            self.other_pane.editor_error = None;
+        }
+    }
+
     pub(super) fn retire_editor_session_views(&mut self) {
         self.editor_chrome.retire_document();
         self.other_pane.editor_chrome.retire_document();

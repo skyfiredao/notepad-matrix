@@ -5,6 +5,74 @@ use std::io;
 
 use crate::style_config::Node;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Text {
+    Literal(String),
+    Resource {
+        id: &'static str,
+        fallback: &'static str,
+        replacements: Vec<(&'static str, String)>,
+        scope: Option<(&'static str, &'static str)>,
+        suffix: Vec<Text>,
+    },
+}
+
+impl From<String> for Text {
+    fn from(text: String) -> Self { Self::Literal(text) }
+}
+
+impl From<&str> for Text {
+    fn from(text: &str) -> Self { Self::Literal(text.to_owned()) }
+}
+
+impl Text {
+    pub(crate) fn resource(id: &'static str, fallback: &'static str) -> Self {
+        Self::Resource { id, fallback, replacements: Vec::new(), scope: None, suffix: Vec::new() }
+    }
+
+    pub(crate) fn replace(mut self, parameter: &'static str, value: impl Into<String>) -> Self {
+        if let Self::Resource { replacements, .. } = &mut self {
+            replacements.push((parameter, value.into()));
+        }
+        self
+    }
+
+    pub(crate) fn with_scope(mut self, search_scope: (&'static str, &'static str)) -> Self {
+        if let Self::Resource { scope, .. } = &mut self { *scope = Some(search_scope); }
+        self
+    }
+
+    pub(crate) fn with_suffix(mut self, text: impl Into<Text>) -> Self {
+        if let Self::Resource { suffix, .. } = &mut self { suffix.push(text.into()); }
+        self
+    }
+
+    pub(crate) fn render(&self, locale: &str) -> String {
+        match self {
+            Self::Literal(text) => text.clone(),
+            Self::Resource { id, fallback, replacements, scope, suffix } => {
+                let mut remaining = localized_string(locale, id).unwrap_or(fallback);
+                let mut text = String::new();
+                while !remaining.is_empty() {
+                    if let Some((parameter, value)) = replacements.iter().find(|(parameter, _)| !parameter.is_empty() && remaining.starts_with(parameter)) {
+                        text.push_str(value);
+                        remaining = &remaining[parameter.len()..];
+                    } else if let Some(ch) = remaining.chars().next() {
+                        text.push(ch);
+                        remaining = &remaining[ch.len_utf8()..];
+                    }
+                }
+                if let Some((id, fallback)) = scope {
+                    text.push(' ');
+                    text.push_str(localized_string(locale, id).unwrap_or(fallback));
+                }
+                for suffix in suffix { text.push_str(&suffix.render(locale)); }
+                text
+            }
+        }
+    }
+}
+
 const DEFINITIONS: &str = include_str!("../assets/localization-languages.txt");
 const ENGLISH_MENU_NAMES: &str = include_str!("../assets/contextMenu-menuNames.xml");
 
@@ -123,6 +191,7 @@ pub(crate) struct Language {
 struct Dialog {
     name: Option<String>,
     title: Option<String>,
+    titles: BTreeMap<String, String>,
     message: Option<String>,
     controls: BTreeMap<u32, String>,
     combos: BTreeMap<u32, Vec<String>>,
@@ -313,6 +382,14 @@ impl Translation {
                 walk_dialogs(root, |node, path| translation.collect_dialog(node, path));
             }
         }
+        if let Some(root) = native.child("WindowsDlg") {
+            walk_dialogs(root, |node, path| translation.collect_dialog(node, &format!("WindowsDlg/{path}")));
+        }
+        for category in ["DocList", "DocumentMap"] {
+            if let Some(root) = native.child(category) {
+                walk_dialogs(root, |node, path| translation.collect_dialog(node, &format!("{category}/{path}")));
+            }
+        }
         if let Some(main) = native.child("Menu").and_then(|menu| menu.child("Main")) {
             if let Some(commands) = main.child("Commands") {
                 translation.commands = control_names(commands);
@@ -349,6 +426,8 @@ impl Translation {
         let mut dialog = Dialog {
             name: node.attribute("name").map(label),
             title: node.attribute("title").map(label),
+            titles: node.attributes.iter().filter(|(key, _)| key.starts_with("title") && key.as_str() != "title")
+                .map(|(key, value)| (key.clone(), label(value))).collect(),
             message: node.attribute("message").map(str::to_owned),
             controls: control_names_with(node, label),
             combos: BTreeMap::new(),
@@ -487,6 +566,10 @@ pub(crate) fn dialog_control(filename: &str, path: &str, id: u32) -> Option<&'st
 
 pub(crate) fn dialog_title(filename: &str, path: &str) -> Option<&'static str> {
     translated(filename, |translation| translation.dialogs.get(path)?.title.as_deref())
+}
+
+pub(crate) fn dialog_title_variant(filename: &str, path: &str, attribute: &str) -> Option<&'static str> {
+    translated(filename, |translation| translation.dialogs.get(path)?.titles.get(attribute).map(String::as_str))
 }
 
 pub(crate) fn dialog_name(filename: &str, path: &str) -> Option<&'static str> {
@@ -642,6 +725,26 @@ pub(crate) fn is_rtl(filename: &str) -> bool {
 }
 thread_local! {
     static PREFERENCE_SCOPE: std::cell::RefCell<Option<(String, String)>> = const { std::cell::RefCell::new(None) };
+    static DIALOG_SCOPE: std::cell::RefCell<Option<(String, String)>> = const { std::cell::RefCell::new(None) };
+}
+
+struct DialogScope(Option<(String, String)>);
+
+impl Drop for DialogScope {
+    fn drop(&mut self) {
+        DIALOG_SCOPE.with(|scope| *scope.borrow_mut() = self.0.take());
+    }
+}
+
+pub(crate) fn with_dialog<R>(filename: &str, path: &str, build: impl FnOnce() -> R) -> R {
+    let previous = DIALOG_SCOPE.with(|scope| scope.replace(Some((filename.to_owned(), path.to_owned()))));
+    let _scope = DialogScope(previous);
+    build()
+}
+
+pub(crate) fn current_dialog_text(label: &'static str) -> &'static str {
+    let path = DIALOG_SCOPE.with(|scope| scope.borrow().as_ref().map(|(_, path)| path.clone()));
+    path.map_or(label, |path| current_dialog_label(&path, label))
 }
 
 struct PreferenceScope(Option<(String, String)>);
@@ -759,18 +862,29 @@ pub(crate) fn current_preference_source_label<'a>(id: &str, label: &'a str) -> &
 }
 
 pub(crate) fn current_dialog_control(path: &str, id: u32) -> Option<&'static str> {
-    let filename = PREFERENCE_SCOPE.with(|scope| scope.borrow().as_ref().map(|(filename, _)| filename.clone()))?;
+    let filename = current_dialog_locale()?;
     dialog_control(&filename, path, id)
+}
+
+fn current_dialog_locale() -> Option<String> {
+    PREFERENCE_SCOPE.with(|scope| scope.borrow().as_ref().map(|(filename, _)| filename.clone()))
+        .or_else(|| DIALOG_SCOPE.with(|scope| scope.borrow().as_ref().map(|(filename, _)| filename.clone())))
+}
+
+pub(crate) fn current_dialog_combo_item(path: &str, id: u32, index: usize) -> Option<&'static str> {
+    combo_element(&current_dialog_locale()?, path, id, index)
 }
 
 pub(crate) fn current_dialog_label<'a>(path: &str, label: &'a str) -> &'a str {
     let key = label_key(label);
-    let id = catalog_translation("chineseSimplified.xml").ok().and_then(|translation| translation.dialogs.get(path))
-        .and_then(|dialog| dialog.controls.iter().find(|(_, name)| label_key(name) == key).map(|(id, _)| *id));
+    let id = ["chineseSimplified.xml", "english.xml"].into_iter().find_map(|filename| {
+        catalog_translation(filename).ok()?.dialogs.get(path)?.controls.iter()
+            .find(|(_, name)| label_key(name) == key).map(|(id, _)| *id)
+    });
     id.and_then(|id| current_dialog_control(path, id)).unwrap_or(label)
 }
 
 pub(crate) fn current_string(id: &str) -> Option<&'static str> {
-    let filename = PREFERENCE_SCOPE.with(|scope| scope.borrow().as_ref().map(|(filename, _)| filename.clone()))?;
+    let filename = current_dialog_locale()?;
     localized_string(&filename, id)
 }

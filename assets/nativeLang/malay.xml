@@ -483,5 +483,65 @@ Desc: Malay translation for Notepad++
 				<Item id="2" name="Batal"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="Baik"/>
+			<common-cancel value="Batal"/>
+			<common-name value="Nama"/>
+			<discover-file-candidates-title value="Mencari calon fail..."/>
+			<matrix-close value="Tutup"/>
+			<matrix-retry value="Cuba semula"/>
+			<matrix-cancelled value="Dibatalkan"/>
+			<matrix-read-only value="Baca Sahaja"/>
+			<matrix-find-status-details value="Butiran status"/>
+			<matrix-find-backward-unavailable value="Carian ungkapan nalar ke belakang dinyahdayakan"/>
+			<matrix-hash-select-files value="Pilih fail"/>
+			<matrix-hash-calculating value="Mengira nilai cincangan…"/>
+			<matrix-hash-selection-failed value="Pemilihan fail gagal: $ERROR$"/>
+			<matrix-hash-read-failed value="Tidak dapat membaca fail berikut:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Tutup mesej ralat"/>
+			<matrix-hash-file-paths value="Laluan fail (baca sahaja)"/>
+			<matrix-hash-digest-result value="Hasil cincangan (baca sahaja)"/>
+			<matrix-hash-source-text value="Teks sumber cincangan"/>
+			<matrix-hash-selection-composition value="Pencincangan teks terpilih semasa penggubahan input aktif belum dilaksanakan"/>
+			<matrix-hash-selection-read-failed value="Tidak dapat membaca teks terpilih: $ERROR$"/>
+			<matrix-window-activation-failed value="Tidak dapat beralih ke fail terpilih"/>
+			<matrix-window-selection-unavailable value="Fail terpilih telah ditutup atau tidak dapat diaktifkan"/>
+			<matrix-incremental-position value="Alihkan bar carian bertokok"/>
+			<matrix-find-progress-bar value="Bar kemajuan"/>
+			<matrix-find-previous-search value="Tunjukkan carian terdahulu"/>
+			<matrix-find-results-summary value="Hasil carian - ($INT_REPLACE$ padanan)"/>
+			<matrix-udl-allow-code2-close value="Benarkan penutup kod 2"/>
+			<matrix-udl-allow-code2-middle value="Benarkan bahagian tengah kod 2"/>
+			<matrix-udl-allow-code2-open value="Benarkan pembuka kod 2"/>
+			<matrix-udl-allow-comment-fold-close value="Benarkan penutup lipatan komen"/>
+			<matrix-udl-allow-comment-fold-middle value="Benarkan bahagian tengah lipatan komen"/>
+			<matrix-udl-allow-comment-fold-open value="Benarkan pembuka lipatan komen"/>
+			<matrix-udl-choose-json value="Pilih fail takrif UDL JSON"/>
+			<matrix-udl-close value="Tutup bahasa takrifan pengguna"/>
+			<matrix-udl-close-styler value="Tutup penggaya"/>
+			<matrix-udl-colors value="Warna"/>
+			<matrix-udl-dark-mode-language value="Bahasa mod gelap"/>
+			<matrix-udl-definition-exported value="Takrif dieksport"/>
+			<matrix-udl-definitions-saved value="Takrif disimpan"/>
+			<matrix-udl-enable-font value="Dayakan fon"/>
+			<matrix-udl-error value="Ralat bahasa takrifan pengguna: $ERROR$"/>
+			<matrix-udl-file-failed value="Operasi fail UDL gagal: $ERROR$"/>
+			<matrix-udl-file-progress value="Operasi fail sedang dijalankan…"/>
+			<matrix-udl-import-rejected value="Import ditolak: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ bahasa diimport"/>
+			<matrix-udl-live-edits value="Bahasa takrifan pengguna — suntingan diterapkan serta-merta hanya pada dokumen yang menggunakan bahasa ini"/>
+			<matrix-udl-loading value="Memuatkan takrif…"/>
+			<matrix-udl-memory-only value="Takrif hanya berada dalam ingatan (tiada direktori konfigurasi)"/>
+			<matrix-udl-missing-ids value="ID bahasa takrifan pengguna tiada: $IDS$. Teks dokumen dan identiti bahasa tersimpan dikekalkan. Pulihkan takrif atau pilih bahasa lain secara nyata."/>
+			<matrix-udl-open-panel-disconnected value="Panel buka UDL terputus sambungan: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Buang takrif bernama ini? Dokumen sedia ada mengekalkan teksnya dan beralih kepada bahasa takrifan pengguna tanpa nama."/>
+			<matrix-udl-retry-file value="Cuba semula operasi fail UDL"/>
+			<matrix-udl-save-panel-disconnected value="Panel simpan UDL terputus sambungan: $ERROR$"/>
+			<matrix-udl-unavailable value="Takrif tidak tersedia; betulkan udl.json dan cuba semula."/>
+			<matrix-udl-use-background value="Gunakan latar belakang"/>
+			<matrix-udl-use-foreground value="Gunakan latar depan"/>
+			<matrix-udl-working-copy value="Takrifan pengguna (salinan kerja)"/>
+			<matrix-find-resize-results value="Ubah saiz hasil carian"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

@@ -1680,7 +1680,61 @@ Mengeklik tombol &quot;?&quot; di kanan untuk membuka Manual Pengguna di situs w
 
 			<!-- Don't translate "(&quot;Non-printing characters custom color&quot;)" -->
 			<npcCustomColor-tip value="Pergi ke Konfigurator Gaya untuk mengubah warna kustom baku untuk karakter spasi putih dan noncetak (&quot;Non-printing characters custom color&quot;) terpilih."/>
+			<discover-file-candidates-title value="Mencari kandidat berkas..."/>
+			<matrix-close value="Tutup"/>
+			<matrix-retry value="Coba lagi"/>
+			<matrix-cancelled value="Dibatalkan"/>
+			<matrix-read-only value="Baca-Saja"/>
+			<matrix-find-status-details value="Rincian status"/>
+			<matrix-find-backward-unavailable value="Pencarian ekspresi reguler mundur dinonaktifkan"/>
+			<matrix-hash-select-files value="Pilih berkas"/>
+			<matrix-hash-calculating value="Menghitung nilai hash…"/>
+			<matrix-hash-selection-failed value="Pemilihan berkas gagal: $ERROR$"/>
+			<matrix-hash-read-failed value="Tidak dapat membaca berkas berikut:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Tutup pesan kesalahan"/>
+			<matrix-hash-file-paths value="Jalur berkas (baca-saja)"/>
+			<matrix-hash-digest-result value="Hasil hash (baca-saja)"/>
+			<matrix-hash-source-text value="Teks sumber hash"/>
+			<matrix-hash-selection-composition value="Penghitungan hash teks terpilih saat komposisi masukan aktif belum diimplementasikan"/>
+			<matrix-hash-selection-read-failed value="Tidak dapat membaca teks terpilih: $ERROR$"/>
+			<matrix-window-activation-failed value="Tidak dapat beralih ke berkas terpilih"/>
+			<matrix-window-selection-unavailable value="Berkas terpilih sudah ditutup atau tidak dapat diaktifkan"/>
+			<matrix-incremental-position value="Pindahkan bilah pencarian inkremental"/>
+			<matrix-find-progress-bar value="Bilah kemajuan"/>
+			<matrix-find-previous-search value="Tampilkan pencarian sebelumnya"/>
+			<matrix-find-results-summary value="Hasil pencarian - ($INT_REPLACE$ kecocokan)"/>
+			<matrix-udl-allow-code2-close value="Izinkan penutup kode 2"/>
+			<matrix-udl-allow-code2-middle value="Izinkan bagian tengah kode 2"/>
+			<matrix-udl-allow-code2-open value="Izinkan pembuka kode 2"/>
+			<matrix-udl-allow-comment-fold-close value="Izinkan penutup pelipatan komentar"/>
+			<matrix-udl-allow-comment-fold-middle value="Izinkan bagian tengah pelipatan komentar"/>
+			<matrix-udl-allow-comment-fold-open value="Izinkan pembuka pelipatan komentar"/>
+			<matrix-udl-choose-json value="Pilih berkas definisi UDL JSON"/>
+			<matrix-udl-close value="Tutup bahasa yang ditentukan pengguna"/>
+			<matrix-udl-close-styler value="Tutup pengatur gaya"/>
+			<matrix-udl-colors value="Warna"/>
+			<matrix-udl-dark-mode-language value="Bahasa mode gelap"/>
+			<matrix-udl-definition-exported value="Definisi diekspor"/>
+			<matrix-udl-definitions-saved value="Definisi disimpan"/>
+			<matrix-udl-enable-font value="Aktifkan fon"/>
+			<matrix-udl-error value="Kesalahan bahasa yang ditentukan pengguna: $ERROR$"/>
+			<matrix-udl-file-failed value="Operasi berkas UDL gagal: $ERROR$"/>
+			<matrix-udl-file-progress value="Operasi berkas sedang berlangsung…"/>
+			<matrix-udl-import-rejected value="Impor ditolak: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ bahasa diimpor"/>
+			<matrix-udl-live-edits value="Bahasa yang ditentukan pengguna — perubahan langsung diterapkan hanya pada dokumen yang menggunakan bahasa ini"/>
+			<matrix-udl-loading value="Memuat definisi…"/>
+			<matrix-udl-memory-only value="Definisi hanya ada di memori (tidak ada direktori konfigurasi)"/>
+			<matrix-udl-missing-ids value="ID bahasa yang ditentukan pengguna tidak ditemukan: $IDS$. Teks dokumen dan identitas bahasa tersimpan dipertahankan. Pulihkan definisi atau pilih bahasa lain secara eksplisit."/>
+			<matrix-udl-open-panel-disconnected value="Panel buka UDL terputus: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Hapus definisi bernama ini? Dokumen yang ada mempertahankan teksnya dan beralih ke bahasa yang ditentukan pengguna tanpa nama."/>
+			<matrix-udl-retry-file value="Coba lagi operasi berkas UDL"/>
+			<matrix-udl-save-panel-disconnected value="Panel simpan UDL terputus: $ERROR$"/>
+			<matrix-udl-unavailable value="Definisi tidak tersedia; perbaiki udl.json dan coba lagi."/>
+			<matrix-udl-use-background value="Gunakan latar belakang"/>
+			<matrix-udl-use-foreground value="Gunakan latar depan"/>
+			<matrix-udl-working-copy value="Ditentukan pengguna (salinan kerja)"/>
+			<matrix-find-resize-results value="Ubah ukuran hasil pencarian"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>
-

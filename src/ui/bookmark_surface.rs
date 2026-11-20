@@ -644,7 +644,7 @@ impl MatrixWindow {
             .top(px(0.))
             .bottom(px(editor_surface::SCROLLBAR_SIZE))
             .w(self.editor_gutter_width())
-            .pt(px(editor_surface::TEXT_TOP))
+            .pt(self.editor_text_top())
             .overflow_hidden()
             .flex()
             .flex_col()

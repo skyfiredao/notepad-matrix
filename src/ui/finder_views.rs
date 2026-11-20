@@ -1,4 +1,5 @@
 use super::*;
+use crate::localization::Text;
 
 #[derive(Clone, Copy)]
 enum ResultCheck {
@@ -75,7 +76,7 @@ struct ResultPane {
     context_focus: FocusHandle,
     context_selected: usize,
     results_purge: bool,
-    message: String,
+    message: Text,
 }
 
 impl ResultPane {
@@ -100,7 +101,7 @@ impl ResultPane {
             context_focus: cx.focus_handle(),
             context_selected: 0,
             results_purge: false,
-            message: String::new(),
+            message: String::new().into(),
         }
     }
 
@@ -229,6 +230,7 @@ impl MatrixWindow {
             .collect();
         ids.push(self.files_search.views.active);
         ids.sort_unstable();
+        let caption = crate::localization::localized_string(&self.native_locale(), "find-result-caption").unwrap_or("Search results");
         Some(
             div()
                 .flex()
@@ -242,9 +244,9 @@ impl MatrixWindow {
                         .aria_selected(id == self.files_search.views.active)
                         .px(px(8.))
                         .child(if id == 0 {
-                            "Search results".to_owned()
+                            caption.to_owned()
                         } else {
-                            format!("Search results {id}")
+                            format!("{caption} {id}")
                         })
                         .when(id == self.files_search.views.active, |tab| {
                             tab.bg(rgb(0x0078d4)).text_color(rgb(0xffffff))
@@ -321,7 +323,9 @@ impl MatrixWindow {
             let (completed, hits) = progress.state.snapshot();
             (completed > 0, hits, progress.state.is_cancelled(), completed.checked_sub(1).and_then(|index| progress.paths.get(index)).cloned().unwrap_or_default(), progress.state.percent(progress.paths.len()) as f32)
         };
-        let path = if cancelled { "Cancelling operation, please wait...".to_owned() } else { path };
+        let locale = self.native_locale();
+        let cancel = crate::localization::localized_string(&locale, "common-cancel").unwrap_or("Cancel");
+        let path = if cancelled { crate::localization::localized_string(&locale, "progress-cancel-info").unwrap_or("Cancelling operation, please wait...").to_owned() } else { path };
         Some(
             div()
                 .id("find-results-progress")
@@ -358,7 +362,7 @@ impl MatrixWindow {
                         .w(px(150.))
                         .h(px(18.))
                         .text_right()
-                        .child("Hits:"),
+                        .child(crate::localization::localized_string(&locale, "progress-hits-title").unwrap_or("Hits:")),
                 )
                 .child(
                     div()
@@ -380,7 +384,7 @@ impl MatrixWindow {
                     div()
                         .id("find-results-progress-bar")
                         .role(Role::ProgressIndicator)
-                        .aria_label("Progress Bar")
+                        .aria_label(crate::localization::localized_string(&locale, "matrix-find-progress-bar").unwrap_or("Progress Bar"))
                         .absolute()
                         .left(px(5.))
                         .top(px(41.))
@@ -400,7 +404,7 @@ impl MatrixWindow {
                         .id("find-results-progress-cancel")
                         .debug_selector(|| "find-results-progress-cancel".into())
                         .role(Role::Button)
-                        .aria_label("Cancel")
+                        .aria_label(cancel)
                         .track_focus(&self.files_search.views.progress_focus)
                         .absolute()
                         .left(px(237.))
@@ -413,7 +417,7 @@ impl MatrixWindow {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .child("Cancel")
+                        .child(cancel)
                         .a11y_synthetic_children(move |builder| {
                             if cancelled {
                                 builder.parent_node().set_disabled();
@@ -441,10 +445,12 @@ impl MatrixWindow {
     pub(in crate::ui) fn find_in_results_progress_title(&self) -> &'static str {
         if let Some(progress) = &self.files_search.progress {
             let snapshot = progress.snapshot();
-            if snapshot.discovering { return "Discovering file candidates..."; }
-            if snapshot.replacing { return "Replace In Files progress..."; }
+            if snapshot.discovering { return crate::localization::localized_string(&self.native_locale(), "discover-file-candidates-title").unwrap_or("Discovering file candidates..."); }
+            if snapshot.replacing {
+                return crate::localization::localized_string(&self.native_locale(), "replace-in-files-progress-title").unwrap_or("Replace In Files progress...");
+            }
         }
-        "Find In Files progress..."
+        crate::localization::localized_string(&self.native_locale(), "find-in-files-progress-title").unwrap_or("Find In Files progress...")
     }
 
     pub(in crate::ui) fn focus_find_in_results_progress(
@@ -612,7 +618,7 @@ impl MatrixWindow {
                     .id("find-in-results-history-toggle")
                     .debug_selector(|| "find-in-results-history-toggle".into())
                     .role(Role::Button)
-                    .aria_label("Show previous search")
+                    .aria_label(crate::localization::localized_string(&self.native_locale(), "matrix-find-previous-search").unwrap_or("Show previous search"))
                     .w(px(20.))
                     .child("⌄")
                     .on_click(cx.listener(|view, _, window, cx| {
@@ -662,11 +668,14 @@ impl MatrixWindow {
 
     pub(in crate::ui) fn render_find_in_results(&self, cx: &mut Context<Self>) -> AnyElement {
         use super::super::dialog_font::px;
+        let locale = self.native_locale();
+        let label = |id, fallback| crate::localization::dialog_control(&locale, "FindInFinder", id).unwrap_or(fallback);
+        self.files_search.views.query.update(cx, |field, cx| field.set_label(label(1711, "Find what:"), cx));
         div()
             .id("find-in-results-dialog")
             .debug_selector(|| "find-in-results-dialog".into())
             .role(Role::Dialog)
-            .aria_label("Find in search results")
+            .aria_label(crate::localization::dialog_title(&locale, "FindInFinder").unwrap_or("Find in search results"))
             .key_context("MatrixFind")
             .size_full()
             .relative()
@@ -682,7 +691,7 @@ impl MatrixWindow {
                     .top(px(16.5))
                     .w(px(112.5))
                     .text_right()
-                    .child("Find what:"),
+                    .child(label(1711, "Find what:")),
             )
             .child(
                 div()
@@ -696,7 +705,7 @@ impl MatrixWindow {
             .child(
                 find_surface::checkbox(
                     "find-in-results-line-filter",
-                    "Search only in found lines",
+                    label(1713, "Search only in found lines"),
                     self.files_search.views.match_line_numbers,
                 )
                 .absolute()
@@ -721,7 +730,7 @@ impl MatrixWindow {
             .child(
                 find_surface::checkbox(
                     "find-in-results-word",
-                    "全词匹配(W)",
+                    label(1714, "Match whole word only"),
                     self.files_search.views.options.whole_word,
                 )
                 .absolute()
@@ -746,7 +755,7 @@ impl MatrixWindow {
             .child(
                 find_surface::checkbox(
                     "find-in-results-case",
-                    "匹配大小写(C)",
+                    label(1715, "Match case"),
                     self.files_search.views.options.match_case,
                 )
                 .absolute()
@@ -772,7 +781,7 @@ impl MatrixWindow {
                 div()
                     .id("find-in-results-search-mode")
                     .role(Role::Group)
-                    .aria_label("Search Mode")
+                    .aria_label(label(1716, "Search Mode"))
                     .absolute()
                     .left(px(9.))
                     .top(px(105.))
@@ -787,14 +796,14 @@ impl MatrixWindow {
                             .top(px(-8.))
                             .px(px(3.))
                             .bg(rgb(0xf9f9f9))
-                            .child("Search Mode"),
+                            .child(label(1716, "Search Mode")),
                     )
                     .children(
                         [
-                            (crate::search::SearchMode::Normal, "普通(N)"),
+                            (crate::search::SearchMode::Normal, label(1717, "Normal")),
                             (
                                 crate::search::SearchMode::Extended,
-                                r"扩展(X) (\n, \r, \t, \0, \x...)",
+                                label(1718, r"Extended (\n, \r, \t, \0, \x...)"),
                             ),
                             (
                                 crate::search::SearchMode::Regex {
@@ -805,7 +814,7 @@ impl MatrixWindow {
                                         }
                                     ),
                                 },
-                                "正则表达式(G)",
+                                label(1719, "Regular expression"),
                             ),
                         ]
                         .into_iter()
@@ -813,7 +822,7 @@ impl MatrixWindow {
                         .map(|(index, (mode, label))| {
                             let selected = self.files_search.views.options.mode == mode;
                             div()
-                                .id(label)
+                                .id(("find-in-results-mode", index))
                                 .role(Role::RadioButton)
                                 .track_focus(
                                     &self.files_search.views.mode_focus[index]
@@ -873,7 +882,7 @@ impl MatrixWindow {
                     .child(
                         find_surface::checkbox(
                             "results-dot-newline",
-                            ". 号匹配换行符",
+                            label(1720, ". matches newline"),
                             matches!(
                                 self.files_search.views.options.mode,
                                 crate::search::SearchMode::Regex {
@@ -899,7 +908,7 @@ impl MatrixWindow {
                     ),
             )
             .child(
-                find_surface::button("find-in-results-all", "Find All", 13.5)
+                find_surface::button("find-in-results-all", label(1, "Find All"), 13.5)
                     .right(px(11.))
                     .w(px(135.))
                     .focusable()
@@ -915,7 +924,7 @@ impl MatrixWindow {
                     })),
             )
             .child(
-                find_surface::button("find-in-results-cancel", "Close", 40.5)
+                find_surface::button("find-in-results-cancel", label(2, "Close"), 40.5)
                     .right(px(11.))
                     .w(px(135.))
                     .focusable()
@@ -1024,8 +1033,7 @@ impl MatrixWindow {
             match document_window.update(cx, |_, window, cx| {
                 view.update(cx, |view, cx| {
                     view.write_search_regex_states(&identities, updates);
-                    view.file_busy = false;
-                    view.files_search.cancel = None;
+                    view.finish_file_search_job();
                     view.files_search.views.progress = None;
                     match result {
                         Ok(search) => {
@@ -1042,11 +1050,8 @@ impl MatrixWindow {
                             let mut pane = ResultPane::new(wrap, cx);
                             let hits = search.hits;
                             pane.results.push(search, false);
-                            pane.message = format!(
-                                "Search results - ({} {})",
-                                crate::finder::commafy(hits),
-                                if hits == 1 { "hit" } else { "hits" }
-                            );
+                            pane.message = Text::resource("matrix-find-results-summary", "Search results - ($INT_REPLACE$ hits)")
+                                .replace("$INT_REPLACE$", crate::finder::commafy(hits));
                             pane.swap(&mut view.files_search);
                             let previous = view.files_search.views.active;
                             let id = view.files_search.views.next;
@@ -1056,7 +1061,16 @@ impl MatrixWindow {
                             view.files_search.results_visible = true;
                             view.files_search.results_focus.focus(window, cx);
                         }
-                        Err(error) => view.notify_editor_error(error.to_string(), cx),
+                        Err(error) => {
+                            let message = match error {
+                                crate::search::SearchError::Regex(detail) => Text::resource("find-status-invalid-re", "Find: Invalid regular expression")
+                                    .with_suffix(": ").with_suffix(detail),
+                                crate::search::SearchError::RegexRuntime(detail) => Text::resource("find-status-search-failed", "Find: Search failed")
+                                    .with_suffix(": ").with_suffix(detail),
+                                crate::search::SearchError::InvalidSelection => Text::resource("matrix-search-invalid-selection", "Search selection is not a valid text boundary"),
+                            };
+                            view.notify_localized_editor_error(message, cx);
+                        }
                     }
                     cx.notify();
                 })

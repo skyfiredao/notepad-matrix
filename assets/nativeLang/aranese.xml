@@ -360,5 +360,65 @@
 				<Item id="7004" name="Ordenar Pest."/>
 			</Window>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="D'acord"/>
+			<common-cancel value="Cancellar"/>
+			<common-name value="Nòm"/>
+			<discover-file-candidates-title value="En tot descobrir fichèrs candidats..."/>
+			<matrix-close value="Barrar"/>
+			<matrix-retry value="Tornar a provar"/>
+			<matrix-cancelled value="Anullat"/>
+			<matrix-read-only value="Sonque lectura"/>
+			<matrix-find-status-details value="Detalhs der estat"/>
+			<matrix-find-resize-results value="Cambiar era dimension des resultats dera recèrca"/>
+			<matrix-find-backward-unavailable value="Era recèrca endarrèr damb expressions regulars ei desactivada"/>
+			<matrix-hash-select-files value="Seleccionar fichèrs"/>
+			<matrix-hash-calculating value="En tot calcular era emprenta…"/>
+			<matrix-hash-selection-failed value="Era seleccion de fichèrs a falhat: $ERROR$"/>
+			<matrix-hash-read-failed value="Non se pòden liéger aguesti fichèrs:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Barrar er error"/>
+			<matrix-hash-file-paths value="Camins des fichèrs (sonque lectura)"/>
+			<matrix-hash-digest-result value="Resultat dera emprenta (sonque lectura)"/>
+			<matrix-hash-source-text value="Tèxte d'origina dera emprenta"/>
+			<matrix-hash-selection-composition value="Eth calcul dera emprenta dera seleccion pendent era composicion activa encara non ei implementat"/>
+			<matrix-hash-selection-read-failed value="Non se pòt liéger era seleccion: $ERROR$"/>
+			<matrix-window-activation-failed value="Non se pòt passar tath fichèr seleccionat"/>
+			<matrix-window-selection-unavailable value="Eth fichèr seleccionat ei barrat o non se pòt activar"/>
+			<matrix-incremental-position value="Mòir era barra de recèrca incrementau"/>
+			<matrix-find-progress-bar value="Barra de progrès"/>
+			<matrix-find-previous-search value="Amostrar era recèrca anteriora"/>
+			<matrix-find-results-summary value="Resultats dera recèrca - ($INT_REPLACE$ coincidéncies)"/>
+			<matrix-udl-allow-code2-close value="Perméter eth barrament deth còdi 2"/>
+			<matrix-udl-allow-code2-middle value="Perméter eth miei deth còdi 2"/>
+			<matrix-udl-allow-code2-open value="Perméter era dubertura deth còdi 2"/>
+			<matrix-udl-allow-comment-fold-close value="Perméter eth barrament deth plegatge de comentaris"/>
+			<matrix-udl-allow-comment-fold-middle value="Perméter eth miei deth plegatge de comentaris"/>
+			<matrix-udl-allow-comment-fold-open value="Perméter era dubertura deth plegatge de comentaris"/>
+			<matrix-udl-choose-json value="Escuélher un fichèr JSON de definicion UDL"/>
+			<matrix-udl-close value="Barrar eth lenguatge definit per usatgèr"/>
+			<matrix-udl-close-styler value="Barrar eth configurador d'estil"/>
+			<matrix-udl-colors value="Colors"/>
+			<matrix-udl-dark-mode-language value="Lenguatge deth mòde escur"/>
+			<matrix-udl-definition-exported value="Definicion exportada"/>
+			<matrix-udl-definitions-saved value="Definicions sauvades"/>
+			<matrix-udl-enable-font value="Activar era hònt"/>
+			<matrix-udl-error value="Error deth lenguatge definit per usatgèr: $ERROR$"/>
+			<matrix-udl-file-failed value="Era operacion de fichèr UDL a falhat: $ERROR$"/>
+			<matrix-udl-file-progress value="Operacion de fichèr en cors…"/>
+			<matrix-udl-import-rejected value="Importacion refusada: $ERROR$"/>
+			<matrix-udl-imported value="S'an importat $COUNT$ lenguatges"/>
+			<matrix-udl-live-edits value="Lenguatge definit per usatgèr — es cambis s'apliquen de seguida sonque as documents qu'usen aguest lenguatge"/>
+			<matrix-udl-loading value="En tot cargar es definicions…"/>
+			<matrix-udl-memory-only value="Es definicions son sonque ena memòria (sense directòri de configuracion)"/>
+			<matrix-udl-missing-ids value="Manquen identificadors de lenguatges definits per usatgèr: $IDS$. S'an conservat eth tèxte deth document e es identitats sauvades des lenguatges. Restauratz es definicions o seleccionatz explicitament un aute lenguatge."/>
+			<matrix-udl-open-panel-disconnected value="Panèu de dubertura UDL desconnectat: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Suprimir aguesta definicion damb nòm? Es documents existents consèrven eth tèxte e passen ath lenguatge definit per usatgèr sense nòm."/>
+			<matrix-udl-retry-file value="Tornar a provar era operacion de fichèr UDL"/>
+			<matrix-udl-save-panel-disconnected value="Panèu de sauvament UDL desconnectat: $ERROR$"/>
+			<matrix-udl-unavailable value="Definicions non disponibles; corregitz udl.json e tornatz a provar."/>
+			<matrix-udl-use-background value="Usar eth hons"/>
+			<matrix-udl-use-foreground value="Usar eth prumèr plan"/>
+			<matrix-udl-working-copy value="Definit per usatgèr (còpia de trabalh)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

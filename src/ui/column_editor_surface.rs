@@ -1,4 +1,5 @@
 use super::*;
+use crate::localization;
 use super::dialog_font::px;
 use crate::editor::{ColumnBase, ColumnFill, ColumnNumbers};
 
@@ -522,8 +523,12 @@ impl MatrixWindow {
             return None;
         }
         let (unit_x, unit_y) = dialog_units(window);
-        for field in &self.column_editor.fields {
-            field.update(cx, |field, cx| field.set_compact_height(12. * unit_y, cx));
+        for (index, field) in self.column_editor.fields.iter().enumerate() {
+            let (source_id, label) = [(2023, "Text to Insert"), (2030, "Initial number:"), (2031, "Increase by:"), (2036, "Repeat:")][index];
+            field.update(cx, |field, cx| {
+                field.set_compact_height(12. * unit_y, cx);
+                field.set_label(localization::current_dialog_control("ColumnEditor", source_id).unwrap_or(label), cx);
+            });
         }
         let confirm_enabled = self.column_editor.numbers || !self.column_editor.fields[0].read(cx).text().is_empty();
         let control = |index: usize, id: &'static str, label: &'static str, selected: bool| {
@@ -609,7 +614,7 @@ impl MatrixWindow {
             .id("column-editor-dialog")
             .debug_selector(|| "column-editor-dialog".into())
             .role(Role::Dialog)
-            .aria_label("列编辑器")
+            .aria_label(localization::dialog_title(&self.native_locale(), "ColumnEditor").unwrap_or("Column Editor"))
             .font_family(dialog_font::font_family())
             .text_size(px(11.))
             .key_context("MatrixColumnEditor")
@@ -655,26 +660,30 @@ impl MatrixWindow {
                 div().absolute().left(px(x * unit_x)).top(px(y * unit_y))
                     .w(px(width * unit_x)).h(px(height * unit_y)).border_1().border_color(rgb(0xa0a0a0))
             }))
-            .child(control(4, "column-mode-text", "插入文本(T)", !numbers))
-            .child(control(5, "column-mode-numbers", "插入数字(N)", numbers))
-            .child(control(6, "column-base-decimal", "十进制(D)", self.column_editor.base == ColumnBase::Decimal))
-            .child(control(7, "column-base-hex", "十六进制(H)", matches!(self.column_editor.base, ColumnBase::Hexadecimal | ColumnBase::HexadecimalUpper)))
-            .child(control(8, "column-base-octal", "八进制(O)", self.column_editor.base == ColumnBase::Octal))
-            .child(control(9, "column-base-binary", "二进制(B)", self.column_editor.base == ColumnBase::Binary))
+            .child(control(4, "column-mode-text", localization::current_dialog_control("ColumnEditor", 2023).unwrap_or("Text to Insert"), !numbers))
+            .child(control(5, "column-mode-numbers", localization::current_dialog_control("ColumnEditor", 2033).unwrap_or("Number to Insert"), numbers))
+            .child(control(6, "column-base-decimal", localization::current_dialog_control("ColumnEditor", 2024).unwrap_or("Dec"), self.column_editor.base == ColumnBase::Decimal))
+            .child(control(7, "column-base-hex", localization::current_dialog_control("ColumnEditor", 2026).unwrap_or("Hex"), matches!(self.column_editor.base, ColumnBase::Hexadecimal | ColumnBase::HexadecimalUpper)))
+            .child(control(8, "column-base-octal", localization::current_dialog_control("ColumnEditor", 2025).unwrap_or("Oct"), self.column_editor.base == ColumnBase::Octal))
+            .child(control(9, "column-base-binary", localization::current_dialog_control("ColumnEditor", 2027).unwrap_or("Bin"), self.column_editor.base == ColumnBase::Binary))
             .child(control(15, "column-hex-case", if self.column_editor.hex_uppercase { "A-F" } else { "a-f" }, false))
-            .child(control(14, "column-leading", match self.column_editor.fill { ColumnFill::None => "无", ColumnFill::Zero => "补零", ColumnFill::Space => "补空格" }, false))
-            .child(control(12, "column-editor-confirm", "确定", false))
-            .child(control(13, "column-editor-cancel", "取消", false))
+            .child(control(14, "column-leading", match self.column_editor.fill {
+                ColumnFill::None => localization::current_dialog_combo_item("ColumnEditor", 2039, 0).unwrap_or("None"),
+                ColumnFill::Zero => localization::current_dialog_combo_item("ColumnEditor", 2039, 1).unwrap_or("Zeros"),
+                ColumnFill::Space => localization::current_dialog_combo_item("ColumnEditor", 2039, 2).unwrap_or("Spaces"),
+            }, false))
+            .child(control(12, "column-editor-confirm", localization::current_dialog_control("ColumnEditor", 1).unwrap_or("OK"), false))
+            .child(control(13, "column-editor-cancel", localization::current_dialog_control("ColumnEditor", 2).unwrap_or("Cancel"), false))
             .child(div().absolute().left(px(94. * unit_x)).top(px(82. * unit_y))
-                .px(px(3.)).bg(rgb(0xf0f0f0)).text_color(rgb(if numbers { 0x202020 } else { 0x808080 })).child("格式"));
+                .px(px(3.)).bg(rgb(0xf0f0f0)).text_color(rgb(if numbers { 0x202020 } else { 0x808080 })).child(localization::current_dialog_control("ColumnEditor", 2032).unwrap_or("Format")));
         for (index, x, y, width) in [(0, 20., 32., 97.), (1, 90., 138., 38.), (2, 90., 155., 38.), (3, 90., 172., 38.)] {
             dialog = dialog.child(div().absolute().left(px(x * unit_x)).top(px(y * unit_y))
                 .w(px(width * unit_x)).h(px(12. * unit_y)).overflow_hidden().child(self.column_editor.fields[index].clone()));
         }
-        for (y, label) in [(140., "初始值(I):"), (157., "增量(Y):"), (174., "重复次数(R):"), (190., "开头补齐(L):")] {
+        for (y, source_id, label) in [(140., 2030, "Initial number:"), (157., 2031, "Increase by:"), (174., 2036, "Repeat:"), (190., 2038, "Leading:")] {
             dialog = dialog.child(div().absolute().left(px(10. * unit_x)).top(px(y * unit_y))
                 .w(px(76. * unit_x)).h(px(8. * unit_y)).flex().justify_end().whitespace_nowrap()
-                .text_color(rgb(if numbers { 0x202020 } else { 0x808080 })).child(label));
+                .text_color(rgb(if numbers { 0x202020 } else { 0x808080 })).child(localization::current_dialog_control("ColumnEditor", source_id).unwrap_or(label)));
         }
         if let Some(error) = &self.column_editor.error {
             dialog = dialog.child(
@@ -693,9 +702,9 @@ impl MatrixWindow {
             dialog = dialog.child(div().id("column-leading-options").absolute()
                 .left(px(90. * unit_x)).top(px(153. * unit_y)).w(px(100. * unit_x))
                 .border_1().bg(rgb(0xffffff)).occlude().children(
-                    [(ColumnFill::None, "无"), (ColumnFill::Zero, "补零"), (ColumnFill::Space, "补空格")].into_iter().enumerate().map(|(index, (fill, label))| {
+                    [(ColumnFill::None, "None"), (ColumnFill::Zero, "Zeros"), (ColumnFill::Space, "Spaces")].into_iter().enumerate().map(|(index, (fill, label))| {
                         div().id(("column-leading-option", index)).role(Role::MenuItem)
-                            .h(px(12. * unit_y)).px(px(4.)).child(label)
+                            .h(px(12. * unit_y)).px(px(4.)).child(localization::current_dialog_combo_item("ColumnEditor", 2039, index).unwrap_or(label))
                             .when(fill == self.column_editor.fill, |item| item.bg(rgb(0xcce4f7)))
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 view.column_editor.fill = fill;

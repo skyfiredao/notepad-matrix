@@ -17,7 +17,7 @@ mod drag;
 pub(super) mod layout;
 mod selection_geometry;
 mod shaped;
-pub(super) use chrome::EditorSymbols;
+pub(super) use chrome::{DEFAULT_EDITOR_FONT_FAMILY, EditorSymbols};
 use chrome::{DisplayRow, EditorDisplay, ScrollAxis};
 use layout::VisualRows;
 use shaped::EditorShapedLine;
@@ -105,14 +105,13 @@ pub(super) fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
-pub(super) use chrome::{GUTTER_LEFT, SCROLLBAR_SIZE, TEXT_TOP};
-use chrome::TEXT_VERTICAL_PADDING;
+pub(super) use chrome::{GUTTER_LEFT, SCROLLBAR_SIZE};
 
 #[derive(Default)]
 pub(super) struct EditorChrome {
     text_system: Option<Rc<gpui::WindowTextSystem>>,
     buffer: Option<crate::workspace::BufferId>,
-    positions: std::collections::BTreeMap<crate::workspace::BufferId, (usize, Pixels)>,
+    positions: std::collections::BTreeMap<crate::workspace::BufferId, (usize, Pixels, Pixels)>,
     p_width: f32,
     line_number_width: Option<Pixels>,
     collapsed: std::collections::BTreeMap<crate::workspace::BufferId, Vec<crate::editor::Document>>,
@@ -125,6 +124,7 @@ pub(super) struct EditorChrome {
     top_anchor: Option<usize>,
     pending_viewport: Option<crate::workspace::ViewportPosition>,
     unwrapped_horizontal_offset: Pixels,
+    unwrapped_content_width: Pixels,
     rectangle_pixels: Option<(usize, Pixels)>,
     selection_drag: Option<usize>,
     observed_selections: Option<crate::editor::SelectionSet>,
@@ -198,9 +198,10 @@ struct EditorLayoutKey {
 struct EditorLayout {
     key: EditorLayoutKey,
     rows: VisualRows,
-    shapes: Vec<Arc<EditorShapedLine>>,
+    shapes: std::cell::RefCell<std::collections::BTreeMap<usize, Arc<EditorShapedLine>>>,
     starts: Vec<usize>,
-    content_width: Pixels,
+    ends: Vec<usize>,
+    content_width: std::cell::Cell<Pixels>,
 }
 
 struct EditorScrollbars {
@@ -223,12 +224,13 @@ impl EditorScrollbars {
         content_width: Pixels,
         horizontal: Pixels,
         text_inset: Pixels,
+        vertical_padding: Pixels,
     ) -> Self {
         let height = (f32::from(bounds.size.height) - SCROLLBAR_SIZE).max(0.);
         let width = (f32::from(bounds.size.width) - SCROLLBAR_SIZE).max(0.);
         let vertical_track = chrome::scrollbar_track(height);
         let horizontal_track = chrome::scrollbar_track(width);
-        let capacity = ((height - TEXT_VERTICAL_PADDING) / f32::from(line_height))
+        let capacity = ((height - f32::from(vertical_padding)) / f32::from(line_height))
             .floor()
             .max(1.);
         Self {
@@ -522,6 +524,9 @@ fn shape_editor_row(
 ) -> (usize, EditorShapedLine) {
     let start = text.line_to_byte_idx(row, LineType::LF_CR);
     let raw = text.line(row, LineType::LF_CR).to_string();
+    let text_system = gpui::WindowTextSystem::new(
+        std::ops::Deref::deref(window.text_system().as_ref()).clone(),
+    );
     let projection = DisplayRow::with_preferences(
         raw_bytes,
         view.editor_symbols,
@@ -583,7 +588,7 @@ fn shape_editor_row(
                     view.style_colour("Non-printing characters custom color", "fgColor", 0xc0c0c0)
                 }),
             view.pref_bool("ScintillaPrimaryView.npcIncludeCcUniEOL", false),
-            window,
+            &text_system,
         ),
     )
 }
@@ -753,13 +758,19 @@ impl MatrixWindow {
         if let Some(previous) = self.editor_chrome.buffer.replace(id) {
             self.editor_chrome.positions.insert(
                 previous,
-                (self.editor_top_line, self.editor_horizontal_offset),
+                (
+                    self.editor_top_line,
+                    self.editor_horizontal_offset,
+                    self.editor_chrome.unwrapped_content_width,
+                ),
             );
         }
         let restored = self.editor_chrome.positions.get(&id).copied();
-        let (top, horizontal) = restored.unwrap_or((0, px(0.)));
+        let (top, horizontal, content_width) = restored.unwrap_or((0, px(0.), px(1.)));
         self.editor_top_line = top;
         self.editor_horizontal_offset = horizontal;
+        self.editor_chrome.content_width = content_width;
+        self.editor_chrome.unwrapped_content_width = content_width;
         self.editor_follow_caret = restored.is_none();
         self.editor_lines.clear();
         self.editor_bounds = None;
@@ -825,7 +836,7 @@ impl MatrixWindow {
             })
             .head;
         let row = layout.rows.row_for_byte(display.0);
-        let capacity = ((f32::from(bounds.size.height) - SCROLLBAR_SIZE - TEXT_VERTICAL_PADDING)
+        let capacity = ((f32::from(bounds.size.height) - SCROLLBAR_SIZE - f32::from(self.editor_vertical_padding()))
             / f32::from(self.editor_line_height()))
         .floor()
         .max(1.) as usize;
@@ -871,8 +882,8 @@ impl MatrixWindow {
         }
         let text = self.editor().display_snapshot();
         let mut rows = VisualRows::default();
-        let mut shapes = Vec::new();
         let mut starts = Vec::new();
+        let mut ends = Vec::new();
         let space_width = window
             .text_system()
             .shape_line(
@@ -891,55 +902,68 @@ impl MatrixWindow {
             .width();
         let folds = self.udl_fold_ranges();
         let baseline = self.editor_style_baseline();
-        for (logical, raw_bytes) in self.editor().display_byte_snapshot().lines().enumerate() {
-            let raw = text.line(logical, LineType::LF_CR).to_string();
-            let content = raw.trim_end_matches(['\r', '\n']);
-            let (start, shape) = shape_editor_row(
-                self,
-                &text,
-                logical,
-                &raw_bytes,
-                space_width,
-                baseline,
-                window,
-            );
-            let indent_byte = content
-                .char_indices()
-                .find(|(_, ch)| !matches!(ch, ' ' | '\t'))
-                .map_or(content.len(), |(byte, _)| byte);
-            let mut indent = shape.x_for_index(indent_byte);
-            indent = match self
-                .pref_string("ScintillaPrimaryView.lineWrapMethod", "aligned")
-                .as_str()
-            {
-                "default" => px(0.),
-                "indent" => indent + space_width * self.editor().tab_preferences().size as f32,
-                _ => indent,
-            };
-            if indent > width - space_width * 15. {
-                indent = px(0.);
+        if self.editor_word_wrap_enabled() {
+            for (logical, raw_bytes) in self.editor().display_byte_snapshot().lines().enumerate() {
+                let raw = text.line(logical, LineType::LF_CR).to_string();
+                let content = raw.trim_end_matches(['\r', '\n']);
+                let (start, shape) = shape_editor_row(
+                    self,
+                    &text,
+                    logical,
+                    &raw_bytes,
+                    space_width,
+                    baseline,
+                    window,
+                );
+                starts.push(start);
+                ends.push(start + content.len());
+                let indent_byte = content
+                    .char_indices()
+                    .find(|(_, ch)| !matches!(ch, ' ' | '\t'))
+                    .map_or(content.len(), |(byte, _)| byte);
+                let mut indent = shape.x_for_index(indent_byte);
+                indent = match self
+                    .pref_string("ScintillaPrimaryView.lineWrapMethod", "aligned")
+                    .as_str()
+                {
+                    "default" => px(0.),
+                    "indent" => indent + space_width * self.editor().tab_preferences().size as f32,
+                    _ => indent,
+                };
+                if indent > width - space_width * 15. {
+                    indent = px(0.);
+                }
+                let mut ranges = layout::wrap_ranges(
+                    content,
+                    f32::from(width),
+                    f32::from(indent),
+                    |byte| f32::from(shape.x_for_index(byte)),
+                );
+                if self.editor_symbols.eol
+                    && raw.len() > content.len()
+                    && let Some(last) = ranges.last()
+                    && !last.is_empty()
+                    && shape.width() - shape.x_for_index(last.start)
+                        + if ranges.len() > 1 { indent } else { px(0.) }
+                        > width
+                {
+                    ranges.push(content.len()..content.len());
+                }
+                rows.push_line(logical, start, &ranges, f32::from(indent));
             }
-            let mut ranges = if self.editor_word_wrap_enabled() {
-                layout::wrap_ranges(content, f32::from(width), f32::from(indent), |byte| {
-                    f32::from(shape.x_for_index(byte))
-                })
-            } else {
-                std::iter::once(0..content.len()).collect()
-            };
-            if self.editor_word_wrap_enabled()
-                && self.editor_symbols.eol
-                && raw.len() > content.len()
-                && let Some(last) = ranges.last()
-                && !last.is_empty()
-                && shape.width() - shape.x_for_index(last.start)
-                    + if ranges.len() > 1 { indent } else { px(0.) }
-                    > width
-            {
-                ranges.push(content.len()..content.len());
+        } else {
+            let mut start = 0;
+            for (logical, raw) in text.lines(LineType::LF_CR).enumerate() {
+                let mut content_len = raw.len();
+                while content_len > 0 && matches!(raw.byte(content_len - 1), b'\r' | b'\n') {
+                    content_len -= 1;
+                }
+                let end = start + content_len;
+                rows.push_line(logical, start, &[0..end - start], 0.);
+                starts.push(start);
+                ends.push(end);
+                start += raw.len();
             }
-            rows.push_line(logical, start, &ranges, f32::from(indent));
-            starts.push(start);
-            shapes.push(Arc::new(shape));
         }
         let collapsed: Vec<_> = folds
             .into_iter()
@@ -947,16 +971,56 @@ impl MatrixWindow {
             .collect();
         rows.hide_folded(&collapsed);
         rows.hide_lines(&key.hidden);
-        let content_width = rows.rows().iter()
-            .map(|row| shapes[row.logical_line].width())
-            .fold(px(0.), Pixels::max);
+        let content_width = self.editor_chrome.layout.as_ref()
+            .filter(|layout| layout.key.revision == key.revision && layout.key.display == key.display)
+            .map_or(
+                self.editor_chrome.unwrapped_content_width.max(px(1.)),
+                |layout| layout.content_width.get(),
+            );
         Arc::new(EditorLayout {
             key,
             rows,
-            shapes,
+            shapes: Default::default(),
             starts,
-            content_width,
+            ends,
+            content_width: std::cell::Cell::new(content_width),
         })
+    }
+
+    fn editor_row_bytes(&self, logical: usize) -> Result<Vec<u8>, EditError> {
+        let bytes = self.editor().display_byte_snapshot();
+        let start = bytes.line_start(logical).map_err(|_| EditError::InvalidRange)?;
+        let end = if logical + 1 < bytes.line_count() {
+            bytes.line_start(logical + 1).map_err(|_| EditError::InvalidRange)?
+        } else {
+            bytes.len()
+        };
+        bytes.slice(start..end)
+            .map(|bytes| bytes.to_vec())
+            .map_err(|_| EditError::InvalidRange)
+    }
+
+    fn editor_row_shape(
+        &self,
+        layout: &EditorLayout,
+        logical: usize,
+        window: &Window,
+    ) -> Result<Arc<EditorShapedLine>, EditError> {
+        if let Some(shape) = layout.shapes.borrow().get(&logical) {
+            return Ok(shape.clone());
+        }
+        let text = self.editor().display_snapshot();
+        let bytes = self.editor_row_bytes(logical)?;
+        let (_, shape) = shape_editor_row(
+            self,
+            &text,
+            logical,
+            &bytes,
+            self.editor_space_width(window),
+            self.editor_style_baseline(),
+            window,
+        );
+        Ok(Arc::new(shape))
     }
 
     fn editor_text_width(&self) -> Pixels {
@@ -1001,7 +1065,7 @@ impl MatrixWindow {
         self.editor_chrome.content_width = if self.editor_word_wrap_enabled() {
             (width - px(1.)).max(px(0.))
         } else {
-            layout.content_width
+            layout.content_width.get()
         };
         self.editor_chrome.layout = Some(layout);
     }
@@ -1416,7 +1480,7 @@ impl MatrixWindow {
                     .id(("editor-hidden-lines", row))
                     .absolute()
                     .left(self.editor_line_number_width())
-                    .top(px(TEXT_TOP) + row_height * row as f32)
+                    .top(self.editor_text_top() + row_height * row as f32)
                     .w(px(12.))
                     .h(row_height)
                     .text_size(px(11.))
@@ -1552,6 +1616,15 @@ impl MatrixWindow {
     pub(super) fn editor_zoom_delta(&self) -> i32 {
         self.editor_chrome.display.zoom()
     }
+    fn editor_added_padding(&self) -> Pixels {
+        self.editor_text_system().map_or(
+            self.editor_font_size() / 4.,
+            |text_system| {
+                let font = text_system.resolve_font(&gpui::font(self.editor_font_family()));
+                text_system.layout_width(font, self.editor_font_size(), ' ') / 2.
+            },
+        )
+    }
     pub(super) fn editor_text_origin(&self) -> Pixels {
         px(chrome::TEXT_LEFT) + self.editor_line_number_width() - px(32.) - px(14.)
             + self.editor_fold_margin_width()
@@ -1560,6 +1633,7 @@ impl MatrixWindow {
             + self.editor_history_margin_width()
             - px(9.)
             + px(self.appearance_padding(true))
+            + self.editor_added_padding()
     }
     fn editor_text_inset(&self) -> Pixels {
         self.editor_text_origin() + px(chrome::TEXT_RIGHT_PADDING + self.appearance_padding(false))
@@ -1744,9 +1818,15 @@ impl MatrixWindow {
     pub(super) fn editor_line_height(&self) -> Pixels {
         self.editor_style_line_height().max(px(1.))
     }
+    pub(super) fn editor_text_top(&self) -> Pixels {
+        px(chrome::TEXT_LEFT - chrome::GUTTER_WIDTH) + self.editor_added_padding() * 0.8
+    }
+    fn editor_vertical_padding(&self) -> Pixels {
+        self.editor_text_top() + px(chrome::TEXT_TOP)
+    }
     pub(super) fn editor_visible_capacity(&self) -> usize {
         self.editor_bounds.map_or(50, |bounds| {
-            ((f32::from(bounds.size.height) - SCROLLBAR_SIZE - TEXT_VERTICAL_PADDING)
+            ((f32::from(bounds.size.height) - SCROLLBAR_SIZE - f32::from(self.editor_vertical_padding()))
                 / f32::from(self.editor_line_height()))
             .floor()
             .max(1.) as usize
@@ -1872,6 +1952,7 @@ impl MatrixWindow {
             self.editor_chrome.content_width,
             self.editor_horizontal_offset,
             self.editor_text_inset(),
+            self.editor_vertical_padding(),
         ))
     }
 
@@ -1986,7 +2067,7 @@ impl MatrixWindow {
         self.dispatch_actual_first_line_edits(cx);
         self.invalidate_changed_incremental_count();
         if result.is_ok() {
-            self.restart_appearance_caret(self.pref_int("Caret.blinkRate", 600), window, cx);
+            self.restart_appearance_caret(self.pref_int("Caret.blinkRate", 500), window, cx);
             if self.workspace.smart_highlight_allowed() {
                 self.update_appearance_smart_token();
             } else {
@@ -2023,7 +2104,7 @@ impl MatrixWindow {
             }
         }
         self.macro_step_pending = false;
-        self.editor_error = result.err().map(|error| error.to_string());
+        self.editor_error = result.err().map(|error| crate::localization::Text::from(error.to_string()));
         if self.editor_error.is_some() {
             self.editor_error_revision = self.editor_error_revision.wrapping_add(1);
         }
@@ -2376,7 +2457,7 @@ impl MatrixWindow {
         let mut ranges = Vec::new();
         for visual in &layout.rows.rows()[top..=bottom] {
             let start = layout.starts[visual.logical_line];
-            let shape = &layout.shapes[visual.logical_line];
+            let shape = self.editor_row_shape(&layout, visual.logical_line, window)?;
             let geometry = selection_geometry::RowGeometry {
                 start: visual.range.start,
                 end: visual.range.end,
@@ -2385,7 +2466,7 @@ impl MatrixWindow {
             };
             let hit = |x: Pixels| {
                 let offset = shape.x_for_index(visual.range.start - start) - px(visual.indent);
-                let nearest = self.closest_editor_index_for_x(shape, start, x + offset)?;
+                let nearest = self.closest_editor_index_for_x(&shape, start, x + offset)?;
                 let (mut byte, virtual_space) = geometry.hit(
                     f32::from(x + offset),
                     |_| start + nearest,
@@ -2433,7 +2514,7 @@ impl MatrixWindow {
                 let selected = selected.selection;
                 let visual = &layout.rows.rows()[layout.rows.row_for_byte(selected.head.0)];
                 let logical_start = layout.starts[visual.logical_line];
-                let logical_end = logical_start + layout.shapes[visual.logical_line].content_len();
+                let logical_end = layout.ends[visual.logical_line];
                 let head = if end {
                     let visual_end = if visual.last {
                         visual.range.end
@@ -2522,7 +2603,7 @@ impl MatrixWindow {
             let selection = selected.selection;
             let row = layout.rows.row_for_byte(selection.head.0);
             let current = &layout.rows.rows()[row];
-            let current_shape = &layout.shapes[current.logical_line];
+            let current_shape = self.editor_row_shape(&layout, current.logical_line, window)?;
             let current_start = layout.starts[current.logical_line];
             let x = ((index == selections.primary_index())
                 .then_some(self.editor_preferred_x)
@@ -2541,11 +2622,11 @@ impl MatrixWindow {
             } else {
                 let target_row = if down { row + 1 } else { row - 1 };
                 let target = &layout.rows.rows()[target_row];
-                let shape = &layout.shapes[target.logical_line];
+                let shape = self.editor_row_shape(&layout, target.logical_line, window)?;
                 let start = layout.starts[target.logical_line];
                 let target_x =
                     x - px(target.indent) + shape.x_for_index(target.range.start - start);
-                let mut byte = (start + self.closest_editor_index_for_x(shape, start, target_x)?)
+                let mut byte = (start + self.closest_editor_index_for_x(&shape, start, target_x)?)
                     .clamp(target.range.start, target.range.end);
                 if !target.last && byte == target.range.end && byte > target.range.start {
                     byte = self.editor().adjacent_position(ByteOffset(byte), false)?.0;
@@ -2784,10 +2865,11 @@ impl MatrixWindow {
             let selection = selections.primary().selection;
             let layout = self.editor_layout_for_width(self.editor_text_width(), window);
             let row = layout.rows.row_for_byte(selection.head.0);
+            let current_shape = self.editor_row_shape(&layout, layout.rows.rows()[row].logical_line, window)?;
             let x = self.editor_preferred_x.unwrap_or_else(|| {
                 let visual = &layout.rows.rows()[row];
                 let start = layout.starts[visual.logical_line];
-                let shape = &layout.shapes[visual.logical_line];
+                let shape = &current_shape;
                 shape.x_for_index(selection.head.0 - start)
                     - shape.x_for_index(visual.range.start - start)
                     + px(visual.indent)
@@ -2809,10 +2891,10 @@ impl MatrixWindow {
             } else {
                 let target = &layout.rows.rows()[target_row];
                 let start = layout.starts[target.logical_line];
-                let shape = &layout.shapes[target.logical_line];
+                let shape = self.editor_row_shape(&layout, target.logical_line, window)?;
                 let target_x =
                     x - px(target.indent) + shape.x_for_index(target.range.start - start);
-                let mut byte = (start + self.closest_editor_index_for_x(shape, start, target_x)?)
+                let mut byte = (start + self.closest_editor_index_for_x(&shape, start, target_x)?)
                     .clamp(target.range.start, target.range.end);
                 if !target.last && byte == target.range.end && byte > target.range.start {
                     byte = self.editor().adjacent_position(ByteOffset(byte), false)?.0;
@@ -2838,7 +2920,7 @@ impl MatrixWindow {
                 let anchor_row = layout.rows.row_for_byte(anchor.selection.anchor.0);
                 let visual = &layout.rows.rows()[anchor_row];
                 let start = layout.starts[visual.logical_line];
-                let shape = &layout.shapes[visual.logical_line];
+                let shape = self.editor_row_shape(&layout, visual.logical_line, window)?;
                 let anchor_x = shape.x_for_index(anchor.selection.anchor.0 - start)
                     - shape.x_for_index(visual.range.start - start)
                     + px(visual.indent)
@@ -2903,7 +2985,13 @@ impl MatrixWindow {
                     let row = layout.rows.row_for_byte(selection.selection.anchor.0);
                     let visual = &layout.rows.rows()[row];
                     let start = layout.starts[visual.logical_line];
-                    let shape = &layout.shapes[visual.logical_line];
+                    let shape = match self.editor_row_shape(&layout, visual.logical_line, window) {
+                        Ok(shape) => shape,
+                        Err(error) => {
+                            self.editor_changed(Err(error), window, cx);
+                            return;
+                        }
+                    };
                     (
                         row,
                         shape.x_for_index(selection.selection.anchor.0 - start)
@@ -3224,7 +3312,7 @@ impl MatrixWindow {
         self.editor_chrome.content_width = if self.editor_word_wrap_enabled() {
             (self.editor_text_width() - px(1.)).max(px(0.))
         } else {
-            layout.content_width
+            layout.content_width.get()
         };
         self.editor_chrome.layout = Some(layout);
         let viewport_width = self
@@ -3761,7 +3849,7 @@ impl MatrixWindow {
                     .h(px(SCROLLBAR_SIZE))
                     .cursor(CursorStyle::Arrow),
             )
-            .when_some(self.editor_error.clone(), |editor, error| {
+            .when_some(self.editor_error.as_ref().map(|error| error.render(&self.native_locale())), |editor, error| {
                 editor.child(
                     div()
                         .id("editor-error")
@@ -3822,6 +3910,10 @@ impl MatrixWindow {
     }
 
     pub(super) fn notify_editor_error(&mut self, error: String, cx: &mut Context<Self>) {
+        self.notify_localized_editor_error(error.into(), cx);
+    }
+
+    pub(super) fn notify_localized_editor_error(&mut self, error: crate::localization::Text, cx: &mut Context<Self>) {
         self.editor_error_revision = self.editor_error_revision.wrapping_add(1);
         if self.editor_error.as_ref() != Some(&error) {
             self.editor_error = Some(error);
@@ -4111,6 +4203,7 @@ impl Element for EditorElement {
             }
             let text = view.editor().display_snapshot();
             let mut lines = Vec::new();
+            let mut visible_shapes = std::collections::BTreeMap::new();
             let text_origin = view.editor_text_origin();
             let text_inset = view.editor_text_inset();
             let text_width = (bounds.size.width - text_inset - px(SCROLLBAR_SIZE)).max(px(1.));
@@ -4119,12 +4212,12 @@ impl Element for EditorElement {
             let mut content_width = if view.editor_word_wrap_enabled() {
                 (text_width - px(1.)).max(px(0.))
             } else {
-                layout.content_width
+                layout.content_width.get()
             };
-            let mut top = bounds.top() + px(TEXT_TOP);
+            let mut top = bounds.top() + view.editor_text_top();
             let line_height = view.editor_line_height();
             let capacity =
-                ((f32::from(bounds.size.height) - SCROLLBAR_SIZE - TEXT_VERTICAL_PADDING)
+                ((f32::from(bounds.size.height) - SCROLLBAR_SIZE - f32::from(view.editor_vertical_padding()))
                     / f32::from(line_height))
                 .floor()
                 .max(1.) as usize;
@@ -4170,7 +4263,23 @@ impl Element for EditorElement {
                 let visual = &layout.rows.rows()[index];
                 let logical = visual.logical_line;
                 let raw = text.line(logical, LineType::LF_CR).to_string();
-                let shape = layout.shapes[logical].clone();
+                let shape = if let Some(shape) = visible_shapes.get(&logical) {
+                    Arc::clone(shape)
+                } else {
+                    match view.editor_row_shape(&layout, logical, window) {
+                        Ok(shape) => {
+                            visible_shapes.insert(logical, shape.clone());
+                            shape
+                        }
+                        Err(error) => {
+                            view.notify_editor_error(error.to_string(), cx);
+                            break;
+                        }
+                    }
+                };
+                if !view.editor_word_wrap_enabled() {
+                    content_width = content_width.max(shape.width());
+                }
                 let logical_start = layout.starts[logical];
                 let start = visual.range.start;
                 let end = visual.range.end;
@@ -4291,6 +4400,11 @@ impl Element for EditorElement {
                         }
                     }
                 }
+            }
+            layout.shapes.replace(visible_shapes);
+            if !view.editor_word_wrap_enabled() {
+                layout.content_width.set(content_width);
+                view.editor_chrome.unwrapped_content_width = content_width;
             }
             let mut horizontal_offset = if view.editor_word_wrap_enabled() {
                 px(0.)
@@ -4466,7 +4580,7 @@ impl Element for EditorElement {
             let current_line_colour = colour(
                 "Current line background colour",
                 "bgColor",
-                if dark { 0x101010 } else { 0xe8e8ff },
+                if dark { 0x101010 } else { 0xfbfcd9 },
             );
             let guide_style = view.style_config.config.effective_global_style(37, dark);
             let guide_mask = guide_style.as_ref().and_then(|style| style.attributes.get("colorStyle"))
@@ -4494,6 +4608,8 @@ impl Element for EditorElement {
                 [prepaint.layout.rows.row_for_byte(selection.head.0)]
             .logical_line;
             let line_height = view.editor_line_height();
+            let caret_font = window.text_system().resolve_font(&gpui::font(view.editor_font_family()));
+            let caret_cap_height = window.text_system().cap_height(caret_font, view.editor_font_size());
             window.handle_input(
                 &focus,
                 ElementInputHandler::new(bounds, self.view.clone()),
@@ -4549,13 +4665,23 @@ impl Element for EditorElement {
                         let indicator_mode =
                             view.pref_int("ScintillaPrimaryView.currentLineIndicator", 1);
                         if caret_logical == line.logical_line && indicator_mode == 1 {
-                            window.paint_quad(fill(
-                                Bounds::new(
-                                    point(text_bounds.left(), line.origin.y),
-                                    size(text_bounds.size.width, line_height),
+                            let highlight = Bounds::new(
+                                point(
+                                    text_bounds.left(),
+                                    line.clip.top(),
                                 ),
+                                size(text_bounds.size.width, line.clip.size.height),
+                            );
+                            window.paint_quad(fill(
+                                highlight,
                                 current_line_colour,
                             ));
+                            for top in [highlight.top(), highlight.bottom() - px(2.)] {
+                                window.paint_quad(fill(
+                                    Bounds::new(point(highlight.left(), top), size(highlight.size.width, px(2.))),
+                                    rgb(if dark { 0x303030 } else { 0xf0f0f0 }),
+                                ));
+                            }
                         }
                         let mut clip = line.clip;
                         if line.last {
@@ -4700,8 +4826,8 @@ impl Element for EditorElement {
                                 {
                                     window.paint_quad(fill(
                                         Bounds::new(
-                                            point(line.origin.x + px(span.start), line.origin.y),
-                                            size(px(span.end - span.start), line_height),
+                                            point(line.origin.x + px(span.start), line.clip.top()),
+                                            size(px(span.end - span.start), line.clip.size.height),
                                         ),
                                         if index == selections.primary_index() {
                                             selection_colour
@@ -4759,9 +4885,27 @@ impl Element for EditorElement {
                             if let Err(error) = line.paint_change_history(&history_spans, view, line_height, window) {
                                 failure = Some(error);
                             }
-                            if focused && view.appearance_caret_visible() {
+                        });
+                        if focused && view.appearance_caret_visible() {
+                            let caret_top_extension = (line_height - line.shape.baseline() * 2. + caret_cap_height).max(px(0.)).round();
+                            let caret_height = line_height + caret_top_extension;
+                            let caret_trim = caret_height * 0.05;
+                            let caret_body_height = caret_height - caret_trim * 2.;
+                            let ink = selections.ranges().iter()
+                                .any(|selected| line.owns_caret(selected.selection.head.0))
+                                .then(|| line.shape.ink_vertical_bounds(window))
+                                .flatten()
+                                .unwrap_or_else(|| line.shape.baseline() - caret_cap_height..line.shape.baseline());
+                            let caret_top = (line.origin.y + (ink.start + ink.end - caret_body_height) / 2.).round();
+                            let caret_clip_top = clip.top().min(caret_top);
+                            let caret_clip_bottom = clip.bottom().max(caret_top + caret_body_height);
+                            let caret_clip = Bounds::new(
+                                point(clip.left(), caret_clip_top),
+                                size(clip.size.width, caret_clip_bottom - caret_clip_top),
+                            );
+                            window.with_content_mask(Some(ContentMask { bounds: caret_clip }), |window| {
                                 for (index, selected) in selections.ranges().iter().enumerate() {
-                                    let caret_width = view.pref_int("Caret.width", 1);
+                                    let caret_width = view.pref_int("Caret.width", 2);
                                     if caret_width == 0 {
                                         continue;
                                     }
@@ -4807,16 +4951,23 @@ impl Element for EditorElement {
                                             Bounds::new(
                                                 point(
                                                     line.origin.x + px(x),
-                                                    line.origin.y
-                                                        + if overwrite {
-                                                            line_height - px(2.)
-                                                        } else {
-                                                            px(0.)
-                                                        },
+                                                    if overwrite {
+                                                        line.origin.y + line_height - px(2.)
+                                                    } else if caret_width < 4 {
+                                                        caret_top
+                                                    } else {
+                                                        line.origin.y
+                                                    },
                                                 ),
                                                 size(
                                                     width,
-                                                    if overwrite { px(2.) } else { line_height },
+                                                    if overwrite {
+                                                        px(2.)
+                                                    } else if caret_width < 4 {
+                                                        caret_body_height
+                                                    } else {
+                                                        line_height
+                                                    },
                                                 ),
                                             ),
                                             if index == selections.primary_index() {
@@ -4850,8 +5001,8 @@ impl Element for EditorElement {
                                         }
                                     }
                                 }
-                            }
-                        });
+                            });
+                        }
                         if caret_logical == line.logical_line && indicator_mode == 2 {
                             paint_current_line_frame(
                                 Bounds::new(
@@ -4865,7 +5016,7 @@ impl Element for EditorElement {
                                 view.style_colour(
                                     "Current line background colour",
                                     "bgColor",
-                                    if dark { 0x101010 } else { 0xe8e8ff },
+                                    if dark { 0x101010 } else { 0xfbfcd9 },
                                 ),
                                 window,
                             );
@@ -4898,6 +5049,7 @@ impl Element for EditorElement {
                 prepaint.content_width,
                 prepaint.horizontal_offset,
                 view.editor_text_inset(),
+                view.editor_vertical_padding(),
             );
             let vertical = bars.vertical.thumb();
             let horizontal = bars.horizontal.thumb();

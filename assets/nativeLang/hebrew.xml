@@ -418,6 +418,65 @@
 				</Operator>
 			</UserDefine>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="אישור"/>
+			<common-cancel value="ביטול"/>
+			<common-name value="שם"/>
+			<discover-file-candidates-title value="מאתר קבצים מועמדים..."/>
+			<matrix-close value="סגור"/>
+			<matrix-retry value="נסה שוב"/>
+			<matrix-cancelled value="בוטל"/>
+			<matrix-read-only value="לקריאה בלבד"/>
+			<matrix-find-status-details value="פרטי מצב"/>
+			<matrix-find-resize-results value="שנה את גודל תוצאות החיפוש"/>
+			<matrix-find-backward-unavailable value="חיפוש לאחור באמצעות ביטוי רגולרי מושבת"/>
+			<matrix-hash-select-files value="בחר קבצים"/>
+			<matrix-hash-calculating value="מחשב תקציר…"/>
+			<matrix-hash-selection-failed value="בחירת הקבצים נכשלה: $ERROR$"/>
+			<matrix-hash-read-failed value="לא ניתן לקרוא את הקבצים הבאים:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="סגור שגיאה"/>
+			<matrix-hash-file-paths value="נתיבי קבצים (לקריאה בלבד)"/>
+			<matrix-hash-digest-result value="תוצאת התקציר (לקריאה בלבד)"/>
+			<matrix-hash-source-text value="טקסט המקור לתקציר"/>
+			<matrix-hash-selection-composition value="גיבוב הבחירה בזמן הרכבת טקסט פעילה טרם מומש"/>
+			<matrix-hash-selection-read-failed value="לא ניתן לקרוא את הבחירה: $ERROR$"/>
+			<matrix-window-activation-failed value="לא ניתן לעבור לקובץ שנבחר"/>
+			<matrix-window-selection-unavailable value="הקובץ שנבחר סגור או שאי אפשר להפעילו"/>
+			<matrix-incremental-position value="הזז את סרגל החיפוש ההדרגתי"/>
+			<matrix-find-progress-bar value="סרגל התקדמות"/>
+			<matrix-find-previous-search value="הצג חיפוש קודם"/>
+			<matrix-find-results-summary value="תוצאות חיפוש - ($INT_REPLACE$ התאמות)"/>
+			<matrix-udl-allow-code2-close value="אפשר סגירת קוד 2"/>
+			<matrix-udl-allow-code2-middle value="אפשר אמצע קוד 2"/>
+			<matrix-udl-allow-code2-open value="אפשר פתיחת קוד 2"/>
+			<matrix-udl-allow-comment-fold-close value="אפשר סגירת קיפול הערות"/>
+			<matrix-udl-allow-comment-fold-middle value="אפשר אמצע קיפול הערות"/>
+			<matrix-udl-allow-comment-fold-open value="אפשר פתיחת קיפול הערות"/>
+			<matrix-udl-choose-json value="בחר קובץ הגדרת UDL בתבנית JSON"/>
+			<matrix-udl-close value="סגור שפה מוגדרת משתמש"/>
+			<matrix-udl-close-styler value="סגור עורך סגנון"/>
+			<matrix-udl-colors value="צבעים"/>
+			<matrix-udl-dark-mode-language value="שפה למצב כהה"/>
+			<matrix-udl-definition-exported value="ההגדרה יוצאה"/>
+			<matrix-udl-definitions-saved value="ההגדרות נשמרו"/>
+			<matrix-udl-enable-font value="הפעל גופן"/>
+			<matrix-udl-error value="שגיאת שפה מוגדרת משתמש: $ERROR$"/>
+			<matrix-udl-file-failed value="פעולת קובץ UDL נכשלה: $ERROR$"/>
+			<matrix-udl-file-progress value="פעולת קובץ מתבצעת…"/>
+			<matrix-udl-import-rejected value="הייבוא נדחה: $ERROR$"/>
+			<matrix-udl-imported value="יובאו $COUNT$ שפות"/>
+			<matrix-udl-live-edits value="שפה מוגדרת משתמש — שינויים מוחלים מיד רק על מסמכים המשתמשים בשפה זו"/>
+			<matrix-udl-loading value="טוען הגדרות…"/>
+			<matrix-udl-memory-only value="ההגדרות נמצאות בזיכרון בלבד (אין תיקיית תצורה)"/>
+			<matrix-udl-missing-ids value="חסרים מזהי שפות מוגדרות משתמש: $IDS$. טקסט המסמך וזהויות השפות השמורות נשמרו. שחזר את ההגדרות או בחר במפורש שפה אחרת."/>
+			<matrix-udl-open-panel-disconnected value="חלונית הפתיחה של UDL נותקה: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="להסיר הגדרה זו בעלת השם? מסמכים קיימים ישמרו על הטקסט שלהם ויעברו לשפה מוגדרת משתמש ללא שם."/>
+			<matrix-udl-retry-file value="נסה שוב את פעולת קובץ UDL"/>
+			<matrix-udl-save-panel-disconnected value="חלונית השמירה של UDL נותקה: $ERROR$"/>
+			<matrix-udl-unavailable value="ההגדרות אינן זמינות; תקן את udl.json ונסה שוב."/>
+			<matrix-udl-use-background value="השתמש ברקע"/>
+			<matrix-udl-use-foreground value="השתמש בחזית"/>
+			<matrix-udl-working-copy value="מוגדר משתמש (עותק עבודה)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>
-

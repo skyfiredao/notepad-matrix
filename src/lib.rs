@@ -8,6 +8,7 @@ pub mod character_panel;
 pub mod clipboard;
 pub mod codepages;
 pub mod config;
+pub mod config_directory;
 pub mod context_menu;
 pub mod converter;
 pub mod editor;

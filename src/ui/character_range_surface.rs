@@ -1,4 +1,5 @@
 use super::*;
+use crate::localization;
 use super::dialog_font::px;
 
 #[derive(Clone, PartialEq, gpui::Action)]
@@ -79,8 +80,11 @@ impl MatrixWindow {
                     .take_while(char::is_ascii_digit).collect::<String>().parse::<u8>().ok()),
         };
         let Some((low, high)) = limits.filter(|(low, high)| low <= high) else {
-            let response = window.prompt(gpui::PromptLevel::Warning, "阈值问题",
-                Some("您应当输入 0-255 之间的数字。"), &[gpui::PromptButton::ok("确定")], cx);
+            let locale = self.native_locale();
+            let response = window.prompt(gpui::PromptLevel::Warning,
+                localization::dialog_title(&locale, "FindCharRangeValueError").unwrap_or("Range Value problem"),
+                Some(localization::dialog_message(&locale, "FindCharRangeValueError").unwrap_or("You should type between 0 and 255.")),
+                &[gpui::PromptButton::ok("确定")], cx);
             cx.spawn_in(window, async move |_, _| {
                 if let Err(error) = response.await { eprintln!("character range warning failed: {error}"); }
             }).detach();
@@ -138,7 +142,7 @@ impl MatrixWindow {
         div()
             .id("character-range-dialog")
             .role(Role::Dialog)
-            .aria_label("查找范围内的字符...")
+            .aria_label(localization::dialog_title(&self.native_locale(), "FindCharsInRange").unwrap_or("Find Characters in Range..."))
             .key_context("MatrixCharacterRange")
             .on_action(cx.listener(|view, action: &RangeOption, window, cx| {
                 view.character_range_option(action.0, window, cx);
@@ -151,13 +155,13 @@ impl MatrixWindow {
             .text_size(px(13.))
             .children(
                 [
-                    (0, "range-non-ascii", "非 ASCII 字符 (128-255) (N)"),
-                    (1, "range-ascii", "ASCII 字符 (0-127) (A)"),
-                    (2, "range-custom", "自定义范围 (0-255) (R):"),
+                    (0, "range-non-ascii", "Non-ASCII characters (128–255)"),
+                    (1, "range-ascii", "ASCII characters (0–127)"),
+                    (2, "range-custom", "Custom range (0–255):"),
                 ]
                 .into_iter()
                 .map(|(index, id, label)| {
-                    find_surface::radio(id, label, self.character_range.mode == index)
+                    find_surface::radio(id, localization::current_dialog_control("FindCharsInRange", 2901 + index as u32).unwrap_or(label), self.character_range.mode == index)
                         .track_focus(&self.character_range.mode_focus[index].clone().tab_stop(self.character_range.mode == index))
                         .absolute()
                         .left(px(12.))
@@ -190,11 +194,11 @@ impl MatrixWindow {
             .child(
                 div().absolute().left(px(12.)).top(px(98.)).w(px(130.)).h(px(63.))
                     .border_1().border_color(rgb(0xd6d6d6))
-                    .child(div().absolute().left(px(6.)).top(px(-9.)).bg(rgb(0xffffff)).child("方向"))
-                    .children([("range-up", "向上(U)", true), ("range-down", "向下(D)", false)]
+                    .child(div().absolute().left(px(6.)).top(px(-9.)).bg(rgb(0xffffff)).child(localization::current_dialog_control("FindCharsInRange", 2908).unwrap_or("Direction")))
+                    .children([("range-up", "Up", true), ("range-down", "Down", false)]
                         .into_iter().enumerate().map(|(index, (id, label, backward))| {
                             let selected = self.character_range.backwards == backward;
-                            find_surface::radio(id, label, selected)
+                            find_surface::radio(id, localization::current_dialog_control("FindCharsInRange", 2906 + index as u32).unwrap_or(label), selected)
                                 .track_focus(&self.character_range.direction_focus[index].clone().tab_stop(selected))
                                 .absolute().left(px(11.)).top(px(21. + index as f32 * 21.))
                                 .on_click(cx.listener(move |view, _, window, cx| view.character_range_option(2906 + index as u32, window, cx)))
@@ -210,7 +214,7 @@ impl MatrixWindow {
                         })),
             )
             .child(
-                find_surface::checkbox("range-wrap", "循环查找(P)", self.character_range.wrap)
+                find_surface::checkbox("range-wrap", localization::current_dialog_control("FindCharsInRange", 2909).unwrap_or("Wrap around"), self.character_range.wrap)
                     .focusable().tab_index(4)
                     .absolute()
                     .left(px(150.))
@@ -224,14 +228,14 @@ impl MatrixWindow {
                     })),
             )
             .child(
-                find_surface::source_button("range-find-next", "查找(F)", 10.)
+                find_surface::source_button("range-find-next", localization::current_dialog_control("FindCharsInRange", 2910).unwrap_or("Find"), 10.)
                     .right(px(12.)).w(px(123.))
                     .on_click(
                         cx.listener(|view, _, window, cx| view.find_character_range(window, cx)),
                     ),
             )
             .child(
-                find_surface::source_button("range-close", "关闭(C)", 42.)
+                find_surface::source_button("range-close", localization::current_dialog_control("FindCharsInRange", 2).unwrap_or("Close"), 42.)
                     .right(px(12.)).w(px(123.))
                     .on_click(cx.listener(|view, _, window, cx| {
                         view.dismiss_floating(

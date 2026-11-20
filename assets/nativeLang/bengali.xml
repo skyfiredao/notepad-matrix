@@ -884,5 +884,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="ঠিক আছে"/>
+			<common-cancel value="বাতিল"/>
+			<common-name value="নাম"/>
+			<discover-file-candidates-title value="সম্ভাব্য ফাইল খোঁজা হচ্ছে..."/>
+			<matrix-close value="বন্ধ করুন"/>
+			<matrix-retry value="আবার চেষ্টা করুন"/>
+			<matrix-cancelled value="বাতিল করা হয়েছে"/>
+			<matrix-read-only value="শুধুমাত্র পড়ার জন্য"/>
+			<matrix-find-status-details value="অবস্থার বিবরণ"/>
+			<matrix-find-backward-unavailable value="রেগুলার এক্সপ্রেশন দিয়ে পেছনের দিকে অনুসন্ধান নিষ্ক্রিয় করা আছে"/>
+			<matrix-hash-select-files value="ফাইল নির্বাচন করুন"/>
+			<matrix-hash-calculating value="হ্যাশের মান গণনা করা হচ্ছে…"/>
+			<matrix-hash-selection-failed value="ফাইল নির্বাচন ব্যর্থ হয়েছে: $ERROR$"/>
+			<matrix-hash-read-failed value="নিচের ফাইলগুলি পড়া যায়নি:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="ত্রুটি বার্তা বন্ধ করুন"/>
+			<matrix-hash-file-paths value="ফাইলের পথ (শুধুমাত্র পড়ার জন্য)"/>
+			<matrix-hash-digest-result value="হ্যাশের ফলাফল (শুধুমাত্র পড়ার জন্য)"/>
+			<matrix-hash-source-text value="হ্যাশের উৎস পাঠ্য"/>
+			<matrix-hash-selection-composition value="ইনপুট রচনা সক্রিয় থাকা অবস্থায় নির্বাচিত পাঠ্যের হ্যাশ গণনা এখনও বাস্তবায়িত হয়নি"/>
+			<matrix-hash-selection-read-failed value="নির্বাচিত পাঠ্য পড়া যায়নি: $ERROR$"/>
+			<matrix-window-activation-failed value="নির্বাচিত ফাইলে যাওয়া যায়নি"/>
+			<matrix-window-selection-unavailable value="নির্বাচিত ফাইল বন্ধ আছে অথবা সক্রিয় করা যাচ্ছে না"/>
+			<matrix-incremental-position value="ক্রমবর্ধমান অনুসন্ধান বার সরান"/>
+			<matrix-find-progress-bar value="অগ্রগতি বার"/>
+			<matrix-find-previous-search value="আগের অনুসন্ধান দেখান"/>
+			<matrix-find-results-summary value="অনুসন্ধানের ফলাফল - ($INT_REPLACE$টি মিল)"/>
+			<matrix-udl-allow-code2-close value="কোড ২-এর সমাপ্তি অনুমোদন করুন"/>
+			<matrix-udl-allow-code2-middle value="কোড ২-এর মধ্যভাগ অনুমোদন করুন"/>
+			<matrix-udl-allow-code2-open value="কোড ২-এর সূচনা অনুমোদন করুন"/>
+			<matrix-udl-allow-comment-fold-close value="মন্তব্য ভাঁজের সমাপ্তি অনুমোদন করুন"/>
+			<matrix-udl-allow-comment-fold-middle value="মন্তব্য ভাঁজের মধ্যভাগ অনুমোদন করুন"/>
+			<matrix-udl-allow-comment-fold-open value="মন্তব্য ভাঁজের সূচনা অনুমোদন করুন"/>
+			<matrix-udl-choose-json value="JSON বিন্যাসের UDL সংজ্ঞা ফাইল নির্বাচন করুন"/>
+			<matrix-udl-close value="ব্যবহারকারীর সংজ্ঞায়িত ভাষা বন্ধ করুন"/>
+			<matrix-udl-close-styler value="শৈলী বিন্যাসক বন্ধ করুন"/>
+			<matrix-udl-colors value="রং"/>
+			<matrix-udl-dark-mode-language value="গাঢ় মোডের ভাষা"/>
+			<matrix-udl-definition-exported value="সংজ্ঞা রপ্তানি করা হয়েছে"/>
+			<matrix-udl-definitions-saved value="সংজ্ঞাগুলি সংরক্ষণ করা হয়েছে"/>
+			<matrix-udl-enable-font value="ফন্ট সক্রিয় করুন"/>
+			<matrix-udl-error value="ব্যবহারকারীর সংজ্ঞায়িত ভাষায় ত্রুটি: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ফাইলের কাজ ব্যর্থ হয়েছে: $ERROR$"/>
+			<matrix-udl-file-progress value="ফাইলের কাজ চলছে…"/>
+			<matrix-udl-import-rejected value="আমদানি প্রত্যাখ্যান করা হয়েছে: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$টি ভাষা আমদানি করা হয়েছে"/>
+			<matrix-udl-live-edits value="ব্যবহারকারীর সংজ্ঞায়িত ভাষা — পরিবর্তনগুলি কেবল এই ভাষা ব্যবহারকারী নথিগুলিতে সঙ্গে সঙ্গে প্রয়োগ হয়"/>
+			<matrix-udl-loading value="সংজ্ঞাগুলি লোড হচ্ছে…"/>
+			<matrix-udl-memory-only value="সংজ্ঞাগুলি শুধু মেমরিতে রয়েছে (কোনো কনফিগারেশন ডিরেক্টরি নেই)"/>
+			<matrix-udl-missing-ids value="ব্যবহারকারীর সংজ্ঞায়িত ভাষার আইডি নেই: $IDS$। নথির পাঠ্য ও সংরক্ষিত ভাষার পরিচয় অক্ষুণ্ণ রাখা হয়েছে। সংজ্ঞাগুলি পুনরুদ্ধার করুন অথবা স্পষ্টভাবে অন্য একটি ভাষা নির্বাচন করুন।"/>
+			<matrix-udl-open-panel-disconnected value="UDL খোলার প্যানেলের সংযোগ বিচ্ছিন্ন হয়েছে: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="এই নামযুক্ত সংজ্ঞা সরাবেন? বিদ্যমান নথিগুলির পাঠ্য অক্ষুণ্ণ থাকবে এবং সেগুলি নামহীন ব্যবহারকারী-সংজ্ঞায়িত ভাষায় চলে যাবে।"/>
+			<matrix-udl-retry-file value="UDL ফাইলের কাজ আবার চেষ্টা করুন"/>
+			<matrix-udl-save-panel-disconnected value="UDL সংরক্ষণ প্যানেলের সংযোগ বিচ্ছিন্ন হয়েছে: $ERROR$"/>
+			<matrix-udl-unavailable value="সংজ্ঞাগুলি উপলব্ধ নয়; udl.json ঠিক করে আবার চেষ্টা করুন।"/>
+			<matrix-udl-use-background value="পটভূমি ব্যবহার করুন"/>
+			<matrix-udl-use-foreground value="সম্মুখভাগ ব্যবহার করুন"/>
+			<matrix-udl-working-copy value="ব্যবহারকারীর সংজ্ঞায়িত (কাজের অনুলিপি)"/>
+			<matrix-find-resize-results value="অনুসন্ধানের ফলাফলের আকার পরিবর্তন করুন"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

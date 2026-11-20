@@ -1,4 +1,5 @@
 use super::*;
+use crate::localization;
 use super::dialog_font::px;
 use crate::macros::{MacroLibrary, MacroSaveTask, MacroStep, RepeatMode, RepeatTracker};
 use std::sync::Arc;
@@ -322,12 +323,14 @@ impl MatrixWindow {
         if !self.macro_dialogs.save_visible {
             return None;
         }
+        self.macro_dialogs.name_input.update(cx, |field, cx| field.set_label(
+            localization::current_dialog_control("ShortcutMapperSubDialg", 5006).unwrap_or("Name"), cx));
         Some(
             div()
                 .id("save-macro-dialog")
                 .debug_selector(|| "save-macro-dialog".into())
                 .role(Role::Dialog)
-                .aria_label("Save Current Recorded Macro")
+                .aria_label(localization::dialog_title(&self.native_locale(), "ShortcutMapperSubDialg").unwrap_or("Shortcut"))
                 .font_family(dialog_font::font_family())
                 .text_size(px(12.))
                 .line_height(px(16.))
@@ -349,7 +352,7 @@ impl MatrixWindow {
                 .flex()
                 .flex_col()
                 .gap(px(8.))
-                .child("Name")
+                .child(localization::current_dialog_control("ShortcutMapperSubDialg", 5006).unwrap_or("Name"))
                 .child(self.macro_dialogs.name_input.clone())
                 .child(
                     div()
@@ -357,7 +360,7 @@ impl MatrixWindow {
                         .justify_end()
                         .gap(px(8.))
                         .child(
-                            macro_button("macro-save-confirm", "Save")
+                            macro_button("macro-save-confirm", localization::current_dialog_control("ShortcutMapperSubDialg", 1).unwrap_or("OK"))
                                 .when(self.macro_dialogs.pending_save.is_some(), |button| {
                                     button.opacity(0.5)
                                 })
@@ -374,7 +377,7 @@ impl MatrixWindow {
                                 })),
                         )
                         .child(
-                            macro_button("macro-save-cancel", "Cancel").on_click(cx.listener(
+                            macro_button("macro-save-cancel", localization::current_dialog_control("ShortcutMapperSubDialg", 2).unwrap_or("Cancel")).on_click(cx.listener(
                                 |view, _, window, cx| {
                                     view.dismiss_floating(
                                         floating_windows::DialogKind::MacroSave,
@@ -396,6 +399,8 @@ impl MatrixWindow {
         if !self.macro_dialogs.repeat_visible {
             return None;
         }
+        self.macro_dialogs.count_input.update(cx, |field, cx| field.set_label(
+            localization::current_dialog_control("MultiMacro", 8005).unwrap_or("times"), cx));
         let mut choices = Vec::new();
         if self.current_repeat_macro_available() {
             choices.push(
@@ -432,7 +437,7 @@ impl MatrixWindow {
                 .id("repeat-macro-dialog")
                 .debug_selector(|| "repeat-macro-dialog".into())
                 .role(Role::Dialog)
-                .aria_label("Run a Macro Multiple Times")
+                .aria_label(localization::dialog_title(&self.native_locale(), "MultiMacro").unwrap_or("Run a Macro Multiple Times"))
                 .font_family(dialog_font::font_family())
                 .text_size(px(12.))
                 .line_height(px(16.))
@@ -450,7 +455,7 @@ impl MatrixWindow {
                 .flex()
                 .flex_col()
                 .gap(px(8.))
-                .child("Macro to run")
+                .child(localization::current_dialog_control("MultiMacro", 8006).unwrap_or("Macro to run"))
                 .child(
                     div()
                         .id("macro-choices")
@@ -463,7 +468,7 @@ impl MatrixWindow {
                 .child(
                     macro_choice(
                         "macro-repeat-count-mode".into(),
-                        "Run a specified number of times".into(),
+                        localization::current_dialog_control("MultiMacro", 8001).unwrap_or("Run").into(),
                         !self.macro_dialogs.until_end,
                     )
                     .on_click(cx.listener(|view, _, _, cx| {
@@ -474,12 +479,14 @@ impl MatrixWindow {
                     })),
                 )
                 .when(!self.macro_dialogs.until_end, |dialog| {
-                    dialog.child(self.macro_dialogs.count_input.clone())
+                    dialog.child(div().flex().items_center().gap(px(8.))
+                        .child(self.macro_dialogs.count_input.clone())
+                        .child(localization::current_dialog_control("MultiMacro", 8005).unwrap_or("times")))
                 })
                 .child(
                     macro_choice(
                         "macro-repeat-eof-mode".into(),
-                        "Run until the end of file".into(),
+                        localization::current_dialog_control("MultiMacro", 8002).unwrap_or("Run until the end of file").into(),
                         self.macro_dialogs.until_end,
                     )
                     .on_click(cx.listener(|view, _, _, cx| {
@@ -495,7 +502,7 @@ impl MatrixWindow {
                         .justify_end()
                         .gap(px(8.))
                         .when(!self.macro_playing, |row| {
-                            row.child(macro_button("macro-repeat-run", "Run").on_click(
+                            row.child(macro_button("macro-repeat-run", localization::current_dialog_control("MultiMacro", 1).unwrap_or("Run")).on_click(
                                 cx.listener(|view, _, window, cx| {
                                     view.confirm_macro_repeat(window, cx)
                                 }),
@@ -508,7 +515,7 @@ impl MatrixWindow {
                                 }),
                             ))
                         })
-                        .child(macro_button("macro-repeat-close", "Close").on_click(
+                        .child(macro_button("macro-repeat-close", localization::current_dialog_control("MultiMacro", 2).unwrap_or("Cancel")).on_click(
                             cx.listener(|view, _, window, cx| view.close_repeat_macro(window, cx)),
                         )),
                 )

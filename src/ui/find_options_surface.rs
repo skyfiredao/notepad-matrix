@@ -15,11 +15,12 @@ impl SwapOperation {
     }
 
     fn label(self) -> &'static str {
-        match self {
-            Self::Swap => "⇅ 交换 查找 和 替换 的内容",
-            Self::FindToReplace => "⤵ 复制 查找的内容 到 替换框",
-            Self::ReplaceToFind => "⤴ 复制 替换的内容 到 查找框",
-        }
+        let id = match self { Self::Swap => 1726, Self::FindToReplace => 1727, Self::ReplaceToFind => 1728 };
+        crate::localization::current_dialog_control("Find/Menu", id).unwrap_or(match self {
+            Self::Swap => "⇅ Swap Find and Replace text",
+            Self::FindToReplace => "⤵ Copy Find text to Replace",
+            Self::ReplaceToFind => "⤴ Copy Replace text to Find",
+        })
     }
 }
 
@@ -118,7 +119,9 @@ impl MatrixWindow {
                 Ok(())
             })
         {
-            self.set_find_status(find_surface::FindStatus::NotFound, error.to_string());
+            self.set_find_status(find_surface::FindStatus::NotFound,
+                crate::localization::Text::resource("matrix-search-settings-save-error", "Search settings could not be saved: $ERROR$")
+                    .replace("$ERROR$", error.to_string()));
             cx.notify();
             return false;
         }
@@ -137,13 +140,13 @@ impl MatrixWindow {
         {
             let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
             if let Some(host) = view.window() {
-                let dimensions = objc2_foundation::NSSize::new(dialog_font::native_length(f64::from(width)), dialog_font::native_length(f64::from(height)));
-                if host.contentMaxSize().height < dimensions.height
-                    || host.contentMaxSize().width < dimensions.width {
-                    host.setContentMaxSize(dimensions);
+                let native_dimensions = objc2_foundation::NSSize::new(dialog_font::native_length(f64::from(width)), dialog_font::native_length(f64::from(height)) + f64::from(window_caption::HEIGHT));
+                if host.contentMaxSize().height < native_dimensions.height
+                    || host.contentMaxSize().width < native_dimensions.width {
+                    host.setContentMaxSize(native_dimensions);
                 }
-                host.setContentMinSize(dimensions);
-                host.setContentMaxSize(dimensions);
+                host.setContentMinSize(native_dimensions);
+                host.setContentMaxSize(native_dimensions);
                 let transparent = self.find_controls.transparency == 2
                     || self.find_controls.transparency == 1 && !window.is_window_active();
                 host.setAlphaValue(if transparent {
@@ -153,9 +156,10 @@ impl MatrixWindow {
                 });
             }
         }
-        if (f32::from(window.viewport_size().height - px(height))).abs() >= 1.
-            || (f32::from(window.viewport_size().width - px(width))).abs() >= 1. {
-            window.resize(size(px(width), px(height)));
+        let client = self.auxiliary_client_size(window);
+        if (f32::from(client.height - px(height))).abs() >= 1.
+            || (f32::from(client.width - px(width))).abs() >= 1. {
+            window.resize(size(px(width), px(height) + gpui::px(window_caption::HEIGHT)));
         }
     }
 
@@ -245,7 +249,7 @@ impl MatrixWindow {
                 div()
                     .id("find-swap-menu")
                     .role(Role::Button)
-                    .aria_label("复制查找或替换内容")
+                    .aria_label(self.find_text("matrix-find-copy-content", "Copy Find or Replace text"))
                     .w(px(16.))
                     .h_full()
                     .border_1()
@@ -274,7 +278,7 @@ impl MatrixWindow {
     fn open_find_swap_menu(&mut self, keyboard: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.close_search_history();
         let mut bounds = Bounds::new(window.bounds().origin
-            + point(window.viewport_size().width - px(281.), px(76.)), size(px(248.), px(74.)));
+            + point(window.viewport_size().width - px(281.), px(76.) + gpui::px(window_caption::HEIGHT)), size(px(248.), px(74.)));
         if let Some(display) = window.display(cx) {
             let area = display.visible_bounds();
             bounds.origin.x = bounds.origin.x.max(area.left()).min(area.right() - bounds.size.width);
@@ -323,7 +327,7 @@ impl MatrixWindow {
 
     pub(super) fn render_find_swap_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !self.find_controls.swap_menu { return None; }
-        Some(div().id("find-swap-popup").role(Role::Menu).aria_label("查找与替换内容操作")
+        Some(div().id("find-swap-popup").role(Role::Menu).aria_label(self.find_text("matrix-find-content-operations", "Find and Replace text operations"))
             .track_focus(&self.find_controls.swap_menu_focus)
             .key_context("MatrixFind").w(px(248.))
             .bg(rgb(0xffffff)).border_1().border_color(rgb(0xadadad)).occlude()
@@ -448,6 +452,7 @@ impl MatrixWindow {
                             .into_iter()
                             .enumerate()
                             .map(|(index, (mode, id, label))| {
+                                let label = crate::localization::current_dialog_control("Find", if mode == 1 { 1687 } else { 1688 }).unwrap_or(label);
                                 let enabled = self.find_controls.transparency != 0;
                                 let selected = self.find_controls.transparency == mode;
                                 find_surface::radio(id, label, self.find_controls.transparency == mode)
@@ -478,7 +483,7 @@ impl MatrixWindow {
                             div()
                                 .id("find-transparency-slider")
                                 .role(Role::Slider)
-                                .aria_label("透明度")
+                                .aria_label(crate::localization::current_dialog_control("Find", 1686).unwrap_or("Transparency"))
                                 .aria_orientation(gpui::accesskit::Orientation::Horizontal)
                                 .when(self.find_controls.transparency != 0, |control| control.track_focus(&self.find_controls.slider_focus))
                                 .a11y_synthetic_children({
@@ -574,9 +579,9 @@ impl MatrixWindow {
                  .font_family("Courier New")
                  .text_size(px(17.))
                 .aria_label(if compact {
-                    "展开查找窗口"
+                    self.find_text("matrix-find-expand-window", "Expand Find window")
                 } else {
-                    "精简查找窗口"
+                    self.find_text("matrix-find-compact-window", "Compact Find window")
                 })
                 .on_click(cx.listener(|view, _, _, cx| view.toggle_find_compact(cx))),
             )

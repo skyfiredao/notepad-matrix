@@ -1414,6 +1414,61 @@ Jarraitu?"/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Aldatu bilaketaren emaitzen tamaina"/>
+			<discover-file-candidates-title value="Fitxategi hautagaiak bilatzen…"/>
+			<matrix-close value="Itxi"/>
+			<matrix-retry value="Saiatu berriro"/>
+			<matrix-cancelled value="Bertan behera utzita"/>
+			<matrix-read-only value="Irakurtzeko soilik"/>
+			<matrix-find-status-details value="Egoeraren xehetasunak"/>
+			<matrix-find-backward-unavailable value="Adierazpen erregularren atzeranzko bilaketa desgaituta dago"/>
+			<matrix-hash-select-files value="Hautatu fitxategiak"/>
+			<matrix-hash-calculating value="Hash balioa kalkulatzen…"/>
+			<matrix-hash-selection-failed value="Ezin izan dira fitxategiak hautatu: $ERROR$"/>
+			<matrix-hash-read-failed value="Ezin dira fitxategi hauek irakurri:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Itxi errore-mezua"/>
+			<matrix-hash-file-paths value="Fitxategien bideak (irakurtzeko soilik)"/>
+			<matrix-hash-digest-result value="Hash emaitza (irakurtzeko soilik)"/>
+			<matrix-hash-source-text value="Hash balioaren sorburu-testua"/>
+			<matrix-hash-selection-composition value="Testu-konposizio aktiboan hautapenaren hash balioa kalkulatzea ez dago oraindik inplementatuta"/>
+			<matrix-hash-selection-read-failed value="Ezin da hautapena irakurri: $ERROR$"/>
+			<matrix-window-activation-failed value="Ezin da hautatutako fitxategira aldatu"/>
+			<matrix-window-selection-unavailable value="Hautatutako fitxategia itxita dago edo ezin da aktibatu"/>
+			<matrix-incremental-position value="Mugitu bilaketa inkrementalaren barra"/>
+			<matrix-find-progress-bar value="Aurrerapen-barra"/>
+			<matrix-find-previous-search value="Erakutsi aurreko bilaketa"/>
+			<matrix-find-results-summary value="Bilaketaren emaitzak - ($INT_REPLACE$ emaitza)"/>
+			<matrix-udl-allow-code2-close value="Baimendu 2. kodearen itxiera"/>
+			<matrix-udl-allow-code2-middle value="Baimendu 2. kodearen erdia"/>
+			<matrix-udl-allow-code2-open value="Baimendu 2. kodearen irekiera"/>
+			<matrix-udl-allow-comment-fold-close value="Baimendu iruzkin-tolestearen itxiera"/>
+			<matrix-udl-allow-comment-fold-middle value="Baimendu iruzkin-tolestearen erdia"/>
+			<matrix-udl-allow-comment-fold-open value="Baimendu iruzkin-tolestearen irekiera"/>
+			<matrix-udl-choose-json value="Aukeratu UDL definizioaren JSON fitxategi bat"/>
+			<matrix-udl-close value="Itxi erabiltzaileak zehaztutako hizkuntza"/>
+			<matrix-udl-close-styler value="Itxi estiloak aplikatzeko leihoa"/>
+			<matrix-udl-colors value="Koloreak"/>
+			<matrix-udl-dark-mode-language value="Modu iluneko hizkuntza"/>
+			<matrix-udl-definition-exported value="Definizioa esportatuta"/>
+			<matrix-udl-definitions-saved value="Definizioak gordeta"/>
+			<matrix-udl-enable-font value="Gaitu letra-tipoa"/>
+			<matrix-udl-error value="Erabiltzaileak zehaztutako hizkuntzaren errorea: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL fitxategiaren eragiketak huts egin du: $ERROR$"/>
+			<matrix-udl-file-progress value="Fitxategi-eragiketa abian…"/>
+			<matrix-udl-import-rejected value="Inportazioa baztertuta: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ hizkuntza inportatuta"/>
+			<matrix-udl-live-edits value="Erabiltzaileak zehaztutako hizkuntza — aldaketak berehala aplikatzen zaizkie hizkuntza hau erabiltzen duten dokumentuei soilik"/>
+			<matrix-udl-loading value="Definizioak kargatzen…"/>
+			<matrix-udl-memory-only value="Definizioak memorian soilik daude (ez dago konfigurazio-karpetarik)"/>
+			<matrix-udl-missing-ids value="Erabiltzaileak zehaztutako hizkuntzen IDak falta dira: $IDS$. Dokumentuen testua eta gordetako hizkuntza-identitateak mantendu dira. Leheneratu definizioak edo hautatu berariaz beste hizkuntza bat."/>
+			<matrix-udl-open-panel-disconnected value="UDL irekitzeko panela deskonektatu da: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Kendu izendatutako definizio hau? Lehendik dauden dokumentuek testua mantenduko dute eta izenik gabeko erabiltzaileak zehaztutako hizkuntzara aldatuko dira."/>
+			<matrix-udl-retry-file value="Saiatu berriro UDL fitxategiaren eragiketarekin"/>
+			<matrix-udl-save-panel-disconnected value="UDL gordetzeko panela deskonektatu da: $ERROR$"/>
+			<matrix-udl-unavailable value="Definizioak ez daude erabilgarri; zuzendu udl.json eta saiatu berriro."/>
+			<matrix-udl-use-background value="Erabili atzeko planoa"/>
+			<matrix-udl-use-foreground value="Erabili aurreko planoa"/>
+			<matrix-udl-working-copy value="Erabiltzaileak zehaztuta (laneko kopia)"/>
 			<!-- $INT_REPLACE$  and $STR_REPLACE$ are a place holders, don't translate these place holders -->
 			<word-chars-list-tip value="Honek Word karaktereen zerrendara zure karaktere gehigarriak aukeratzeko edo bilatzeko klik bikoitza egiterakoan gehitzea baimentzen dizu &quot;Bat etorri soilik hitz-osoa&quot; aukera markatuta."/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 

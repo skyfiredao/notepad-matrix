@@ -674,5 +674,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="კარგი"/>
+			<common-cancel value="გაუქმება"/>
+			<common-name value="სახელი"/>
+			<discover-file-candidates-title value="შესაძლო ფაილების აღმოჩენა..."/>
+			<matrix-close value="დახურვა"/>
+			<matrix-retry value="ხელახლა ცდა"/>
+			<matrix-cancelled value="გაუქმებულია"/>
+			<matrix-read-only value="მხოლოდ წაკითხვა"/>
+			<matrix-find-status-details value="მდგომარეობის დეტალები"/>
+			<matrix-find-resize-results value="ძებნის შედეგების ზომის შეცვლა"/>
+			<matrix-find-backward-unavailable value="რეგულარული გამოსახულებით უკუსვლა ძებნისას გამორთულია"/>
+			<matrix-hash-select-files value="ფაილების არჩევა"/>
+			<matrix-hash-calculating value="ჰეშის გამოთვლა…"/>
+			<matrix-hash-selection-failed value="ფაილების არჩევა ვერ მოხერხდა: $ERROR$"/>
+			<matrix-hash-read-failed value="შემდეგი ფაილების წაკითხვა ვერ მოხერხდა:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="შეცდომის დახურვა"/>
+			<matrix-hash-file-paths value="ფაილების ბილიკები (მხოლოდ წაკითხვა)"/>
+			<matrix-hash-digest-result value="ჰეშის შედეგი (მხოლოდ წაკითხვა)"/>
+			<matrix-hash-source-text value="ჰეშის საწყისი ტექსტი"/>
+			<matrix-hash-selection-composition value="ტექსტის აქტიური შედგენისას მონიშნულის ჰეშირება ჯერ განხორციელებული არ არის"/>
+			<matrix-hash-selection-read-failed value="მონიშნულის წაკითხვა ვერ მოხერხდა: $ERROR$"/>
+			<matrix-window-activation-failed value="არჩეულ ფაილზე გადართვა ვერ მოხერხდა"/>
+			<matrix-window-selection-unavailable value="არჩეული ფაილი დახურულია ან ვერ აქტიურდება"/>
+			<matrix-incremental-position value="თანდათანობითი ძებნის ზოლის გადატანა"/>
+			<matrix-find-progress-bar value="მიმდინარეობის ზოლი"/>
+			<matrix-find-previous-search value="წინა ძებნის ჩვენება"/>
+			<matrix-find-results-summary value="ძებნის შედეგები - ($INT_REPLACE$ დამთხვევა)"/>
+			<matrix-udl-allow-code2-close value="კოდი 2-ის დახურვის დაშვება"/>
+			<matrix-udl-allow-code2-middle value="კოდი 2-ის შუა ნაწილის დაშვება"/>
+			<matrix-udl-allow-code2-open value="კოდი 2-ის გახსნის დაშვება"/>
+			<matrix-udl-allow-comment-fold-close value="კომენტარის დაკეცვის დახურვის დაშვება"/>
+			<matrix-udl-allow-comment-fold-middle value="კომენტარის დაკეცვის შუა ნაწილის დაშვება"/>
+			<matrix-udl-allow-comment-fold-open value="კომენტარის დაკეცვის გახსნის დაშვება"/>
+			<matrix-udl-choose-json value="აირჩიეთ UDL-ის განსაზღვრების JSON ფაილი"/>
+			<matrix-udl-close value="მომხმარებლის განსაზღვრული ენის დახურვა"/>
+			<matrix-udl-close-styler value="სტილის რედაქტორის დახურვა"/>
+			<matrix-udl-colors value="ფერები"/>
+			<matrix-udl-dark-mode-language value="მუქი რეჟიმის ენა"/>
+			<matrix-udl-definition-exported value="განსაზღვრება გატანილია"/>
+			<matrix-udl-definitions-saved value="განსაზღვრებები შენახულია"/>
+			<matrix-udl-enable-font value="შრიფტის ჩართვა"/>
+			<matrix-udl-error value="მომხმარებლის განსაზღვრული ენის შეცდომა: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ფაილის მოქმედება ვერ შესრულდა: $ERROR$"/>
+			<matrix-udl-file-progress value="ფაილზე მოქმედება მიმდინარეობს…"/>
+			<matrix-udl-import-rejected value="შემოტანა უარყოფილია: $ERROR$"/>
+			<matrix-udl-imported value="შემოტანილია $COUNT$ ენა"/>
+			<matrix-udl-live-edits value="მომხმარებლის განსაზღვრული ენა — ცვლილებები დაუყოვნებლივ ეხება მხოლოდ ამ ენის დოკუმენტებს"/>
+			<matrix-udl-loading value="განსაზღვრებების ჩატვირთვა…"/>
+			<matrix-udl-memory-only value="განსაზღვრებები მხოლოდ მეხსიერებაშია (კონფიგურაციის საქაღალდე არ არსებობს)"/>
+			<matrix-udl-missing-ids value="აკლია მომხმარებლის განსაზღვრული ენის იდენტიფიკატორები: $IDS$. დოკუმენტის ტექსტი და შენახული ენის იდენტობები შენარჩუნებულია. აღადგინეთ განსაზღვრებები ან აშკარად აირჩიეთ სხვა ენა."/>
+			<matrix-udl-open-panel-disconnected value="UDL-ის გახსნის პანელი გათიშულია: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="წაიშალოს ეს სახელდებული განსაზღვრება? არსებული დოკუმენტები შეინარჩუნებს ტექსტს და გადავა მომხმარებლის უსახელო ენაზე."/>
+			<matrix-udl-retry-file value="UDL ფაილის მოქმედების ხელახლა ცდა"/>
+			<matrix-udl-save-panel-disconnected value="UDL-ის შენახვის პანელი გათიშულია: $ERROR$"/>
+			<matrix-udl-unavailable value="განსაზღვრებები მიუწვდომელია; გაასწორეთ udl.json და ხელახლა სცადეთ."/>
+			<matrix-udl-use-background value="ფონის გამოყენება"/>
+			<matrix-udl-use-foreground value="წინა პლანის გამოყენება"/>
+			<matrix-udl-working-copy value="მომხმარებლის განსაზღვრული (სამუშაო ასლი)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

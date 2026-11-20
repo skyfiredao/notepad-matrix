@@ -678,5 +678,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="OK"/>
+			<common-cancel value="Annudda"/>
+			<common-name value="Nùmene"/>
+			<discover-file-candidates-title value="Chirchende files candidatos..."/>
+			<matrix-close value="Serra"/>
+			<matrix-retry value="Torra a proare"/>
+			<matrix-cancelled value="Annulladu"/>
+			<matrix-read-only value="Letura isceti"/>
+			<matrix-find-status-details value="Detàllios de s'istadu"/>
+			<matrix-find-resize-results value="Muda sa mannària de sos resurtados de sa chirca"/>
+			<matrix-find-backward-unavailable value="Sa chirca a coa cun espressiones regulares est disabilitada"/>
+			<matrix-hash-select-files value="Seletziona files"/>
+			<matrix-hash-calculating value="Carculende s'imprenta…"/>
+			<matrix-hash-selection-failed value="Seletzione de files fallida: $ERROR$"/>
+			<matrix-hash-read-failed value="Impossìbile lèghere custos files:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Serra s'errore"/>
+			<matrix-hash-file-paths value="Percursos de sos files (letura isceti)"/>
+			<matrix-hash-digest-result value="Resurtadu de s'imprenta (letura isceti)"/>
+			<matrix-hash-source-text value="Testu de orìgine de s'imprenta"/>
+			<matrix-hash-selection-composition value="Su càrculu de s'imprenta de sa seletzione durante sa compositzione ativa no est ancora implementadu"/>
+			<matrix-hash-selection-read-failed value="Impossìbile lèghere sa seletzione: $ERROR$"/>
+			<matrix-window-activation-failed value="Impossìbile passare a su file seletzionadu"/>
+			<matrix-window-selection-unavailable value="Su file seletzionadu est serradu o no si podet ativare"/>
+			<matrix-incremental-position value="Tràmuda sa barra de chirca incrementale"/>
+			<matrix-find-progress-bar value="Barra de progressu"/>
+			<matrix-find-previous-search value="Ammustra sa chirca pretzedente"/>
+			<matrix-find-results-summary value="Resurtados de sa chirca - ($INT_REPLACE$ currispondèntzias)"/>
+			<matrix-udl-allow-code2-close value="Permite sa serradura de su còdighe 2"/>
+			<matrix-udl-allow-code2-middle value="Permite su mesu de su còdighe 2"/>
+			<matrix-udl-allow-code2-open value="Permite s'abertura de su còdighe 2"/>
+			<matrix-udl-allow-comment-fold-close value="Permite sa serradura de su plegamentu de cummentos"/>
+			<matrix-udl-allow-comment-fold-middle value="Permite su mesu de su plegamentu de cummentos"/>
+			<matrix-udl-allow-comment-fold-open value="Permite s'abertura de su plegamentu de cummentos"/>
+			<matrix-udl-choose-json value="Sèbera unu file JSON de definitzione UDL"/>
+			<matrix-udl-close value="Serra su limbàgiu personalizadu"/>
+			<matrix-udl-close-styler value="Serra su configuradore de istilos"/>
+			<matrix-udl-colors value="Colores"/>
+			<matrix-udl-dark-mode-language value="Limbàgiu de sa modalidade iscura"/>
+			<matrix-udl-definition-exported value="Definitzione esportada"/>
+			<matrix-udl-definitions-saved value="Definitziones sarbadas"/>
+			<matrix-udl-enable-font value="Abìlita su caràtere"/>
+			<matrix-udl-error value="Errore de su limbàgiu personalizadu: $ERROR$"/>
+			<matrix-udl-file-failed value="Operatzione de file UDL fallida: $ERROR$"/>
+			<matrix-udl-file-progress value="Operatzione de file in cursu…"/>
+			<matrix-udl-import-rejected value="Importatzione refudada: $ERROR$"/>
+			<matrix-udl-imported value="Importados $COUNT$ limbàgios"/>
+			<matrix-udl-live-edits value="Limbàgiu personalizadu — sas modìficas si àplicant deretu isceti a sos documentos chi impreant custu limbàgiu"/>
+			<matrix-udl-loading value="Carrighende definitziones…"/>
+			<matrix-udl-memory-only value="Sas definitziones sunt in memòria isceti (peruna cartella de cunfiguratzione)"/>
+			<matrix-udl-missing-ids value="Mancant sos identificadores de limbàgios personalizados: $IDS$. Su testu de sos documentos e sas identidades sarbadas de sos limbàgios sunt istados cunservados. Riprìstina sas definitziones o sèbera in manera esplìtzita un'àteru limbàgiu."/>
+			<matrix-udl-open-panel-disconnected value="Pannellu de abertura UDL disconnètidu: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Boga·nche custa definitzione cun nùmene? Sos documentos esistentes mantenent su testu e passant a su limbàgiu personalizadu chene nùmene."/>
+			<matrix-udl-retry-file value="Torra a proare s'operatzione de file UDL"/>
+			<matrix-udl-save-panel-disconnected value="Pannellu de sarvamentu UDL disconnètidu: $ERROR$"/>
+			<matrix-udl-unavailable value="Definitziones no a disponimentu; currege udl.json e torra a proare."/>
+			<matrix-udl-use-background value="Imprea s'isfundu"/>
+			<matrix-udl-use-foreground value="Imprea su primu pianu"/>
+			<matrix-udl-working-copy value="Personalizadu (còpia de traballu)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

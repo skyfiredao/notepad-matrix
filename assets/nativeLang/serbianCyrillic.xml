@@ -1717,6 +1717,61 @@ Notepad++ ће се поново покренути када се све опе�
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Промени величину резултата претраге"/>
+			<discover-file-candidates-title value="Откривање могућих датотека…"/>
+			<matrix-close value="Затвори"/>
+			<matrix-retry value="Покушај поново"/>
+			<matrix-cancelled value="Отказано"/>
+			<matrix-read-only value="Само за читање"/>
+			<matrix-find-status-details value="Детаљи статуса"/>
+			<matrix-find-backward-unavailable value="Претрага регуларним изразима уназад је онемогућена"/>
+			<matrix-hash-select-files value="Изабери датотеке"/>
+			<matrix-hash-calculating value="Израчунавање хеш вредности…"/>
+			<matrix-hash-selection-failed value="Избор датотека није успео: $ERROR$"/>
+			<matrix-hash-read-failed value="Није могуће прочитати следеће датотеке:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Затвори поруку о грешци"/>
+			<matrix-hash-file-paths value="Путање датотека (само за читање)"/>
+			<matrix-hash-digest-result value="Хеш вредност (само за читање)"/>
+			<matrix-hash-source-text value="Изворни текст за хеширање"/>
+			<matrix-hash-selection-composition value="Хеширање избора током активног састављања текста још није имплементирано"/>
+			<matrix-hash-selection-read-failed value="Није могуће прочитати избор: $ERROR$"/>
+			<matrix-window-activation-failed value="Није могуће прећи на изабрану датотеку"/>
+			<matrix-window-selection-unavailable value="Изабрана датотека је затворена или се не може активирати"/>
+			<matrix-incremental-position value="Премести траку постепене претраге"/>
+			<matrix-find-progress-bar value="Трака напретка"/>
+			<matrix-find-previous-search value="Прикажи претходну претрагу"/>
+			<matrix-find-results-summary value="Резултати претраге - ($INT_REPLACE$ погодака)"/>
+			<matrix-udl-allow-code2-close value="Дозволи крај кода 2"/>
+			<matrix-udl-allow-code2-middle value="Дозволи средину кода 2"/>
+			<matrix-udl-allow-code2-open value="Дозволи почетак кода 2"/>
+			<matrix-udl-allow-comment-fold-close value="Дозволи крај склапања коментара"/>
+			<matrix-udl-allow-comment-fold-middle value="Дозволи средину склапања коментара"/>
+			<matrix-udl-allow-comment-fold-open value="Дозволи почетак склапања коментара"/>
+			<matrix-udl-choose-json value="Изабери JSON датотеку са UDL дефиницијом"/>
+			<matrix-udl-close value="Затвори кориснички дефинисани језик"/>
+			<matrix-udl-close-styler value="Затвори дијалог за стилизацију"/>
+			<matrix-udl-colors value="Боје"/>
+			<matrix-udl-dark-mode-language value="Језик за тамни режим"/>
+			<matrix-udl-definition-exported value="Дефиниција је извезена"/>
+			<matrix-udl-definitions-saved value="Дефиниције су сачуване"/>
+			<matrix-udl-enable-font value="Омогући фонт"/>
+			<matrix-udl-error value="Грешка кориснички дефинисаног језика: $ERROR$"/>
+			<matrix-udl-file-failed value="Операција са UDL датотеком није успела: $ERROR$"/>
+			<matrix-udl-file-progress value="Операција са датотеком је у току…"/>
+			<matrix-udl-import-rejected value="Увоз је одбијен: $ERROR$"/>
+			<matrix-udl-imported value="Увезено језика: $COUNT$"/>
+			<matrix-udl-live-edits value="Кориснички дефинисани језик — измене се одмах примењују само на документе који користе овај језик"/>
+			<matrix-udl-loading value="Учитавање дефиниција…"/>
+			<matrix-udl-memory-only value="Дефиниције су само у меморији (нема директоријума за подешавања)"/>
+			<matrix-udl-missing-ids value="Недостају ID-ови кориснички дефинисаних језика: $IDS$. Текст докумената и сачувани идентитети језика су очувани. Вратите дефиниције или изричито изаберите други језик."/>
+			<matrix-udl-open-panel-disconnected value="Панел за отварање UDL-а је искључен: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Уклонити ову именовану дефиницију? Постојећи документи задржавају текст и прелазе на неименовани кориснички дефинисани језик."/>
+			<matrix-udl-retry-file value="Понови операцију са UDL датотеком"/>
+			<matrix-udl-save-panel-disconnected value="Панел за чување UDL-а је искључен: $ERROR$"/>
+			<matrix-udl-unavailable value="Дефиниције нису доступне; исправите udl.json и покушајте поново."/>
+			<matrix-udl-use-background value="Користи позадину"/>
+			<matrix-udl-use-foreground value="Користи боју текста"/>
+			<matrix-udl-working-copy value="Кориснички дефинисано (радна копија)"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are place holders, don't translate these place holders. -->
 			<word-chars-list-tip value="Ово омогућава укључивање додатног карактера у тренутну реч двокликом за избор или претрагу са укљученом опцијом &quot;Поклапање само целих речи&quot;."/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 

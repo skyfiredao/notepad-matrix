@@ -12,7 +12,11 @@ use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
 pub(super) const TITLE: &str = "语言样式配置器";
 
-pub(super) fn dimensions() -> gpui::Size<gpui::Pixels> { size(px(875.), px(430.5)) }
+const NOMINAL_WIDTH: f32 = 875.;
+
+pub(super) fn dimensions() -> gpui::Size<gpui::Pixels> { size(preferences_surface::dimensions().width, px(430.5)) }
+
+fn horizontal_px(value: f32) -> gpui::Pixels { preferences_surface::dimensions().width * (value / NOMINAL_WIDTH) }
 
 #[derive(Clone, Copy)]
 pub(super) struct PreferencesTarget {
@@ -87,7 +91,7 @@ impl MatrixWindow {
 impl NativeKeywordField {
     fn new(value: &str, read_only: bool, palette: RenderPalette) -> io::Result<Self> {
         unsafe {
-            let frame = NSRect::new(NSPoint::new(0., 0.), NSSize::new(dialog_font::native_length(238.), dialog_font::native_length(91.)));
+            let frame = NSRect::new(NSPoint::new(0., 0.), NSSize::new(f64::from(f32::from(horizontal_px(238.))), dialog_font::native_length(91.)));
             let scroll: Allocated<AnyObject> = msg_send![class!(NSScrollView), alloc];
             let scroll: Option<Retained<AnyObject>> = msg_send![scroll, initWithFrame: frame];
             let scroll = scroll.ok_or_else(|| io::Error::other("无法创建关键字滚动区域"))?;
@@ -104,11 +108,11 @@ impl NativeKeywordField {
             let _: () = msg_send![&*text, setHorizontallyResizable: false];
             let _: () = msg_send![&*text, setVerticallyResizable: true];
             let _: () = msg_send![&*text, setMinSize: NSSize::new(0., dialog_font::native_length(91.))];
-            let _: () = msg_send![&*text, setMaxSize: NSSize::new(dialog_font::native_length(238.), f64::MAX)];
-            let _: () = msg_send![&*text, setTextContainerInset: NSSize::new(dialog_font::native_length(3.), dialog_font::native_length(2.))];
+            let _: () = msg_send![&*text, setMaxSize: NSSize::new(f64::from(f32::from(horizontal_px(238.))), f64::MAX)];
+            let _: () = msg_send![&*text, setTextContainerInset: NSSize::new(f64::from(f32::from(horizontal_px(3.))), dialog_font::native_length(2.))];
             let container: *mut AnyObject = msg_send![&*text, textContainer];
             let _: () = msg_send![container, setWidthTracksTextView: true];
-            let _: () = msg_send![container, setContainerSize: NSSize::new(dialog_font::native_length(238.), f64::MAX)];
+            let _: () = msg_send![container, setContainerSize: NSSize::new(f64::from(f32::from(horizontal_px(238.))), f64::MAX)];
             let font = dialog_font::native_font();
             let _: () = msg_send![&*text, setFont: &*font];
             let _: () = msg_send![&*text, setString: &*NSString::from_str(value)];
@@ -310,7 +314,7 @@ impl State {
 }
 
 fn at(x: f32, y: f32, w: f32, h: f32) -> gpui::Div {
-    div().absolute().left(px(if crate::localization::current_preference_rtl() { 875. - (x + w) * 1.75 } else { x * 1.75 })).top(px(y * 1.75)).w(px(w * 1.75)).h(px(h * 1.75))
+    div().absolute().left(horizontal_px(if crate::localization::current_preference_rtl() { NOMINAL_WIDTH - (x + w) * 1.75 } else { x * 1.75 })).top(px(y * 1.75)).w(horizontal_px(w * 1.75)).h(px(h * 1.75))
         .when(crate::localization::current_preference_rtl(), |element| element.text_right())
 }
 
@@ -325,9 +329,31 @@ fn group(title: &'static str, x: f32, y: f32, w: f32, h: f32, palette: RenderPal
     let mut group = at(x, y, w, h)
         .child(div().absolute().top(px(7.)).left(px(0.)).right(px(0.)).bottom(px(0.)).border_1().border_color(rgb(palette.group_edge())));
     if !title.is_empty() {
-        group = group.child(div().absolute().top(px(0.)).h(px(14.)).w_full().flex().justify_center().child(div().h(px(14.)).px(px(3.)).line_height(px(14.)).bg(rgb(palette.pure_background)).text_color(rgb(palette.text)).child(source_label(title))));
+        group = group.child(div().absolute().top(px(0.)).h(px(14.)).w_full().flex().justify_center().child(div().h(px(14.)).px(horizontal_px(3.)).line_height(px(14.)).bg(rgb(palette.pure_background)).text_color(rgb(palette.text)).child(source_label(title))));
     }
     group
+}
+
+fn indicator(checked: bool, enabled: bool, palette: RenderPalette) -> AnyElement {
+    let color = if enabled { palette.text } else { palette.disabled_text };
+    let border = if enabled { if palette.dark { palette.edge } else { 0x333333 } }
+        else if palette.dark { palette.disabled_edge } else { 0xbfbfbf };
+    let mut indicator = div().relative().w(horizontal_px(13.)).h(px(13.)).flex_shrink_0().border_1().border_color(rgb(border))
+        .bg(rgb(if palette.dark { palette.softer_background } else { 0xffffff }))
+        .flex().items_center().justify_center();
+    if checked {
+        indicator = indicator.child(gpui::canvas(|_, _, _| (), move |bounds, _, window, _| {
+            let mut path = gpui::PathBuilder::stroke(px(1.5));
+            path.move_to(gpui::point(bounds.left() + horizontal_px(1.), bounds.top() + px(5.)));
+            path.line_to(gpui::point(bounds.left() + horizontal_px(4.), bounds.top() + px(8.)));
+            path.line_to(gpui::point(bounds.left() + horizontal_px(9.), bounds.top() + px(2.)));
+            match path.build() {
+                Ok(path) => window.paint_path(path, rgb(color)),
+                Err(error) => eprintln!("Style check mark could not be drawn: {error}"),
+            }
+        }).size_full());
+    }
+    indicator.into_any_element()
 }
 
 impl MatrixWindow {
@@ -601,7 +627,7 @@ impl MatrixWindow {
         at(x, y, w, 13.).id(id).role(Role::ComboBox).aria_label(label).aria_value(text.clone()).aria_expanded(self.style_config.choice == Some(choice)).tab_index(if enabled { 0 } else { -1 })
             .a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } })
             .border_1().border_color(rgb(palette.control_edge(enabled))).bg(rgb(if palette.dark { palette.control_background(enabled) } else if enabled { 0xe1e1e1 } else { 0xf0f0f0 }))
-            .flex().items_center().justify_between().px(px(4.)).overflow_hidden()
+            .flex().items_center().justify_between().px(horizontal_px(4.)).overflow_hidden()
             .when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
             .text_color(rgb(palette.control_text(enabled)))
             .when(enabled, |element| element.hover(move |style| style.bg(rgb(palette.hot_background)).border_color(rgb(palette.hot_edge)))
@@ -726,6 +752,7 @@ impl MatrixWindow {
     }
 
     fn choose_style_color(&mut self, background: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.finish_udl_styler_color(cx);
         if !self.finish_preference_color(window, cx) { return; }
         self.finish_style_color(window, cx);
         let key = if background { "bgColor" } else { "fgColor" };
@@ -780,7 +807,7 @@ impl MatrixWindow {
         let scroll = self.style_config.style_scroll.clone();
         div().id("style-list-scrollbar").role(Role::ScrollBar).aria_label(source_label("样式:")).aria_orientation(gpui::accesskit::Orientation::Vertical)
             .map(|element| preferences_editing_surface::scrollbar_accessibility(element, scroll.clone()))
-            .w(px(17.)).h_full().flex_shrink_0().border_y_1().border_r_1().border_color(rgb(palette.edge))
+            .w(horizontal_px(17.)).h_full().flex_shrink_0().border_y_1().border_r_1().border_color(rgb(palette.edge))
             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|view, event: &gpui::MouseDownEvent, _, cx| {
                 let scroll = &view.style_config.style_scroll;
                 let height = dialog_font::logical(scroll.bounds().size.height);
@@ -811,9 +838,9 @@ impl MatrixWindow {
                 for (y, direction) in [(8., -1.), (height - 8., 1.)] {
                     let x = dialog_font::logical(bounds.size.width) / 2.;
                     let mut path = gpui::PathBuilder::stroke(px(1.));
-                    path.move_to(bounds.origin + gpui::point(px(x - 3.), px(y - direction * 1.5)));
+                    path.move_to(bounds.origin + gpui::point(px(x) - horizontal_px(3.), px(y - direction * 1.5)));
                     path.line_to(bounds.origin + gpui::point(px(x), px(y + direction * 1.5)));
-                    path.line_to(bounds.origin + gpui::point(px(x + 3.), px(y - direction * 1.5)));
+                    path.line_to(bounds.origin + gpui::point(px(x) + horizontal_px(3.), px(y - direction * 1.5)));
                     match path.build() {
                         Ok(path) => window.paint_path(path, rgb(palette.control_text(maximum > 0.))),
                         Err(error) => eprintln!("Style scrollbar arrow cannot be drawn: {error}"),
@@ -904,7 +931,7 @@ impl MatrixWindow {
             let style = &self.style_config.styles(dark)[index];
             let selected = index == self.style_config.style;
             let style_name = style.attributes.get("name").cloned().unwrap_or_default();
-            styles = styles.child(div().id(gpui::SharedString::from(format!("style-list-{index}"))).role(Role::ListBoxOption).aria_label(style_name.clone()).aria_selected(selected).w_full().h(px(14.)).min_h(px(14.)).line_height(px(14.)).px(px(1.)).overflow_hidden()
+            styles = styles.child(div().id(gpui::SharedString::from(format!("style-list-{index}"))).role(Role::ListBoxOption).aria_label(style_name.clone()).aria_selected(selected).w_full().h(px(14.)).min_h(px(14.)).line_height(px(14.)).px(horizontal_px(1.)).overflow_hidden()
                 .bg(rgb(if selected { selection_background } else { palette.softer_background }))
                 .text_color(rgb(if selected { selection_text } else { palette.text }))
                 .when(!selected, |row| row.hover(move |style| style.bg(rgb(palette.hot_background)).text_color(rgb(palette.text))))
@@ -953,11 +980,11 @@ impl MatrixWindow {
         for (mask, text, y) in [(1, "粗体", 88.), (2, "斜体", 101.), (4, "下划线", 114.)] {
             let text = source_label(text);
             let checked = style.as_ref().is_some_and(|style| style_config::number(style, "fontStyle", 0).max(0) & mask != 0);
-            root = root.child(at(327., y, 80., 10.).id(gpui::SharedString::from(format!("style-font-bit-{mask}"))).role(Role::CheckBox).aria_label(text.clone()).aria_toggled(checked.into()).tab_index(if font_enabled { 0 } else { -1 }).flex().items_center().gap(px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
+            root = root.child(at(327., y, 80., 10.).id(gpui::SharedString::from(format!("style-font-bit-{mask}"))).role(Role::CheckBox).aria_label(text.clone()).aria_toggled(checked.into()).tab_index(if font_enabled { 0 } else { -1 }).flex().items_center().gap(horizontal_px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
                 .a11y_synthetic_children(move |builder| { if !font_enabled { builder.parent_node().set_disabled(); } })
                 .text_color(rgb(if font_enabled { palette.darker_text } else { palette.disabled_text }))
                 .when(font_enabled, |element| element.hover(move |style| style.text_color(rgb(palette.text))).focus(move |style| style.text_color(rgb(palette.text))))
-                .child(preferences_surface::pref_indicator_palette(checked, false, font_enabled, palette)).child(text)
+                .child(indicator(checked, font_enabled, palette)).child(text)
                 .on_click(cx.listener(move |view, _, window, cx| view.toggle_style_font_bit(mask, font_enabled, window, cx)))
                 .on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, window, cx| { if event.keystroke.key == "space" { view.toggle_style_font_bit(mask, font_enabled, window, cx); cx.stop_propagation(); } })));
         }
@@ -967,9 +994,9 @@ impl MatrixWindow {
             for (index, text, x, y) in [(0, "使用全局前景色", 191., 134.), (1, "使用全局背景色", 191., 149.), (2, "使用全局字体", 327., 134.), (3, "使用全局字体大小", 327., 149.), (4, "使用全局粗体样式", 327., 164.), (5, "使用全局斜体样式", 327., 179.), (6, "使用全局下划线样式", 327., 194.)] {
                 let text = source_label(text);
                 let checked = self.style_config.config.global_override.flag(index);
-                root = root.child(at(x, y, 153., 10.).id(gpui::SharedString::from(format!("style-global-flag-{index}"))).role(Role::CheckBox).aria_label(text.clone()).aria_toggled(checked.into()).tab_index(0).flex().items_center().gap(px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
+                root = root.child(at(x, y, 153., 10.).id(gpui::SharedString::from(format!("style-global-flag-{index}"))).role(Role::CheckBox).aria_label(text.clone()).aria_toggled(checked.into()).tab_index(0).flex().items_center().gap(horizontal_px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
                     .text_color(rgb(palette.darker_text)).hover(move |style| style.text_color(rgb(palette.text))).focus(move |style| style.text_color(rgb(palette.text)))
-                    .child(preferences_surface::pref_indicator_palette(checked, false, true, palette)).child(text)
+                    .child(indicator(checked, true, palette)).child(text)
                     .on_click(cx.listener(move |view, _, window, cx| view.toggle_style_global_flag(index, window, cx)))
                     .on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, window, cx| { if event.keystroke.key == "space" { view.toggle_style_global_flag(index, window, cx); cx.stop_propagation(); } })));
             }
@@ -1019,9 +1046,9 @@ impl MatrixWindow {
                 .focus(move |style| style.border_color(rgb(palette.hot_edge))).flex().items_center().justify_center().child(source_label("取消"))
                 .on_click(cx.listener(|view, _, window, cx| view.close_style_configurator(window, cx)))
                 .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, window, cx| { if matches!(event.keystroke.key.as_str(), "enter" | "space") { view.close_style_configurator(window, cx); cx.stop_propagation(); } })))
-            .child(at(431., 221., 63., 10.).id("style-transparency").role(Role::CheckBox).aria_label(source_label("透明度")).aria_toggled(self.style_config.transparent.into()).tab_index(0).flex().items_center().gap(px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
+            .child(at(431., 221., 63., 10.).id("style-transparency").role(Role::CheckBox).aria_label(source_label("透明度")).aria_toggled(self.style_config.transparent.into()).tab_index(0).flex().items_center().gap(horizontal_px(3.)).when(crate::localization::current_preference_rtl(), |element| element.flex_row_reverse())
                 .text_color(rgb(palette.darker_text)).hover(move |style| style.text_color(rgb(palette.text))).focus(move |style| style.text_color(rgb(palette.text)))
-                .child(preferences_surface::pref_indicator_palette(self.style_config.transparent, false, true, palette)).child(source_label("透明度"))
+                .child(indicator(self.style_config.transparent, true, palette)).child(source_label("透明度"))
                 .on_click(cx.listener(|view, _, window, cx| { view.style_config.transparent = !view.style_config.transparent; view.apply_style_transparency(window); cx.notify(); }))
                 .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, window, cx| { if event.keystroke.key == "space" { view.style_config.transparent = !view.style_config.transparent; view.apply_style_transparency(window); cx.stop_propagation(); cx.notify(); } })));
         let position = f32::from(self.style_config.transparency.saturating_sub(20)) / 180.;
@@ -1031,7 +1058,7 @@ impl MatrixWindow {
             .a11y_synthetic_children(move |builder| { if !transparency_enabled { builder.parent_node().set_disabled(); } })
             .when(transparency_enabled, |element| element.focus(move |style| style.border_1().border_color(rgb(palette.hot_edge))))
             .child(div().absolute().top(px(7.)).w_full().h(px(3.)).bg(rgb(palette.control_edge(transparency_enabled))))
-            .child(div().absolute().left(px(position * 88.)).top(px(2.)).w(px(6.)).h(px(13.))
+            .child(div().absolute().left(horizontal_px(position * 88.)).top(px(2.)).w(horizontal_px(6.)).h(px(13.))
                 .border_1().border_color(rgb(palette.control_edge(transparency_enabled)))
                 .bg(rgb(if transparency_enabled { palette.softer_background } else { palette.disabled_edge })))
             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|view, event: &gpui::MouseDownEvent, window, cx| {
@@ -1054,7 +1081,7 @@ impl MatrixWindow {
             let mut popup = at(x, y, w, h).id("style-choice-popup").role(Role::ListBox).aria_label(match choice { Choice::Theme => "选择主题", Choice::Language => "语言", Choice::Font => "字体名称", Choice::FontSize => "字体大小" }).border_1().border_color(rgb(palette.edge)).bg(rgb(palette.softer_background)).overflow_y_scroll().track_scroll(&self.style_config.choice_scroll);
             for (index, option) in options.into_iter().enumerate() {
                 let current = index == self.style_config.choice_cursor;
-                popup = popup.child(div().id(gpui::SharedString::from(format!("style-choice-{index}"))).role(Role::ListBoxOption).aria_label(option.clone()).aria_selected(current).h(px(14.)).min_h(px(14.)).line_height(px(14.)).w_full().px(px(4.))
+                popup = popup.child(div().id(gpui::SharedString::from(format!("style-choice-{index}"))).role(Role::ListBoxOption).aria_label(option.clone()).aria_selected(current).h(px(14.)).min_h(px(14.)).line_height(px(14.)).w_full().px(horizontal_px(4.))
                     .bg(rgb(if current { selection_background } else { palette.softer_background })).text_color(rgb(if current { selection_text } else { palette.text }))
                     .hover(move |style| style.bg(rgb(palette.hot_background)).text_color(rgb(palette.text))).child(option)
                     .on_click(cx.listener(move |view, _, window, cx| view.choose_style_value(choice, index, window, cx))));
@@ -1066,8 +1093,8 @@ impl MatrixWindow {
 
     fn set_style_transparency_position(&mut self, x: gpui::Pixels, window: &mut Window, cx: &mut Context<Self>) {
         let rtl = crate::localization::is_rtl(&self.native_locale());
-        let left = if rtl { 875. - (441. + 53.) * 1.75 } else { 441. * 1.75 };
-        let ratio = ((dialog_font::logical(x) - left) / (53. * 1.75)).clamp(0., 1.);
+        let left = horizontal_px(if rtl { NOMINAL_WIDTH - (441. + 53.) * 1.75 } else { 441. * 1.75 });
+        let ratio = (f32::from(x - left) / f32::from(horizontal_px(53. * 1.75))).clamp(0., 1.);
         let ratio = if rtl { 1. - ratio } else { ratio };
         self.style_config.transparency = (20. + ratio * 180.).round() as u8;
         self.apply_style_transparency(window);

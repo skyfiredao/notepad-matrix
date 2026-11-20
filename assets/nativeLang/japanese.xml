@@ -1757,6 +1757,60 @@ OKボタンを押すと検索ダイアログが開きます。
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-close value="閉じる"/>
+			<matrix-retry value="再試行"/>
+			<matrix-cancelled value="キャンセル済み"/>
+			<matrix-read-only value="読み取り専用"/>
+			<matrix-find-status-details value="状態の詳細"/>
+			<matrix-find-resize-results value="検索結果領域のサイズを変更"/>
+			<matrix-find-backward-unavailable value="正規表現の逆方向検索は無効です"/>
+			<matrix-hash-select-files value="ファイルを選択"/>
+			<matrix-hash-calculating value="ダイジェストを計算中…"/>
+			<matrix-hash-selection-failed value="ファイルの選択に失敗しました: $ERROR$"/>
+			<matrix-hash-read-failed value="次のファイルを読み取れません:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="エラー表示を閉じる"/>
+			<matrix-hash-file-paths value="ファイルパス（読み取り専用）"/>
+			<matrix-hash-digest-result value="ダイジェストの結果（読み取り専用）"/>
+			<matrix-hash-source-text value="ダイジェストの元のテキスト"/>
+			<matrix-hash-selection-composition value="入力の変換中に選択範囲のハッシュを計算する機能は未実装です"/>
+			<matrix-hash-selection-read-failed value="選択範囲を読み取れません: $ERROR$"/>
+			<matrix-window-activation-failed value="選択したファイルに切り替えられません"/>
+			<matrix-window-selection-unavailable value="選択したファイルは閉じられているか、アクティブにできません"/>
+			<matrix-incremental-position value="インクリメンタル検索バーを移動"/>
+			<matrix-find-progress-bar value="進行状況バー"/>
+			<matrix-find-previous-search value="前の検索を表示"/>
+			<matrix-find-results-summary value="検索結果 -（$INT_REPLACE$ 件一致）"/>
+			<matrix-udl-allow-code2-close value="コード 2 の折りたたみ終了記号を許可"/>
+			<matrix-udl-allow-code2-middle value="コード 2 の折りたたみ中間記号を許可"/>
+			<matrix-udl-allow-code2-open value="コード 2 の折りたたみ開始記号を許可"/>
+			<matrix-udl-allow-comment-fold-close value="コメントの折りたたみ終了記号を許可"/>
+			<matrix-udl-allow-comment-fold-middle value="コメントの折りたたみ中間記号を許可"/>
+			<matrix-udl-allow-comment-fold-open value="コメントの折りたたみ開始記号を許可"/>
+			<matrix-udl-choose-json value="JSON 形式の UDL 定義ファイルを選択"/>
+			<matrix-udl-close value="ユーザー定義言語を閉じる"/>
+			<matrix-udl-close-styler value="スタイル設定を閉じる"/>
+			<matrix-udl-colors value="色"/>
+			<matrix-udl-dark-mode-language value="ダークモード用の言語"/>
+			<matrix-udl-definition-exported value="定義をエクスポートしました"/>
+			<matrix-udl-definitions-saved value="定義を保存しました"/>
+			<matrix-udl-enable-font value="フォントを有効にする"/>
+			<matrix-udl-error value="ユーザー定義言語のエラー: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ファイルの操作に失敗しました: $ERROR$"/>
+			<matrix-udl-file-progress value="ファイルを操作中…"/>
+			<matrix-udl-import-rejected value="インポートが拒否されました: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ 個の言語をインポートしました"/>
+			<matrix-udl-live-edits value="ユーザー定義言語 — 変更はこの言語を使用する文書にのみ即時反映されます"/>
+			<matrix-udl-loading value="定義を読み込み中…"/>
+			<matrix-udl-memory-only value="定義はメモリ内にのみ存在します（設定ディレクトリなし）"/>
+			<matrix-udl-missing-ids value="ユーザー定義言語の ID が見つかりません: $IDS$。文書のテキストと保存済みの言語識別情報は保持されています。定義を復元するか、別の言語を明示的に選択してください。"/>
+			<matrix-udl-open-panel-disconnected value="UDL の開くパネルとの接続が切れました: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="この名前付き定義を削除しますか？既存の文書はテキストを保持し、名前のないユーザー定義言語に切り替わります。"/>
+			<matrix-udl-retry-file value="UDL ファイルの操作を再試行"/>
+			<matrix-udl-save-panel-disconnected value="UDL の保存パネルとの接続が切れました: $ERROR$"/>
+			<matrix-udl-unavailable value="定義を利用できません。udl.json を修正して再試行してください。"/>
+			<matrix-udl-use-background value="背景色を使用"/>
+			<matrix-udl-use-foreground value="前景色を使用"/>
+			<matrix-udl-working-copy value="ユーザー定義（作業用コピー）"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are place holders, don't translate these place holders. -->
 			<word-chars-list-tip value="この機能を使うと、標準の 単語を構成する文字 のリストに文字を追加できます。ダブルクリックでの単語選択や、「単語単位」での検索に影響します。"/>
 			<!-- Don't translate "(&quot;EOL custom color&quot;)" -->

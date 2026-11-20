@@ -263,7 +263,7 @@ impl MatrixWindow {
         self.macro_dialogs.executing_step = false;
         self.macro_dialogs.active_run = Some(run);
         if finished {
-            let error = self.editor_error.clone();
+            let error = self.editor_error.as_ref().map(|error| error.render(&self.native_locale()));
             self.finish_macro_repeat(error.as_deref(), cx);
         } else {
             cx.on_next_frame(window, move |view, window, cx| {

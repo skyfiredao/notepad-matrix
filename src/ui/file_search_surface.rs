@@ -8,15 +8,16 @@ use super::*;
 #[path = "finder_views.rs"]
 mod finder_views;
 
-fn choose_search_directory(initial: &std::path::Path) -> io::Result<Option<PathBuf>> {
+fn choose_search_directory(initial: &std::path::Path, title: &str) -> Result<Option<PathBuf>, crate::localization::Text> {
     use objc2_app_kit::{NSModalResponseCancel, NSModalResponseOK, NSOpenPanel};
     use objc2_foundation::{MainThreadMarker, NSString, NSURL};
-    let mtm = MainThreadMarker::new().ok_or_else(|| io::Error::other("目录选择需要主线程"))?;
+    let mtm = MainThreadMarker::new().ok_or_else(|| crate::localization::Text::resource(
+        "matrix-search-directory-main-thread", "Search directory selection requires the main thread"))?;
     let panel = NSOpenPanel::openPanel(mtm);
     panel.setCanChooseFiles(false);
     panel.setCanChooseDirectories(true);
     panel.setAllowsMultipleSelection(false);
-    panel.setTitle(Some(&NSString::from_str("选择要搜索的文件夹")));
+    panel.setTitle(Some(&NSString::from_str(title)));
     if initial.is_dir() {
         let url = NSURL::fileURLWithPath_isDirectory(
             &NSString::from_str(&initial.to_string_lossy()),
@@ -29,14 +30,15 @@ fn choose_search_directory(initial: &std::path::Path) -> io::Result<Option<PathB
         return Ok(None);
     }
     if response != NSModalResponseOK {
-        return Err(io::Error::other("目录选择窗口未能完成"));
+        return Err(crate::localization::Text::resource("matrix-search-directory-dialog-incomplete", "Search directory selection did not complete"));
     }
     let path = panel
         .URL()
         .and_then(|url| url.path())
         .map(|path| PathBuf::from(path.to_string()))
-        .ok_or_else(|| io::Error::other("目录选择未返回有效路径"))?;
-    crate::file_access::selected(&path)?;
+        .ok_or_else(|| crate::localization::Text::resource("matrix-search-directory-invalid-path", "Search directory selection did not return a valid path"))?;
+    crate::file_access::selected(&path).map_err(|error| crate::localization::Text::resource(
+        "matrix-search-directory-select-error", "Select search directory failed: $ERROR$").replace("$ERROR$", error.to_string()))?;
     Ok(Some(path))
 }
 
@@ -122,6 +124,24 @@ impl FinderCommand {
             Self::CloseResults => "finder-close-results",
         }
     }
+
+    fn localized_label(self, locale: &str) -> &'static str {
+        let id = match self {
+            Self::FoldAll => "finder-collapse-all",
+            Self::UnfoldAll => "finder-uncollapse-all",
+            Self::Copy(FinderCopy::Verbatim) => return crate::localization::menu_command(locale, 42002).unwrap_or(self.label()),
+            Self::Copy(FinderCopy::Lines) => "finder-copy",
+            Self::Copy(FinderCopy::Pathnames) => "finder-copy-selected-paths",
+            Self::SelectAll => return crate::localization::menu_command(locale, 42007).unwrap_or(self.label()),
+            Self::ClearAll => "finder-clear-all",
+            Self::TogglePurge => "finder-purge-for-every-search",
+            Self::OpenSelectedPathnames => "finder-open-selected-paths",
+            Self::ToggleWrap => "finder-wrap-long-lines",
+            Self::FindWithin => "finder-find-in-finder",
+            Self::CloseResults => "finder-close-this",
+        };
+        crate::localization::localized_string(locale, id).unwrap_or(self.label())
+    }
 }
 
 
@@ -129,7 +149,7 @@ use crate::find_in_files::FileSearchRequest;
 
 enum FileOperationResult {
     Search(crate::finder::SearchCompletion, Vec<(usize, crate::search::RegexState)>),
-    Replace(crate::find_in_files::FileReplaceResults),
+    Replace(crate::find_in_files::FileReplaceResults, Vec<crate::localization::Text>),
 }
 
 pub(super) struct FileSearchState {
@@ -171,7 +191,7 @@ pub(super) struct FileSearchState {
     results_purge: bool,
     results_one_per_line: bool,
     always_visible: bool,
-    message: String,
+    message: crate::localization::Text,
 }
 
 impl FileSearchState {
@@ -215,7 +235,7 @@ impl FileSearchState {
             results_purge: false,
             results_one_per_line: true,
             always_visible: false,
-            message: String::new(),
+            message: "".into(),
         }
     }
 }
@@ -492,8 +512,9 @@ impl MatrixWindow {
             Ok(())
         }) {
             self.set_find_status(find_surface::FindStatus::NotFound,
-                format!("Search settings could not be saved: {error}"));
-            self.notify_editor_error(self.find_message.clone(), cx);
+                crate::localization::Text::resource("matrix-search-settings-save-error", "Search settings could not be saved: $ERROR$")
+                    .replace("$ERROR$", error.to_string()));
+            self.notify_localized_editor_error(self.find_message.clone(), cx);
             return false;
         }
         true
@@ -672,7 +693,7 @@ impl MatrixWindow {
             };
             if buffer.editor.has_composition() {
                 self.set_find_status(find_surface::FindStatus::NotFound,
-                    "Find All during active document composition is not implemented yet");
+                    crate::localization::Text::resource("matrix-find-all-composition-unavailable", "Find All during active document composition is not implemented yet"));
                 cx.notify();
                 return;
             }
@@ -727,9 +748,7 @@ impl MatrixWindow {
         cx.spawn_in(window, async move |view, cx| {
             let (completion, updates) = task.await;
             if let Err(error) = view.update_in(cx, |view, window, cx| {
-                view.files_search.cancel = None;
-                view.files_search.progress = None;
-                view.file_busy = false;
+                view.finish_file_search_job();
                 view.write_search_regex_states(&identities, updates);
                 view.finish_streamed_search_results(&query, options, completion, window, cx);
             }) { eprintln!("document search completion lost its window: {error}"); }
@@ -739,7 +758,9 @@ impl MatrixWindow {
 
     fn begin_streamed_search_results(&mut self, query: &str, cx: &mut Context<Self>) {
         self.files_search.created = true;
-        self.set_find_status(find_surface::FindStatus::NoMessage, "");
+        if !self.files_search.cancel.as_ref().is_some_and(|cancel| cancel.load(Ordering::Relaxed)) {
+            self.set_find_status(find_surface::FindStatus::NoMessage, "");
+        }
         self.activate_main_finder(cx);
         self.cancel_finder_drag();
         self.files_search.results.start_search(query, self.files_search.results_purge);
@@ -754,7 +775,8 @@ impl MatrixWindow {
         self.files_search.wrapped_scroll.reset(self.files_search.results.rows.len());
         self.reveal_finder_row(0, gpui::ScrollStrategy::Top);
         self.files_search.results_visible = true;
-        self.files_search.message = "Search results - (0 hits)".into();
+        self.files_search.message = crate::localization::Text::resource("matrix-find-results-summary", "Search results - ($INT_REPLACE$ hits)")
+            .replace("$INT_REPLACE$", "0");
         cx.notify();
     }
 
@@ -770,7 +792,8 @@ impl MatrixWindow {
         self.files_search.wrapped_scroll.reset(self.files_search.results.rows.len());
         self.files_search.wrapped_scroll.scroll_to(top);
         let hits = self.files_search.results.searches.first().map_or(0, |search| search.hits);
-        self.files_search.message = format!("Search results - ({} {})", crate::finder::commafy(hits), if hits == 1 { "hit" } else { "hits" });
+        self.files_search.message = crate::localization::Text::resource("matrix-find-results-summary", "Search results - ($INT_REPLACE$ hits)")
+            .replace("$INT_REPLACE$", crate::finder::commafy(hits));
         cx.notify();
     }
 
@@ -792,7 +815,7 @@ impl MatrixWindow {
                 self.files_search.results_focus.focus(window, cx);
             }
         }
-        if let Some(error) = error { self.set_find_status(find_surface::FindStatus::NotFound, error); }
+        if let Some(error) = error { self.set_serialized_find_error(&error); }
         cx.notify();
     }
 
@@ -862,8 +885,8 @@ impl MatrixWindow {
             return;
         }
         if self.editor().marked_range().is_some() {
-            self.notify_editor_error(
-                "Find in Files during active composition is not implemented yet".into(),
+            self.notify_localized_editor_error(
+                crate::localization::Text::resource("matrix-find-in-files-composition-unavailable", "Find in Files during active composition is not implemented yet"),
                 cx,
             );
             return;
@@ -922,22 +945,24 @@ impl MatrixWindow {
         }
         let filters = self.captured_search_input(crate::search_history::Field::Filter, cx);
         let message = if self.find_project_mode {
-            "您是否要替换所选项目面板中所有文档中的所有匹配项？".to_owned()
+            self.find_text("replace-in-projects-confirm-message", "Do you want to replace all occurrences in all documents in the selected Project Panel(s)?").to_owned()
         } else {
-            format!("您是否要替换下列范围内的所有匹配项:\n\n{directory}\n\n对这些文件类型:\n\n{}",
+            format!("{}\n\n{directory}\n\n{}\n\n{}",
+                self.find_text("replace-in-files-confirm-directory", "Are you sure you want to replace all occurrences in:"),
+                self.find_text("replace-in-files-confirm-filetype", "For file type:"),
                 if filters.is_empty() { "*.*" } else { &filters })
         };
         let response = window.prompt(
             gpui::PromptLevel::Warning,
             if self.find_project_mode {
-                "您确定吗？"
+                self.find_text("replace-in-projects-confirm-title", "Are you sure?")
             } else {
-                "确认"
+                self.find_text("replace-in-files-confirm-title", "Are you sure?")
             },
             Some(&message),
             &[
-                gpui::PromptButton::ok("确定"),
-                gpui::PromptButton::cancel("取消"),
+                gpui::PromptButton::ok(self.find_text("common-ok", "OK")),
+                gpui::PromptButton::cancel(self.find_text("common-cancel", "Cancel")),
             ],
             cx,
         );
@@ -955,13 +980,25 @@ impl MatrixWindow {
         .detach();
     }
 
-    pub(super) fn files_search_replace_message(&mut self, message: String, cx: &mut Context<Self>) {
-        self.set_file_search_status(find_surface::FindStatus::Message, message);
+    pub(super) fn files_search_replace_message(&mut self, message: crate::localization::Text, cx: &mut Context<Self>) {
+        self.set_find_status(find_surface::FindStatus::Message, message);
         cx.notify();
     }
 
-    fn set_file_search_status(&mut self, status: find_surface::FindStatus, message: impl Into<String>) {
+    fn set_file_search_status(&mut self, status: find_surface::FindStatus, message: impl Into<crate::localization::Text>) {
         self.set_find_status(status, message);
+    }
+
+    fn finish_file_search_job(&mut self) {
+        self.files_search.cancel = None;
+        self.files_search.progress = None;
+        self.file_busy = false;
+        if self.find_status == find_surface::FindStatus::Message
+            && matches!(&self.find_message, crate::localization::Text::Resource { id, .. }
+                if matches!(*id, "progress-cancel-info" | "find-in-files-progress-title" | "replace-in-files-progress-title"))
+        {
+            self.set_find_status(find_surface::FindStatus::NoMessage, "");
+        }
     }
 
     pub(super) fn toggle_file_search_option(&mut self, id: u32, cx: &mut Context<Self>) {
@@ -1007,7 +1044,8 @@ impl MatrixWindow {
     pub(super) fn cancel_active_file_search(&mut self, cx: &mut Context<Self>) -> bool {
         if let Some(cancel) = &self.files_search.cancel {
             cancel.store(true, Ordering::Relaxed);
-            self.set_file_search_status(find_surface::FindStatus::Message, "正在停止…");
+            self.set_file_search_status(find_surface::FindStatus::Message,
+                crate::localization::Text::resource("progress-cancel-info", "Cancelling operation, please wait..."));
             cx.notify();
             true
         } else {
@@ -1065,7 +1103,7 @@ impl MatrixWindow {
             .any(|buffer| buffer.editor.marked_range().is_some())
         {
             self.set_file_search_status(find_surface::FindStatus::NotFound,
-                "Search with active document composition is not implemented yet");
+                crate::localization::Text::resource("matrix-search-composition-unavailable", "Search with active document composition is not implemented yet"));
             cx.notify();
             return;
         }
@@ -1104,7 +1142,8 @@ impl MatrixWindow {
                 .enumerate()
                 .any(|(index, selected)| *selected && self.projects.visible(index))
             {
-                self.set_file_search_status(find_surface::FindStatus::NotFound, "请选择要搜索的项目面板");
+                self.set_file_search_status(find_surface::FindStatus::NotFound,
+                    crate::localization::Text::resource("matrix-search-select-project-panels", "Select the Project Panel(s) to search"));
                 cx.notify();
                 return;
             }
@@ -1123,9 +1162,9 @@ impl MatrixWindow {
             self.record_search_history(crate::search_history::Field::Replace, window, cx);
         }
         self.set_file_search_status(find_surface::FindStatus::Message, if replacing {
-            "正在替换文件…"
+            crate::localization::Text::resource("replace-in-files-progress-title", "Replace In Files progress...")
         } else {
-            "正在查找文件…"
+            crate::localization::Text::resource("find-in-files-progress-title", "Find In Files progress...")
         });
         let progress = Arc::new(crate::find_in_files::FileSearchProgress::new(replacing, project_paths.is_none()));
         self.files_search.progress = Some(progress.clone());
@@ -1145,9 +1184,7 @@ impl MatrixWindow {
             let candidates = task.await;
             if candidates.cancelled || cancel.load(Ordering::Relaxed) || (candidates.paths.is_empty() && !candidates.errors.is_empty()) {
                 if let Err(error) = view.update(cx, |view, cx| {
-                    view.files_search.cancel = None;
-                    view.files_search.progress = None;
-                    view.file_busy = false;
+                    view.finish_file_search_job();
                     view.set_file_search_status(if candidates.errors.is_empty() { find_surface::FindStatus::NoMessage } else { find_surface::FindStatus::NotFound }, candidates.errors.join("；"));
                     cx.notify();
                 }) { eprintln!("file discovery completion lost its document: {error}"); }
@@ -1162,12 +1199,13 @@ impl MatrixWindow {
                 cx.notify();
             }) { eprintln!("file search could not begin in its document: {error}"); return; }
             let results = if let Some(replacement) = replacement {
-                let mut results = crate::find_in_files::FileReplaceResults { errors: candidates.errors, ..Default::default() };
+                let mut results = crate::find_in_files::FileReplaceResults::default();
+                let mut errors: Vec<crate::localization::Text> = candidates.errors.into_iter().map(Into::into).collect();
                 for (index, path) in candidates.paths.into_iter().enumerate() {
                     if cancel.load(Ordering::Relaxed) { results.cancelled = true; break; }
-                    let opened = match view.update(cx, |view, _| view.replace_open_file_search_target(&path, &query, &replacement, options)) {
+                    let opened = match view.update(cx, |view, _| view.replace_open_file_search_target(&path, &query, &replacement, options, &mut errors)) {
                         Ok(result) => result,
-                        Err(error) => { results.errors.push(error.to_string()); break; }
+                        Err(error) => { errors.push(error.to_string().into()); break; }
                     };
                     let mut replaced = if let Some(result) = opened { result } else {
                         let request = request.clone();
@@ -1180,11 +1218,11 @@ impl MatrixWindow {
                     };
                     results.replaced += replaced.replaced;
                     results.cancelled |= replaced.cancelled;
-                    results.errors.append(&mut replaced.errors);
+                    errors.extend(replaced.errors.drain(..).map(crate::localization::Text::from));
                     progress.record(&path, index + 1, total, results.replaced, false);
                     if let Some(error) = replaced.search_error { results.search_error = Some(error); break; }
                 }
-                FileOperationResult::Replace(results)
+                FileOperationResult::Replace(results, errors)
             } else {
                 let progress = progress.clone();
                 let (sender, receiver) = std::sync::mpsc::sync_channel(2);
@@ -1212,19 +1250,27 @@ impl MatrixWindow {
             };
             match document_window.update(cx, |_, window, cx| {
                 view.update(cx, |view, cx| {
-                    view.files_search.cancel = None;
-                    view.files_search.progress = None;
-                    view.file_busy = false;
+                    view.finish_file_search_job();
                     match results {
                         FileOperationResult::Search(results, updates) => {
                             view.write_search_regex_states(&identities, updates);
                             view.finish_streamed_search_results(&query, options, results, window, cx)
                         }
-                        FileOperationResult::Replace(results) => {
+                        FileOperationResult::Replace(results, errors) => {
                             view.editor_changed(Ok(()), window, cx);
-                            if let Some(error) = results.search_error { view.set_file_search_status(find_surface::FindStatus::NotFound, error); }
-                            else { view.files_search_replace_message(format!("在文件中替换: 已替换 {} 个匹配项。{}{}", results.replaced,
-                                if results.cancelled { "已取消。" } else { "" }, results.errors.join("；")), cx); }
+                            if let Some(error) = results.search_error { view.set_serialized_find_error(&error); }
+                            else {
+                                let mut message = crate::localization::Text::resource(if results.replaced == 1 { "find-status-replaceinfiles-1-replaced" } else { "find-status-replaceinfiles-nb-replaced" },
+                                    "Replace in Files: $INT_REPLACE$ occurrences were replaced")
+                                    .replace("$INT_REPLACE$", crate::finder::commafy(results.replaced));
+                                if results.cancelled {
+                                    message = message.with_suffix(" (").with_suffix(crate::localization::Text::resource("matrix-cancelled", "Cancelled")).with_suffix(")");
+                                }
+                                for (index, error) in errors.into_iter().enumerate() {
+                                    message = message.with_suffix(if index == 0 { " " } else { "; " }).with_suffix(error);
+                                }
+                                view.files_search_replace_message(message, cx);
+                            }
                         }
                     }
                 })
@@ -1239,7 +1285,7 @@ impl MatrixWindow {
         cx.notify();
     }
 
-    fn replace_open_file_search_target(&mut self, path: &std::path::Path, query: &str, replacement: &str, options: crate::search::LiteralOptions) -> Option<crate::find_in_files::FileReplaceResults> {
+    fn replace_open_file_search_target(&mut self, path: &std::path::Path, query: &str, replacement: &str, options: crate::search::LiteralOptions, errors: &mut Vec<crate::localization::Text>) -> Option<crate::find_in_files::FileReplaceResults> {
         if self.files_search.ignore_unsaved_changes { return None; }
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         let buffer = self.workspace.buffers_mut().find(|buffer| buffer.disk_file.as_ref().is_some_and(|file| file.path() == canonical))?;
@@ -1258,7 +1304,8 @@ impl MatrixWindow {
                                 results.errors.push(format!("{}: {error}", path.display()));
                             }
                         }
-                        Err(error) => results.errors.push(format!("{}: 替换已保留在编辑器，但保存失败: {error}", path.display())),
+                        Err(error) => errors.push(crate::localization::Text::resource("matrix-search-replaced-save-error", "$PATH$: replacements were kept in the editor, but saving failed: $ERROR$")
+                            .replace("$PATH$", path.display().to_string()).replace("$ERROR$", error.to_string())),
                     }
                 }
             }
@@ -1330,8 +1377,9 @@ impl MatrixWindow {
         self.file_busy = true;
         self.close_search_history();
         let initial = PathBuf::from(self.files_search.directory.read(cx).text());
+        let title = self.find_text("find-in-files-select-folder", "Select a folder to search from");
         cx.spawn_in(window, async move |view, cx| {
-            let result = choose_search_directory(&initial);
+            let result = choose_search_directory(&initial, title);
             if let Err(error) = view.update_in(cx, |view, window, cx| {
                 view.file_busy = false;
                 match result {
@@ -1344,8 +1392,7 @@ impl MatrixWindow {
                         }
                     }
                     Ok(None) => {}
-                    Err(error) => view.set_file_search_status(find_surface::FindStatus::NotFound,
-                        format!("选择目录失败: {error}")),
+                    Err(error) => view.set_file_search_status(find_surface::FindStatus::NotFound, error),
                 }
                 cx.notify();
             }) {
@@ -1418,7 +1465,8 @@ impl MatrixWindow {
                             }
                         }
                         Err(error) => view
-                            .notify_editor_error(format!("Open search result failed: {error}"), cx),
+                            .notify_localized_editor_error(crate::localization::Text::resource("matrix-search-result-open-error", "Open search result failed: $ERROR$")
+                                .replace("$ERROR$", error.to_string()), cx),
                     }
                 })
             }) {
@@ -1437,6 +1485,12 @@ impl MatrixWindow {
         if !self.files_search.visible {
             return None;
         }
+        self.sync_find_field_labels(cx);
+        let locale = self.native_locale();
+        self.files_search.filters.update(cx, |field, cx| field.set_label(
+            crate::localization::dialog_control(&locale, "Find", 1654).unwrap_or("Filters:"), cx));
+        self.files_search.directory.update(cx, |field, cx| field.set_label(
+            crate::localization::dialog_control(&locale, "Find", 1655).unwrap_or("Directory:"), cx));
         let busy = self.files_search.cancel.is_some();
         let operation_enabled = self.file_search_operation_enabled();
         Some(
@@ -1444,18 +1498,14 @@ impl MatrixWindow {
                 .id("find-in-files-dialog")
                 .debug_selector(|| "find-in-files-dialog".into())
                 .role(Role::Dialog)
-                .aria_label(if self.find_project_mode {
-                    "项目中查找"
-                } else {
-                    "文件中查找"
-                })
+                .aria_label(self.find_dialog_title())
                 .track_focus(&self.files_search.focus)
                 .key_context("MatrixFindInFiles")
                 .size_full()
                 .relative()
-                .font_family(if self.editing_find_monospaced() { "Menlo".to_owned() } else { dialog_font::font_family() })
-                .text_size(px(13.))
-                .line_height(px(18.))
+                .font_family(dialog_font::font_family())
+                .text_size(gpui::px(dialog_font::base_size()))
+                .line_height(dialog_font::line_height())
                 .bg(rgb(0xffffff))
                 .text_color(rgb(0x202020))
                 .occlude()
@@ -1473,18 +1523,19 @@ impl MatrixWindow {
                     self.search_history_combo(crate::search_history::Field::Replace, cx),
                 ))
                 .when(!self.find_controls.compact, |dialog| dialog.child(find_surface::input_row(
-                    "文件类型(S):", 103., self.search_history_combo(crate::search_history::Field::Filter, cx))))
+                    crate::localization::dialog_control(&locale, "Find", 1654).unwrap_or("Filters:"), 103., self.search_history_combo(crate::search_history::Field::Filter, cx))))
                 .when(!self.find_controls.compact, |dialog| {
                     dialog.child(div().id("files-filter-tip")
                         .absolute().left(px(440.)).top(px(103.)).h(px(20.))
                         .text_color(rgb(0x0078ff)).child("(?)")
-                        .tooltip(|_, cx| icon_tooltip::view(
-                            "示例：在 cpp、cxx、h、hxx 和 hpp 中查找:\n*.cpp *.cxx *.h *.hxx *.hpp\n\n查找除 exe、obj 和 log 以外的所有文件:\n*.* !*.exe !*.obj !*.log\n\n查找所有文件但排除文件夹 tests、bin 和 bin64:\n*.* !\\tests !\\bin*\n\n查找所有文件但递归式排除所有叫 log 或 logs 的文件夹:\n*.* !+\\log*",
-                            false, cx)))
+                        .tooltip({
+                            let text = self.find_text("find-in-files-filter-tip", "File name filters");
+                            move |_, cx| icon_tooltip::view(text, false, cx)
+                        }))
                 })
                 .when(!self.find_project_mode && !self.find_controls.compact, |dialog| {
                     dialog.child(find_surface::input_row_with_label_width(
-                        "目录(E):",
+                        crate::localization::dialog_control(&locale, "Find", 1655).unwrap_or("Directory:"),
                         134.,
                         81.,
                         self.search_history_combo(crate::search_history::Field::Directory, cx),
@@ -1495,7 +1546,7 @@ impl MatrixWindow {
                         find_surface::source_button("files-browse", "...", 133.)
                             .right(px(258.))
                             .w(px(26.))
-                            .aria_label("选择要搜索的文件夹")
+                            .aria_label(self.find_text("find-in-files-select-folder", "Select a folder to search from"))
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.browse_search_directory(window, cx)
                             })),
@@ -1506,7 +1557,7 @@ impl MatrixWindow {
                         find_surface::source_button("files-directory-from-document", "<<", 133.)
                             .right(px(222.))
                             .w(px(26.))
-                            .aria_label("使用当前文档所在目录填充目录字段")
+                            .aria_label(self.find_text("find-in-files-dir-from-active-doc-tip", "Fill Directory field based on active document"))
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.use_document_search_directory(window, cx)
                             })),
@@ -1665,19 +1716,21 @@ impl MatrixWindow {
                         }
                     })),
                 )
-                .child(
-                    find_surface::source_button(
-                        "files-close",
-                        if busy { "停止" } else { "关闭" },
-                        101.,
+                .when(!self.find_controls.compact, |dialog| {
+                    dialog.child(
+                        find_surface::source_button(
+                            "files-close",
+                            if busy { "停止" } else { "关闭" },
+                            101.,
+                        )
+                        .on_click(cx.listener(|view, _, window, cx| {
+                            if view.cancel_active_file_search(cx) {
+                                return;
+                            }
+                            view.dismiss_floating(floating_windows::DialogKind::Find, window, cx);
+                        })),
                     )
-                    .on_click(cx.listener(|view, _, window, cx| {
-                        if view.cancel_active_file_search(cx) {
-                            return;
-                        }
-                        view.dismiss_floating(floating_windows::DialogKind::Find, window, cx);
-                    })),
-                )
+                })
                 .when(!self.find_controls.compact, |dialog| {
                     dialog.child(find_surface::search_mode(self.find_options.mode, &self.find_mode_focus,
                         &self.find_controls.option_focus[8], cx))
@@ -2060,8 +2113,9 @@ impl MatrixWindow {
                         view.files_search.results_focus.focus(window, cx);
                     }
                     if !errors.is_empty() {
-                        view.notify_editor_error(
-                            format!("Open search results failed: {}", errors.join("; ")),
+                        view.notify_localized_editor_error(
+                            crate::localization::Text::resource("matrix-search-results-open-error", "Open search results failed: $ERROR$")
+                                .replace("$ERROR$", errors.join("; ")),
                             cx,
                         );
                     }
@@ -2172,8 +2226,9 @@ impl MatrixWindow {
                         Ok(())
                     })
                 {
-                    self.notify_editor_error(
-                        format!("Finder setting could not be saved: {error}"),
+                    self.notify_localized_editor_error(
+                        crate::localization::Text::resource("matrix-finder-settings-save-error", "Finder setting could not be saved: $ERROR$")
+                            .replace("$ERROR$", error.to_string()),
                         cx,
                     );
                     self.files_search.results_focus.focus(window, cx);
@@ -2495,6 +2550,7 @@ impl MatrixWindow {
                                 })
                                 .map(|(index, command)| {
                                     let selector = command.selector();
+                                    let label = command.localized_label(&self.native_locale());
                                     let enabled = self.finder_command_enabled(command);
                                     let checked = match command {
                                         FinderCommand::TogglePurge => {
@@ -2510,13 +2566,13 @@ impl MatrixWindow {
                                         .debug_selector(move || selector.into())
                                         .role(Role::MenuItem)
                                         .relative()
-                                        .aria_label(command.label())
+                                        .aria_label(label)
                                         .when_some(checked, |item, checked| {
                                             item.aria_toggled(checked.into())
                                         })
                                         .h(px(24.))
                                         .px(px(20.))
-                                        .child(command.label())
+                                        .child(label)
                                         .when(checked == Some(true), |item| {
                                             item.child(
                                                 div()
@@ -2568,12 +2624,16 @@ impl MatrixWindow {
             return None;
         }
         let dark = self.dark;
+        let caption = self.find_text("find-result-caption", "Search results");
+        let hits = self.files_search.results.searches.first().map_or(0, |search| search.hits);
+        let count = self.find_text("find-result-hits", "($INT_REPLACE$ hits)").replace("$INT_REPLACE$", &crate::finder::commafy(hits));
+        let summary = format!("{caption} - {count}");
         Some(
             div()
                 .id("files-results")
                 .debug_selector(|| "files-results".into())
                 .role(Role::Group)
-                .aria_label("Search results")
+                .aria_label(caption)
                 .track_focus(&self.files_search.results_focus)
                 .on_mouse_down_out(cx.listener(|view, _, _, _| view.cancel_finder_drag()))
                 .on_mouse_up(
@@ -2660,7 +2720,8 @@ impl MatrixWindow {
                     div()
                         .id("files-results-splitter")
                         .debug_selector(|| "files-results-splitter".into())
-                        .aria_label("Resize search results")
+                        .role(Role::Splitter)
+                        .aria_label(self.find_text("matrix-find-resize-results", "Resize search results"))
                         .h(px(4.))
                         .w_full()
                         .flex_shrink_0()
@@ -2684,8 +2745,8 @@ impl MatrixWindow {
                             div()
                                 .id("files-results-summary")
                                 .role(Role::Status)
-                                .aria_label(self.files_search.message.clone())
-                                .child(self.files_search.message.clone()),
+                                .aria_label(summary.clone())
+                                .child(summary),
                         )
                         .when(
                             self.files_search.cancel.is_some()
@@ -2696,8 +2757,8 @@ impl MatrixWindow {
                                         .id("files-cancel")
                                         .debug_selector(|| "files-cancel".into())
                                         .role(Role::Button)
-                                        .aria_label("Cancel file search")
-                                        .child("Cancel")
+                                        .aria_label(self.find_text("common-cancel", "Cancel"))
+                                        .child(self.find_text("common-cancel", "Cancel"))
                                         .on_click(cx.listener(|view, _, _, _| {
                                             if let Some(cancel) = &view.files_search.cancel {
                                                 cancel.store(true, Ordering::Relaxed);
@@ -2711,9 +2772,10 @@ impl MatrixWindow {
                                 .id("files-results-close")
                                 .debug_selector(|| "files-results-close".into())
                                 .role(Role::Button)
-                                .aria_label("Close search results")
-                                .tooltip(move |_, cx| {
-                                    icon_tooltip::view("Close search results", dark, cx)
+                                .aria_label(self.find_text("matrix-close", "Close"))
+                                .tooltip({
+                                    let label = self.find_text("matrix-close", "Close");
+                                    move |_, cx| icon_tooltip::view(label, dark, cx)
                                 })
                                 .child("×")
                                 .on_click(cx.listener(|view, _, window, cx| {
@@ -2846,9 +2908,9 @@ impl MatrixWindow {
                         .id(("finder-fold", index))
                         .role(Role::Button)
                         .aria_label(if collapsed {
-                            "Expand results"
+                            self.find_text("matrix-find-expand-results", "Expand results")
                         } else {
-                            "Collapse results"
+                            self.find_text("matrix-find-collapse-results", "Collapse results")
                         })
                         .absolute()
                         .left(px(0.))

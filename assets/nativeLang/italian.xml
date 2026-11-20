@@ -1756,6 +1756,60 @@ Per motivi di sicurezza, esaminare il file shortcuts.xml aperto. Se il contenuto
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-close value="Chiudi"/>
+			<matrix-retry value="Riprova"/>
+			<matrix-cancelled value="Annullato"/>
+			<matrix-read-only value="Sola lettura"/>
+			<matrix-find-status-details value="Dettagli sullo stato"/>
+			<matrix-find-resize-results value="Ridimensiona i risultati della ricerca"/>
+			<matrix-find-backward-unavailable value="La ricerca all’indietro con espressioni regolari è disabilitata"/>
+			<matrix-hash-select-files value="Seleziona file"/>
+			<matrix-hash-calculating value="Calcolo dell’impronta…"/>
+			<matrix-hash-selection-failed value="Selezione dei file non riuscita: $ERROR$"/>
+			<matrix-hash-read-failed value="Impossibile leggere i seguenti file:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Chiudi il messaggio di errore"/>
+			<matrix-hash-file-paths value="Percorsi dei file (sola lettura)"/>
+			<matrix-hash-digest-result value="Impronta risultante (sola lettura)"/>
+			<matrix-hash-source-text value="Testo di origine dell’impronta"/>
+			<matrix-hash-selection-composition value="Il calcolo dell’impronta della selezione durante la composizione del testo non è ancora implementato"/>
+			<matrix-hash-selection-read-failed value="Impossibile leggere la selezione: $ERROR$"/>
+			<matrix-window-activation-failed value="Impossibile passare al file selezionato"/>
+			<matrix-window-selection-unavailable value="Il file selezionato è chiuso o non può essere attivato"/>
+			<matrix-incremental-position value="Sposta la barra di ricerca incrementale"/>
+			<matrix-find-progress-bar value="Barra di avanzamento"/>
+			<matrix-find-previous-search value="Mostra la ricerca precedente"/>
+			<matrix-find-results-summary value="Risultati della ricerca - ($INT_REPLACE$ corrispondenze)"/>
+			<matrix-udl-allow-code2-close value="Consenti la chiusura del ripiegamento del codice 2"/>
+			<matrix-udl-allow-code2-middle value="Consenti il punto intermedio del ripiegamento del codice 2"/>
+			<matrix-udl-allow-code2-open value="Consenti l’apertura del ripiegamento del codice 2"/>
+			<matrix-udl-allow-comment-fold-close value="Consenti la chiusura del ripiegamento dei commenti"/>
+			<matrix-udl-allow-comment-fold-middle value="Consenti il punto intermedio del ripiegamento dei commenti"/>
+			<matrix-udl-allow-comment-fold-open value="Consenti l’apertura del ripiegamento dei commenti"/>
+			<matrix-udl-choose-json value="Scegli un file di definizione UDL in formato JSON"/>
+			<matrix-udl-close value="Chiudi il linguaggio definito dall’utente"/>
+			<matrix-udl-close-styler value="Chiudi il configuratore di stili"/>
+			<matrix-udl-colors value="Colori"/>
+			<matrix-udl-dark-mode-language value="Linguaggio in modalità scura"/>
+			<matrix-udl-definition-exported value="Definizione esportata"/>
+			<matrix-udl-definitions-saved value="Definizioni salvate"/>
+			<matrix-udl-enable-font value="Abilita carattere"/>
+			<matrix-udl-error value="Errore del linguaggio definito dall’utente: $ERROR$"/>
+			<matrix-udl-file-failed value="Operazione sul file UDL non riuscita: $ERROR$"/>
+			<matrix-udl-file-progress value="Operazione sul file in corso…"/>
+			<matrix-udl-import-rejected value="Importazione rifiutata: $ERROR$"/>
+			<matrix-udl-imported value="Importati $COUNT$ linguaggi"/>
+			<matrix-udl-live-edits value="Linguaggio definito dall’utente — le modifiche si applicano subito solo ai documenti che usano questo linguaggio"/>
+			<matrix-udl-loading value="Caricamento delle definizioni…"/>
+			<matrix-udl-memory-only value="Le definizioni sono solo in memoria (nessuna cartella di configurazione)"/>
+			<matrix-udl-missing-ids value="ID dei linguaggi definiti dall’utente mancanti: $IDS$. Il testo dei documenti e le identità dei linguaggi salvate sono stati conservati. Ripristina le definizioni o seleziona esplicitamente un altro linguaggio."/>
+			<matrix-udl-open-panel-disconnected value="Pannello di apertura UDL disconnesso: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Rimuovere questa definizione con nome? I documenti esistenti mantengono il testo e passano al linguaggio definito dall’utente senza nome."/>
+			<matrix-udl-retry-file value="Riprova l’operazione sul file UDL"/>
+			<matrix-udl-save-panel-disconnected value="Pannello di salvataggio UDL disconnesso: $ERROR$"/>
+			<matrix-udl-unavailable value="Definizioni non disponibili; correggi udl.json e riprova."/>
+			<matrix-udl-use-background value="Usa colore sfondo"/>
+			<matrix-udl-use-foreground value="Usa colore primo piano"/>
+			<matrix-udl-working-copy value="Definito dall’utente (copia di lavoro)"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are place holders, don't translate these place holders. -->
 			<word-chars-list-tip value="Permette di includere caratteri aggiuntivi nell&apos;elenco dei caratteri considerati una parola, quando effettui un doppio clic per selezionare, o effettui una ricerca con l&apos;opzione &quot;Solo parole intere&quot; selezionata"/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 

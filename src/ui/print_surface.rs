@@ -3,13 +3,25 @@ use objc2::{DefinedClass, MainThreadOnly, class, define_class, msg_send};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2_app_kit::{NSFont, NSPrintInfo, NSPrintOperation, NSPrintingPaginationMode, NSView, NSRectFill};
-use objc2_foundation::{NSCopying, NSObjectProtocol, NSPoint, NSRange, NSRect, NSSize, NSString};
-use std::cell::RefCell;
+use objc2_foundation::{NSCopying, NSObjectProtocol, NSPoint, NSRange, NSRect, NSSize, NSString, NSDate, NSRunLoop, NSDefaultRunLoopMode};
+use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::{Arc, mpsc};
+use std::sync::atomic::{AtomicBool, Ordering};
 
-struct PrintSpan {
-    range: std::ops::Range<usize>,
-    appearance: crate::syntax::StyleAppearance,
+#[path = "print_layout.rs"]
+mod print_layout;
+#[path = "print_measure.rs"]
+mod print_measure;
+
+use print_layout::{PrintGeometry, PrintPageIndex, PrintRun, print_language_has_styles, print_unit_is_representation, print_unit_text};
+use print_measure::{PrintFontSpec, PrintMeasure, PrintStyleSpan};
+
+enum PrintSyntax {
+    None,
+    Builtin(crate::languages::LanguageProfile, bool),
+    UserDefined(crate::udl::Definition),
 }
 
 struct PrintSnapshot {
@@ -20,46 +32,60 @@ struct PrintSnapshot {
     profile: crate::syntax::StyleAppearance,
     controls: crate::syntax::StyleAppearance,
     number: Option<crate::syntax::StyleAppearance>,
-    spans: Vec<PrintSpan>,
+    syntax: PrintSyntax,
+    styles: Vec<crate::syntax::StyleAppearance>,
+    active_fonts: Vec<bool>,
+    spans: Vec<PrintStyleSpan>,
     tabs: crate::input::TabPreferences,
     settings: serde_json::Value,
 }
 
-struct PrintGlyph {
-    character: Option<char>,
-    source: std::ops::Range<usize>,
-    representation: bool,
-    text: Retained<NSString>,
+struct PrintDocument {
+    bytes: crate::byte_buffer::ByteBuffer,
+    range: std::ops::Range<usize>,
+    first_line: usize,
+    fonts: Vec<PrintFontSpec>,
+    style_fonts: Vec<usize>,
+    style_remap: Vec<usize>,
+    spans: Arc<Vec<PrintStyleSpan>>,
+    control_font: usize,
+}
+
+impl PrintDocument {
+    fn metrics(&self) -> io::Result<PrintMeasure<'_>> {
+        PrintMeasure::from_specs(&self.fonts, self.style_fonts.clone(), self.style_remap.clone(), self.spans.clone(), self.control_font)
+    }
+
+    fn paginate(&self, geometry: PrintGeometry, cancelled: &AtomicBool) -> io::Result<Arc<PrintPageIndex>> {
+        let mut metrics = self.metrics()?;
+        PrintPageIndex::build_cancellable(&self.bytes, self.range.clone(), self.first_line, geometry,
+            &mut metrics, cancelled).map(Arc::new)
+    }
+}
+
+struct PrintNativeStyle {
     attributes: Retained<AnyObject>,
-    width: f64,
-    background: u32,
+    control_attributes: Retained<AnyObject>,
     foreground: u32,
+    background: u32,
     ascent: f64,
 }
 
-struct PrintPosition { glyph: usize, x: f64, y: f64, page: usize }
-struct PrintNumber { text: String, y: f64, page: usize }
-
-struct PrintPage {
-    positions: std::ops::Range<usize>,
-    numbers: std::ops::Range<usize>,
+struct PrintPending {
+    geometry: PrintGeometry,
+    result: mpsc::Receiver<io::Result<Arc<PrintPageIndex>>>,
+    cancelled: Arc<AtomicBool>,
 }
 
-#[derive(Default)]
-struct PrintLayout {
-    positions: Vec<PrintPosition>,
-    numbers: Vec<PrintNumber>,
-    page_ranges: Vec<PrintPage>,
-    pages: usize,
-    width: f64,
-    height: f64,
-    inset: f64,
-    body_top: f64,
-    body_bottom: f64,
+impl Drop for PrintPending {
+    fn drop(&mut self) { self.cancelled.store(true, Ordering::Relaxed); }
 }
 
 struct PrintState {
-    glyphs: Vec<PrintGlyph>,
+    document: Arc<PrintDocument>,
+    styles: Vec<PrintNativeStyle>,
+    info: Retained<NSPrintInfo>,
+    title: String,
     line_height: f64,
     space_width: f64,
     tab_size: usize,
@@ -74,12 +100,15 @@ struct PrintState {
     number_width: f64,
     number_background: u32,
     number_ascent: f64,
-    first_line: usize,
     ascent: f64,
     control_height: f64,
     control_ascent: f64,
     background: u32,
-    layout: RefCell<PrintLayout>,
+    layout: RefCell<Option<Arc<PrintPageIndex>>>,
+    pending: RefCell<Option<PrintPending>>,
+    pagination_generation: Cell<usize>,
+    layout_error: RefCell<Option<io::Error>>,
+    error: RefCell<Option<io::Error>>,
 }
 
 fn print_color(color: u32, option: i64, background: bool) -> u32 {
@@ -148,82 +177,125 @@ fn print_margins(info: &NSPrintInfo, settings: &serde_json::Value) {
 }
 
 impl PrintState {
-    fn reflow(&self, width: f64, height: f64) {
+    fn geometry(&self, info: &NSPrintInfo) -> io::Result<PrintGeometry> {
+        print_margins(info, &self.settings);
+        let width = info.paperSize().width - info.leftMargin() - info.rightMargin();
+        let height = info.paperSize().height - info.topMargin() - info.bottomMargin();
+        if width <= 0. || height <= 0. { return Err(io::Error::other("print margins exceed the paper size")); }
         let inset = self.footer_height * 1.5;
-        let header = self.headers.iter().any(|text| !text.is_empty());
-        let footer = self.footers.iter().any(|text| !text.is_empty());
-        let top = inset + if header { self.header_height * 1.5 } else { 0. };
-        let bottom = (height - inset - if footer { self.footer_height * 1.5 } else { 0. }).max(top + self.line_height);
-        let left = inset + self.number_width;
-        let right = (width - inset).max(left + self.space_width);
-        let mut layout = PrintLayout { pages: 1, width, height, inset, body_top: top, body_bottom: bottom, ..PrintLayout::default() };
-        let mut x = left;
-        let mut y = top;
-        let mut line = self.first_line;
-        let mut first_row = true;
-        let mut previous_cr = false;
-        for (index, glyph) in self.glyphs.iter().enumerate() {
-            if glyph.character == Some('\n') && previous_cr { previous_cr = false; continue; }
-            previous_cr = glyph.character == Some('\r');
-            if glyph.character == Some('\u{000c}') && self.settings["formFeedPageBreak"].as_bool().unwrap_or(false) {
-                layout.pages += 1; x = left; y = top; first_row = true; continue;
-            }
-            if matches!(glyph.character, Some('\r' | '\n')) {
-                if first_row && self.number_width > 0. { layout.numbers.push(PrintNumber { text: line.to_string(), y, page: layout.pages }); }
-                line += 1; x = left; y += self.line_height; first_row = true;
-                if y + self.line_height > bottom { layout.pages += 1; y = top; }
-                continue;
-            }
-            let advance_at = |x: f64| if glyph.character == Some('\t') {
-                let tab = self.space_width * self.tab_size as f64;
-                tab - (x - left) % tab
-            } else { glyph.width };
-            let starts_word = !glyph.character.is_some_and(char::is_whitespace)
-                && (index == 0 || self.glyphs[index - 1].character.is_some_and(char::is_whitespace));
-            if starts_word && x > left {
-                let width: f64 = self.glyphs[index..].iter().take_while(|glyph| !glyph.character.is_some_and(char::is_whitespace)).map(|glyph| glyph.width).sum();
-                if width <= right - left && x + width > right {
-                    x = left; y += self.line_height; first_row = false;
-                    if y + self.line_height > bottom { layout.pages += 1; y = top; }
-                }
-            }
-            let mut advance = advance_at(x);
-            if x + advance > right && x > left {
-                x = left; y += self.line_height; first_row = false;
-                if y + self.line_height > bottom { layout.pages += 1; y = top; }
-                advance = advance_at(x);
-            }
-            if first_row && x == left && self.number_width > 0. {
-                layout.numbers.push(PrintNumber { text: line.to_string(), y, page: layout.pages });
-                first_row = false;
-            }
-            if glyph.character != Some('\t') { layout.positions.push(PrintPosition { glyph: index, x, y, page: layout.pages }); }
-            x += advance;
-        }
-        if let Some(last) = self.glyphs.last() {
-            if matches!(last.character, Some('\r' | '\n')) && layout.positions.iter().all(|position| position.page < layout.pages) && layout.numbers.iter().all(|number| number.page < layout.pages) {
-                layout.pages = layout.pages.saturating_sub(1).max(1);
-            }
-        }
-        let mut position = 0;
-        let mut number = 0;
-        for page in 1..=layout.pages {
-            let start_position = position;
-            let start_number = number;
-            while layout.positions.get(position).is_some_and(|position| position.page == page) { position += 1; }
-            while layout.numbers.get(number).is_some_and(|number| number.page == page) { number += 1; }
-            layout.page_ranges.push(PrintPage { positions: start_position..position, numbers: start_number..number });
-        }
-        *self.layout.borrow_mut() = layout;
+        let top = inset + if self.headers.iter().any(|text| !text.is_empty()) { self.header_height * 1.5 } else { 0. };
+        let bottom = (height - inset - if self.footers.iter().any(|text| !text.is_empty()) { self.footer_height * 1.5 } else { 0. }).max(top + self.line_height);
+        PrintGeometry { width, height, inset, body_top: top, body_bottom: bottom,
+            number_width: self.number_width, line_height: self.line_height, space_width: self.space_width,
+            tab_size: self.tab_size, form_feed_page_break: self.settings["formFeedPageBreak"].as_bool().unwrap_or(false) }.validate()
     }
 
-    fn draw_parts(&self, parts: &[String; 3], attributes: &AnyObject, page: usize, y: f64, layout: &PrintLayout) {
+    fn ensure_layout(&self, info: &NSPrintInfo) -> io::Result<Arc<PrintPageIndex>> {
+        let mtm = MainThreadMarker::new().ok_or_else(|| io::Error::other("printing requires the main thread"))?;
+        let operation = NSPrintOperation::currentOperation(mtm);
+        let generation = self.pagination_generation.get();
+        let run_loop = NSRunLoop::currentRunLoop();
+        let mode = run_loop.currentMode().unwrap_or_else(|| unsafe { NSDefaultRunLoopMode.to_owned() });
+        loop {
+            if self.pagination_generation.get() != generation || operation.as_ref().is_some_and(|operation| {
+                NSPrintOperation::currentOperation(mtm).as_ref()
+                    .is_none_or(|current| !std::ptr::eq(&**operation, &**current))
+            }) {
+                self.pending.borrow_mut().take();
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "native print operation stopped"));
+            }
+            let geometry = match self.geometry(info) {
+                Ok(geometry) => geometry,
+                Err(error) => {
+                    self.pending.borrow_mut().take();
+                    return Err(error);
+                }
+            };
+            if self.pending.borrow().as_ref().is_some_and(|pending| pending.geometry != geometry) {
+                self.pending.borrow_mut().take();
+            }
+            if let Some(layout) = self.layout.borrow().as_ref()
+                && layout.matches(&self.document.range, self.document.first_line, geometry) {
+                self.layout_error.borrow_mut().take();
+                return Ok(layout.clone());
+            }
+            let ready = {
+                let pending = self.pending.borrow();
+                if let Some(pending) = pending.as_ref().filter(|pending| pending.geometry == geometry) {
+                    match pending.result.try_recv() {
+                        Ok(result) => Some(result),
+                        Err(mpsc::TryRecvError::Empty) => None,
+                        Err(mpsc::TryRecvError::Disconnected) => Some(Err(io::Error::other("print pagination worker stopped"))),
+                    }
+                } else { None }
+            };
+            if let Some(result) = ready {
+                self.pending.borrow_mut().take();
+                let layout = result?;
+                *self.layout.borrow_mut() = Some(layout.clone());
+                self.layout_error.borrow_mut().take();
+                return Ok(layout);
+            }
+            let needs_worker = self.pending.borrow().as_ref().is_none_or(|pending| pending.geometry != geometry);
+            if needs_worker {
+                self.pending.borrow_mut().take();
+                let document = self.document.clone();
+                let cancelled = Arc::new(AtomicBool::new(false));
+                let worker_cancelled = cancelled.clone();
+                let (sender, result) = mpsc::channel();
+                std::thread::Builder::new().name("matrix-print-pagination".into()).spawn(move || {
+                    let result = objc2::rc::autoreleasepool(|_| document.paginate(geometry, &worker_cancelled));
+                    if sender.send(result).is_err() { worker_cancelled.store(true, Ordering::Relaxed); }
+                }).map_err(io::Error::other)?;
+                *self.pending.borrow_mut() = Some(PrintPending { geometry, result, cancelled });
+            }
+            let limit = NSDate::dateWithTimeIntervalSinceNow(0.01);
+            if !run_loop.runMode_beforeDate(&mode, &limit) { std::thread::yield_now(); }
+        }
+    }
+
+    fn draw_parts(&self, parts: &[String; 3], attributes: &AnyObject, page: usize, y: f64, layout: PrintGeometry) {
         for (index, template) in parts.iter().enumerate() {
             let text = NSString::from_str(&template.replacen("$(CURRENT_PRINTING_PAGE)", &page.to_string(), 1));
             let size = print_size(&text, attributes);
             let x = match index { 0 => layout.inset + 5., 1 => (layout.width - size.width) / 2., _ => layout.width - layout.inset - size.width };
             print_draw(&text, attributes, x, y);
         }
+    }
+
+    fn draw_run(&self, run: PrintRun, offset: f64, layout: PrintGeometry) -> io::Result<()> {
+        match run {
+            PrintRun::Number { line, y } => {
+                print_fill(self.number_background, NSRect::new(NSPoint::new(layout.inset, offset + y), NSSize::new(self.number_width, self.line_height)));
+                let text = NSString::from_str(&format!("{line}   "));
+                let width = print_size(&text, &self.number_attributes).width;
+                print_draw(&text, &self.number_attributes, layout.inset + self.number_width - width, offset + y + self.ascent - self.number_ascent);
+            }
+            PrintRun::Representation { value, style, x, y, width } => {
+                let style = &self.styles[style];
+                let box_y = offset + y + self.ascent - self.control_height;
+                print_fill(style.background, NSRect::new(NSPoint::new(x, offset + y), NSSize::new(width, self.line_height)));
+                print_fill(style.foreground, NSRect::new(NSPoint::new(x + 1., box_y + 1.), NSSize::new((width - 1.).max(0.), (self.control_height - 1.).max(0.))));
+                print_fill(style.foreground, NSRect::new(NSPoint::new(x + 2., box_y), NSSize::new((width - 3.).max(0.), self.control_height + 1.)));
+                print_draw(&NSString::from_str(&print_unit_text(value)), &style.control_attributes, x + 2., offset + y + self.ascent - self.control_ascent);
+            }
+            PrintRun::Text { source, style, x, y, width } => {
+                let style = &self.styles[style];
+                let selected = self.document.bytes.slice(source).map_err(io::Error::other)?;
+                let mut text = String::new();
+                for unit in selected.units() {
+                    match unit.value {
+                        crate::byte_text::ByteValue::Scalar(character) => text.push(character),
+                        crate::byte_text::ByteValue::Invalid(_) => return Err(io::Error::other("print text run contains an invalid byte")),
+                    }
+                }
+                if style.background != self.background {
+                    print_fill(style.background, NSRect::new(NSPoint::new(x, offset + y), NSSize::new(width, self.line_height)));
+                }
+                print_draw(&NSString::from_str(&text), &style.attributes, x, offset + y + self.ascent - style.ascent);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -242,83 +314,67 @@ define_class!(
         #[unsafe(method(knowsPageRange:))]
         unsafe fn page_range(&self, range: *mut NSRange) -> Bool {
             let info = NSPrintOperation::currentOperation(self.mtm()).map(|operation| operation.printInfo()).unwrap_or_else(NSPrintInfo::sharedPrintInfo);
-            print_margins(&info, &self.ivars().settings);
-            let width = (info.paperSize().width - info.leftMargin() - info.rightMargin()).max(1.);
-            let height = (info.paperSize().height - info.topMargin() - info.bottomMargin()).max(1.);
-            self.ivars().reflow(width, height);
-            let pages = self.ivars().layout.borrow().pages;
-            self.setFrameSize(NSSize::new(width, height * pages as f64));
-            if let Some(range) = unsafe { range.as_mut() } { *range = NSRange::new(1, pages); }
+            match self.ivars().ensure_layout(&info) {
+                Ok(layout) => {
+                    let geometry = layout.geometry();
+                    self.setFrameSize(NSSize::new(geometry.width, geometry.height * layout.page_count() as f64));
+                    if let Some(range) = unsafe { range.as_mut() } { *range = NSRange::new(1, layout.page_count()); }
+                }
+                Err(error) => {
+                    *self.ivars().layout_error.borrow_mut() = Some(error);
+                    if let Some(range) = unsafe { range.as_mut() } { *range = NSRange::new(1, 0); }
+                }
+            }
             Bool::YES
         }
 
         #[unsafe(method(rectForPage:))]
         fn page_rect(&self, page: isize) -> NSRect {
             let layout = self.ivars().layout.borrow();
-            NSRect::new(NSPoint::new(0., page.saturating_sub(1).max(0) as f64 * layout.height), NSSize::new(layout.width, layout.height))
+            let Some(layout) = layout.as_ref() else { return NSRect::ZERO; };
+            let geometry = layout.geometry();
+            NSRect::new(NSPoint::new(0., page.saturating_sub(1).max(0) as f64 * geometry.height), NSSize::new(geometry.width, geometry.height))
         }
 
         #[unsafe(method(drawRect:))]
-        fn draw_rect(&self, rect: NSRect) {
+        fn draw_rect(&self, _rect: NSRect) {
             let state = self.ivars();
-            let layout = state.layout.borrow();
-            if layout.height <= 0. { return; }
-            let first = (rect.origin.y / layout.height).floor().max(0.) as usize + 1;
-            let last = ((rect.origin.y + rect.size.height) / layout.height).ceil().max(1.) as usize;
-            for page in first..=last.min(layout.pages) {
-                let Some(ranges) = layout.page_ranges.get(page - 1) else { continue; };
-                let offset = (page - 1) as f64 * layout.height;
-                print_fill(state.background, NSRect::new(NSPoint::new(layout.inset, offset + layout.body_top), NSSize::new(layout.width - layout.inset * 2., layout.body_bottom - layout.body_top)));
-                for number in &layout.numbers[ranges.numbers.clone()] {
-                    print_fill(state.number_background, NSRect::new(NSPoint::new(layout.inset, offset + number.y), NSSize::new(state.number_width, state.line_height)));
-                    let text = NSString::from_str(&format!("{}   ", number.text));
-                    let width = print_size(&text, &state.number_attributes).width;
-                    print_draw(&text, &state.number_attributes, layout.inset + state.number_width - width, offset + number.y + state.ascent - state.number_ascent);
-                }
-                let positions = &layout.positions[ranges.positions.clone()];
-                let mut index = 0;
-                while let Some(position) = positions.get(index) {
-                    let glyph = &state.glyphs[position.glyph];
-                    if glyph.representation {
-                        let y = offset + position.y + state.ascent - state.control_height;
-                        print_fill(glyph.background, NSRect::new(NSPoint::new(position.x, offset + position.y), NSSize::new(glyph.width, state.line_height)));
-                        print_fill(glyph.foreground, NSRect::new(NSPoint::new(position.x + 1., y + 1.), NSSize::new((glyph.width - 1.).max(0.), (state.control_height - 1.).max(0.))));
-                        print_fill(glyph.foreground, NSRect::new(NSPoint::new(position.x + 2., y), NSSize::new((glyph.width - 3.).max(0.), state.control_height + 1.)));
-                        print_draw(&glyph.text, &glyph.attributes, position.x + 2., offset + position.y + state.ascent - state.control_ascent);
-                        index += 1;
-                        continue;
-                    }
-                    let mut text = String::new();
-                    let mut right = position.x;
-                    let mut source_end = glyph.source.start;
-                    while let Some(next) = positions.get(index) {
-                        let candidate = &state.glyphs[next.glyph];
-                        if next.y != position.y || (next.x - right).abs() > 0.01 || candidate.background != glyph.background
-                            || candidate.representation || candidate.source.start != source_end
-                            || !std::ptr::eq(&*candidate.attributes, &*glyph.attributes) { break; }
-                        text.push_str(&candidate.text.to_string());
-                        right = next.x + candidate.width;
-                        source_end = candidate.source.end;
-                        index += 1;
-                    }
-                    if glyph.background != state.background { print_fill(glyph.background, NSRect::new(NSPoint::new(position.x, offset + position.y), NSSize::new(right - position.x, state.line_height))); }
-                    print_draw(&NSString::from_str(&text), &glyph.attributes, position.x, offset + position.y + state.ascent - glyph.ascent);
-                }
+            let Some(layout) = state.layout.borrow().clone() else { return; };
+            let geometry = layout.geometry();
+            let result = (|| -> io::Result<()> {
+                let operation = NSPrintOperation::currentOperation(self.mtm())
+                    .ok_or_else(|| io::Error::other("native print operation is unavailable"))?;
+                let page = usize::try_from(operation.currentPage()).ok()
+                    .filter(|page| *page > 0 && *page <= layout.page_count())
+                    .ok_or_else(|| io::Error::other("native print page is outside the document"))?;
+                let mut metrics = state.document.metrics()?;
+                let offset = (page - 1) as f64 * geometry.height;
+                print_fill(state.background, NSRect::new(NSPoint::new(geometry.inset, offset + geometry.body_top), NSSize::new(geometry.width - geometry.inset * 2., geometry.body_bottom - geometry.body_top)));
+                layout.draw_page_runs(&state.document.bytes, page, &mut metrics, |run| state.draw_run(run, offset, geometry))?;
                 if state.headers.iter().any(|part| !part.is_empty()) {
-                    state.draw_parts(&state.headers, &state.header_attributes, page, offset + layout.inset, &layout);
-                    print_fill(0, NSRect::new(NSPoint::new(layout.inset, offset + layout.body_top - state.header_height / 4.), NSSize::new(layout.width - layout.inset * 2., 0.5)));
+                    state.draw_parts(&state.headers, &state.header_attributes, page, offset + geometry.inset, geometry);
+                    print_fill(0, NSRect::new(NSPoint::new(geometry.inset, offset + geometry.body_top - state.header_height / 4.), NSSize::new(geometry.width - geometry.inset * 2., 0.5)));
                 }
                 if state.footers.iter().any(|part| !part.is_empty()) {
-                    state.draw_parts(&state.footers, &state.footer_attributes, page, offset + layout.body_bottom + state.footer_height / 2., &layout);
-                    print_fill(0, NSRect::new(NSPoint::new(layout.inset, offset + layout.body_bottom + state.footer_height / 4.), NSSize::new(layout.width - layout.inset * 2., 0.5)));
+                    state.draw_parts(&state.footers, &state.footer_attributes, page, offset + geometry.body_bottom + state.footer_height / 2., geometry);
+                    print_fill(0, NSRect::new(NSPoint::new(geometry.inset, offset + geometry.body_bottom + state.footer_height / 4.), NSSize::new(geometry.width - geometry.inset * 2., 0.5)));
                 }
-            }
+                Ok(())
+            })();
+            if let Err(error) = result { *state.error.borrow_mut() = Some(error); }
+        }
+
+        #[unsafe(method(endDocument))]
+        fn end_document(&self) {
+            self.ivars().pagination_generation.set(self.ivars().pagination_generation.get().wrapping_add(1));
+            self.ivars().pending.borrow_mut().take();
+            unsafe { let _: () = msg_send![super(self), endDocument]; }
         }
     }
 );
 
 fn print_dates() -> [String; 3] {
-    use objc2_foundation::{NSDate, NSDateFormatter, NSDateFormatterStyle};
+    use objc2_foundation::{NSDateFormatter, NSDateFormatterStyle};
     let now = NSDate::date();
     let formatter = NSDateFormatter::new();
     formatter.setDateStyle(NSDateFormatterStyle::ShortStyle);
@@ -331,91 +387,156 @@ fn print_dates() -> [String; 3] {
     [short, long, formatter.stringFromDate(&now).to_string()]
 }
 
-fn print_representation(value: crate::byte_text::ByteValue) -> Option<String> {
-    const C0: [&str; 32] = [
-        "NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL", "BS", "HT", "LF", "VT", "FF", "CR", "SO", "SI",
-        "DLE", "DC1", "DC2", "DC3", "DC4", "NAK", "SYN", "ETB", "CAN", "EM", "SUB", "ESC", "FS", "GS", "RS", "US",
-    ];
-    const C1: [&str; 32] = [
-        "PAD", "HOP", "BPH", "NBH", "IND", "NEL", "SSA", "ESA", "HTS", "HTJ", "VTS", "PLD", "PLU", "RI", "SS2", "SS3",
-        "DCS", "PU1", "PU2", "STS", "CCH", "MW", "SPA", "EPA", "SOS", "SGCI", "SCI", "CSI", "ST", "OSC", "PM", "APC",
-    ];
-    match value {
-        crate::byte_text::ByteValue::Invalid(byte) => Some(format!("x{byte:02X}")),
-        crate::byte_text::ByteValue::Scalar(character) => match character {
-            '\0'..='\u{1f}' => Some(C0[character as usize].into()),
-            '\u{7f}' => Some("DEL".into()),
-            '\u{80}'..='\u{9f}' => Some(C1[character as usize - 0x80].into()),
-            '\u{2028}' => Some("LS".into()),
-            '\u{2029}' => Some("PS".into()),
-            _ => None,
-        },
+fn prepare_print_styles(mut snapshot: PrintSnapshot) -> io::Result<PrintSnapshot> {
+    if matches!(snapshot.syntax, PrintSyntax::None) { return Ok(snapshot); }
+    let projection = crate::byte_projection::ByteProjection::from_bytes(&snapshot.bytes);
+    let text = projection.text().to_string();
+    let mut spans = Vec::new();
+    match &snapshot.syntax {
+        PrintSyntax::None => {}
+        PrintSyntax::UserDefined(definition) => {
+            let mut styles = BTreeMap::new();
+            for span in crate::udl::lex(&text, definition).spans {
+                let selected = projection.source_selection(Selection { anchor: ByteOffset(span.range.start), head: ByteOffset(span.range.end) })
+                    .map_err(io::Error::other)?.range();
+                let range = selected.start.0.max(snapshot.range.start)..selected.end.0.min(snapshot.range.end);
+                if range.start >= range.end { continue; }
+                let style = *styles.entry(span.style).or_insert_with(|| {
+                    let appearance = crate::syntax::udl_appearance_with_profile(definition, span.style, &snapshot.profile, 0);
+                    let index = snapshot.styles.iter().position(|style| *style == appearance).unwrap_or(snapshot.styles.len());
+                    if index == snapshot.styles.len() { snapshot.styles.push(appearance); }
+                    index
+                });
+                spans.push(PrintStyleSpan { range, style });
+            }
+        }
+        PrintSyntax::Builtin(definition, dark) => {
+            let mut styles = BTreeMap::new();
+            for span in crate::lexers::lex(&text, definition).map_err(io::Error::other)?.spans {
+                let selected = projection.source_selection(Selection { anchor: ByteOffset(span.range.start), head: ByteOffset(span.range.end) })
+                    .map_err(io::Error::other)?.range();
+                let range = selected.start.0.max(snapshot.range.start)..selected.end.0.min(snapshot.range.end);
+                if range.start >= range.end { continue; }
+                let style = *styles.entry(span.style).or_insert_with(|| {
+                    let appearance = crate::builtin_language::style_appearance(definition, span.style, *dark, &snapshot.profile, 0);
+                    let index = snapshot.styles.iter().position(|style| *style == appearance).unwrap_or(snapshot.styles.len());
+                    if index == snapshot.styles.len() { snapshot.styles.push(appearance); }
+                    index
+                });
+                spans.push(PrintStyleSpan { range, style });
+            }
+        }
     }
+    snapshot.syntax = PrintSyntax::None;
+    snapshot.active_fonts = vec![false; snapshot.styles.len()];
+    snapshot.active_fonts[0] = true;
+    let selected = snapshot.bytes.slice(snapshot.range.clone()).map_err(io::Error::other)?;
+    let mut span_index = 0;
+    for unit in selected.units() {
+        if print_unit_is_representation(unit.value) { continue; }
+        let offset = snapshot.range.start + unit.range.start;
+        while spans.get(span_index).is_some_and(|span| span.range.end <= offset) { span_index += 1; }
+        let style = spans.get(span_index).filter(|span| span.range.contains(&offset)).map_or(0, |span| span.style);
+        snapshot.active_fonts[style] = true;
+    }
+    snapshot.spans = spans;
+    Ok(snapshot)
 }
 
-fn print_text(snapshot: PrintSnapshot, show_panel: bool) -> io::Result<bool> {
-    let PrintSnapshot { bytes, range, first_line, title, profile, controls, number, spans, tabs, settings } = snapshot;
-    let title = title.as_str();
-    let mtm = MainThreadMarker::new()
-        .ok_or_else(|| io::Error::other("printing requires the main thread"))?;
+fn font_index(
+    appearance: &crate::syntax::StyleAppearance,
+    fonts: &mut Vec<Retained<NSFont>>,
+    keys: &mut BTreeMap<(String, u32, bool, bool), usize>,
+) -> io::Result<usize> {
+    let key = (appearance.font_family.clone(), appearance.font_size, appearance.bold, appearance.italic);
+    if let Some(index) = keys.get(&key) { return Ok(*index); }
+    let font = print_font(&appearance.font_family, f64::from(appearance.font_size), appearance.bold, appearance.italic)?;
+    let index = fonts.len();
+    fonts.push(font);
+    keys.insert(key, index);
+    Ok(index)
+}
+
+fn prepare_print(snapshot: PrintSnapshot) -> io::Result<PrintState> {
+    let PrintSnapshot { bytes, range, first_line, title, profile, controls, number, syntax: _, styles: appearances,
+        active_fonts, spans, tabs, settings } = snapshot;
+    MainThreadMarker::new().ok_or_else(|| io::Error::other("printing requires the main thread"))?;
     let info = NSPrintInfo::sharedPrintInfo().copy();
     info.setHorizontalPagination(NSPrintingPaginationMode::Automatic);
     info.setVerticalPagination(NSPrintingPaginationMode::Automatic);
     info.setHorizontallyCentered(false);
     info.setVerticallyCentered(false);
     print_margins(&info, &settings);
-    let font = print_font(&profile.font_family, f64::from(profile.font_size), profile.bold, profile.italic)?;
-    let control_font = print_font(&controls.font_family, f64::from(controls.font_size), controls.bold, controls.italic)?;
-    let control_height = control_font.capHeight().ceil().max(1.);
-    let control_ascent = control_font.ascender();
     let option = settings["printOption"].as_i64().unwrap_or(3);
-    let attributes = print_attributes(&font, print_color(profile.foreground, option, false), profile.underline);
+    let mut native_fonts = Vec::new();
+    let mut font_keys = BTreeMap::new();
+    let profile_font = font_index(&profile, &mut native_fonts, &mut font_keys)?;
+    let control_font = font_index(&controls, &mut native_fonts, &mut font_keys)?;
+    let control_height = native_fonts[control_font].capHeight().ceil().max(1.);
+    let control_ascent = native_fonts[control_font].ascender();
+    let mut ascent = native_fonts[profile_font].ascender().max(control_ascent);
+    let height = |font: &NSFont| (font.ascender() - font.descender() + font.leading()).ceil().max(1.);
+    let mut line_height = height(&native_fonts[profile_font]).max(height(&native_fonts[control_font]));
+    let attributes = print_attributes(&native_fonts[profile_font], print_color(profile.foreground, option, false), profile.underline);
     let space_width = print_size(&NSString::from_str(" "), &attributes).width.max(1.);
-    let mut ascent = font.ascender().max(control_ascent);
-    let mut line_height = (font.ascender() - font.descender() + font.leading()).ceil()
-        .max((control_font.ascender() - control_font.descender() + control_font.leading()).ceil()).max(1.);
     let (number_attributes, number_width, number_background, number_ascent) = if let Some(number) = number {
         let font = print_font(&number.font_family, f64::from(number.font_size), number.bold, number.italic)?;
         ascent = ascent.max(font.ascender());
-        line_height = line_height.max((font.ascender() - font.descender() + font.leading()).ceil());
+        line_height = line_height.max(height(&font));
         let attributes = print_attributes(&font, print_color(number.foreground, option, false), number.underline);
         let width = print_size(&NSString::from_str("99999   "), &attributes).width;
         (attributes, width, if option == 0 { number.background } else { 0xffffff }, font.ascender())
     } else { (attributes.clone(), 0., 0xffffff, 0.) };
-    let mut glyphs = Vec::new();
-    let mut cache = std::collections::BTreeMap::<(String, u32, bool, bool, bool, u32), (Retained<AnyObject>, f64)>::new();
-    let mut span_index = 0;
-    let selected = bytes.slice(range.clone()).map_err(|error| io::Error::other(error.to_string()))?;
-    for unit in selected.units() {
-        let source = range.start + unit.range.start..range.start + unit.range.end;
-        let offset = source.start;
-        let character = match unit.value { crate::byte_text::ByteValue::Scalar(character) => Some(character), crate::byte_text::ByteValue::Invalid(_) => None };
-        let representation = print_representation(unit.value);
-        while spans.get(span_index).is_some_and(|span| span.range.end <= offset) { span_index += 1; }
-        let appearance = spans.get(span_index).filter(|span| span.range.contains(&offset)).map_or(&profile, |span| &span.appearance);
+    let mut styles = Vec::new();
+    let mut style_fonts = Vec::new();
+    let mut style_keys = BTreeMap::new();
+    let mut remap = Vec::new();
+    for (index, appearance) in appearances.iter().enumerate() {
+        let font = font_index(appearance, &mut native_fonts, &mut font_keys)?;
+        style_fonts.push(font);
+        if active_fonts[index] {
+            ascent = ascent.max(native_fonts[font].ascender());
+            line_height = line_height.max(height(&native_fonts[font]));
+        }
         let foreground = print_color(appearance.foreground, option, false);
         let background = print_color(appearance.background, option, true);
-        let glyph_appearance = if representation.is_some() { &controls } else { appearance };
-        let glyph_foreground = if representation.is_some() { background } else { foreground };
-        let key = (glyph_appearance.font_family.clone(), glyph_appearance.font_size, glyph_appearance.bold, glyph_appearance.italic, glyph_appearance.underline, glyph_foreground);
-        let (attributes, glyph_ascent) = if let Some((attributes, ascent)) = cache.get(&key) { (attributes.clone(), *ascent) } else {
-            let font = print_font(&glyph_appearance.font_family, f64::from(glyph_appearance.font_size), glyph_appearance.bold, glyph_appearance.italic)?;
-            ascent = ascent.max(font.ascender());
-            line_height = line_height.max((font.ascender() - font.descender() + font.leading()).ceil());
-            let attributes = print_attributes(&font, glyph_foreground, glyph_appearance.underline);
-            let glyph_ascent = font.ascender();
-            cache.insert(key, (attributes.clone(), glyph_ascent)); (attributes, glyph_ascent)
+        let key = (font, foreground, background, appearance.underline);
+        let style = if let Some(style) = style_keys.get(&key) { *style } else {
+            let style = styles.len();
+            styles.push(PrintNativeStyle {
+                attributes: print_attributes(&native_fonts[font], foreground, appearance.underline),
+                control_attributes: print_attributes(&native_fonts[control_font], background, controls.underline),
+                foreground, background, ascent: native_fonts[font].ascender(),
+            });
+            style_keys.insert(key, style);
+            style
         };
-        let represented = representation.is_some();
-        let text = NSString::from_str(&representation.unwrap_or_else(|| character.map(|character| character.to_string()).unwrap_or_default()));
-        let width = print_size(&text, &attributes).width + if represented { 3. } else { 0. };
-        glyphs.push(PrintGlyph { character, source, representation: represented, text, attributes, width, background, foreground, ascent: glyph_ascent });
+        remap.push(style);
+    }
+    let mut fonts = Vec::new();
+    for font in &native_fonts {
+        let attributes = print_attributes(font, 0, false);
+        let mut ascii_widths = [None; 128];
+        for (index, width) in ascii_widths.iter_mut().enumerate() {
+            let text = print_unit_text(crate::byte_text::ByteValue::Scalar(char::from(index as u8)));
+            *width = Some(print_size(&NSString::from_str(&text), &attributes).width);
+        }
+        let mut other_widths = BTreeMap::new();
+        for byte in 0..=255u8 {
+            let text = print_unit_text(crate::byte_text::ByteValue::Invalid(byte));
+            other_widths.insert(0x110000 + u32::from(byte), print_size(&NSString::from_str(&text), &attributes).width);
+        }
+        for character in ('\u{80}'..='\u{9f}').chain(['\u{2028}', '\u{2029}']) {
+            let text = print_unit_text(crate::byte_text::ByteValue::Scalar(character));
+            other_widths.insert(u32::from(character), print_size(&NSString::from_str(&text), &attributes).width);
+        }
+        fonts.push(PrintFontSpec::from_font(font, ascii_widths, other_widths)?);
     }
     let dates = print_dates();
-    let file = Path::new(title);
+    let file = Path::new(&title);
     let expand = |template: &str| {
-        template.replace("$(FULL_CURRENT_PATH)", title)
-            .replace("$(FILE_NAME)", &file.file_name().map_or_else(|| title.to_owned(), |name| name.to_string_lossy().into_owned()))
+        template.replace("$(FULL_CURRENT_PATH)", &title)
+            .replace("$(FILE_NAME)", &file.file_name().map_or_else(|| title.clone(), |name| name.to_string_lossy().into_owned()))
             .replace("$(CURRENT_DIRECTORY)", &file.parent().map_or_else(String::new, |path| path.to_string_lossy().into_owned()))
             .replacen("$(SHORT_DATE)", &dates[0], 1).replacen("$(LONG_DATE)", &dates[1], 1).replacen("$(TIME)", &dates[2], 1)
     };
@@ -423,31 +544,41 @@ fn print_text(snapshot: PrintSnapshot, show_panel: bool) -> io::Result<bool> {
     let footers = ["footerLeft", "footerMiddle", "footerRight"].map(|key| expand(settings[key].as_str().unwrap_or("")));
     let header_font = print_font(settings["headerFontName"].as_str().filter(|name| !name.is_empty()).unwrap_or("Arial"), settings["headerFontSize"].as_f64().filter(|size| *size > 0.).unwrap_or(9.), settings["headerFontStyle"].as_i64().unwrap_or(0) & 1 != 0, settings["headerFontStyle"].as_i64().unwrap_or(0) & 2 != 0)?;
     let footer_font = print_font(settings["footerFontName"].as_str().filter(|name| !name.is_empty()).unwrap_or("Arial"), settings["footerFontSize"].as_f64().filter(|size| *size > 0.).unwrap_or(9.), settings["footerFontStyle"].as_i64().unwrap_or(0) & 1 != 0, settings["footerFontStyle"].as_i64().unwrap_or(0) & 2 != 0)?;
-    let header_height = (header_font.ascender() - header_font.descender() + header_font.leading()).ceil();
-    let footer_height = (footer_font.ascender() - footer_font.descender() + footer_font.leading()).ceil();
-    let state = PrintState {
-        glyphs, line_height, space_width, tab_size: tabs.size.max(1),
-        headers, footers, header_attributes: print_attributes(&header_font, 0, false), footer_attributes: print_attributes(&footer_font, 0, false),
-        number_attributes, header_height, footer_height,
-        number_width, number_background, number_ascent, first_line, ascent, control_height, control_ascent,
-        background: print_color(profile.background, option, true), settings, layout: RefCell::new(PrintLayout::default()),
-    };
-    let width = info.paperSize().width - info.leftMargin() - info.rightMargin();
-    let height = info.paperSize().height - info.topMargin() - info.bottomMargin();
-    if width <= 0. || height <= 0. { return Err(io::Error::other("print margins exceed the paper size")); }
-    state.reflow(width, height);
-    let pages = state.layout.borrow().pages;
+    let header_height = height(&header_font);
+    let footer_height = height(&footer_font);
+    let document = Arc::new(PrintDocument { bytes, range, first_line, fonts, style_fonts,
+        style_remap: remap, spans: Arc::new(spans), control_font });
+    Ok(PrintState {
+        document, styles, info, title, line_height, space_width, tab_size: tabs.size.max(1),
+        headers, footers, header_attributes: print_attributes(&header_font, 0, false),
+        footer_attributes: print_attributes(&footer_font, 0, false), number_attributes,
+        header_height, footer_height, number_width, number_background, number_ascent,
+        ascent, control_height, control_ascent, background: print_color(profile.background, option, true), settings,
+        layout: RefCell::new(None), pending: RefCell::new(None), pagination_generation: Cell::new(0),
+        layout_error: RefCell::new(None), error: RefCell::new(None),
+    })
+}
+
+fn run_print(state: PrintState, show_panel: bool) -> io::Result<bool> {
+    let mtm = MainThreadMarker::new().ok_or_else(|| io::Error::other("printing requires the main thread"))?;
+    let layout = state.layout.borrow().clone().ok_or_else(|| io::Error::other("print pagination is unavailable"))?;
+    let geometry = layout.geometry();
+    let info = state.info.clone();
+    let title = Path::new(&state.title).file_stem().and_then(|name| name.to_str()).unwrap_or(&state.title).to_owned();
     let allocated = MatrixPrintView::alloc(mtm).set_ivars(state);
-    let view: Retained<MatrixPrintView> = unsafe { msg_send![super(allocated), initWithFrame: NSRect::new(NSPoint::new(0., 0.), NSSize::new(width, height * pages as f64))] };
+    let view: Retained<MatrixPrintView> = unsafe { msg_send![super(allocated), initWithFrame: NSRect::new(NSPoint::new(0., 0.), NSSize::new(geometry.width, geometry.height * layout.page_count() as f64))] };
     let operation = NSPrintOperation::printOperationWithView_printInfo(&view, &info);
-    let title = Path::new(title)
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .unwrap_or(title);
-    operation.setJobTitle(Some(&NSString::from_str(title)));
+    operation.setJobTitle(Some(&NSString::from_str(&title)));
     operation.setShowsPrintPanel(show_panel);
     operation.setShowsProgressPanel(true);
-    Ok(operation.runOperation())
+    let result = operation.runOperation();
+    view.ivars().pending.borrow_mut().take();
+    if let Some(error) = view.ivars().error.borrow_mut().take() { return Err(error); }
+    if let Some(error) = view.ivars().layout_error.borrow_mut().take() {
+        if error.kind() == io::ErrorKind::Interrupted { return Ok(false); }
+        return Err(error);
+    }
+    Ok(result)
 }
 
 impl MatrixWindow {
@@ -455,25 +586,9 @@ impl MatrixWindow {
         self.print_document_mode(true, window, cx);
     }
 
-    pub(super) fn print_document_mode(
-        &mut self,
-        show_panel: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.route_to_document(window, cx, move |view, window, cx| {
-            view.print_document_mode(show_panel, window, cx)
-        }) {
-            return;
-        }
-        if self.printing
-            || self.file_busy
-            || self.close_dialog
-            || self.save_all_dialog
-            || self.batch_editing_blocked()
-        {
-            return;
-        }
+    pub(super) fn print_document_mode(&mut self, show_panel: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.route_to_document(window, cx, move |view, window, cx| view.print_document_mode(show_panel, window, cx)) { return; }
+        if self.printing || self.file_busy || self.close_dialog || self.save_all_dialog || self.batch_editing_blocked() { return; }
         self.menu_input(MenuEvent::Dismiss, window, cx);
         let bytes = self.editor().document().byte_snapshot();
         let selection = match self.editor().source_selection_limits() {
@@ -495,57 +610,48 @@ impl MatrixWindow {
             Some(self.style_config.appearance(None, id, self.dark, &profile, 0))
         } else { None };
         let controls = self.style_config.appearance(None, 36, self.dark, &profile, 0);
-        let spans = match self.print_style_spans(&bytes, language, &profile) {
-            Ok(spans) => spans,
+        let syntax = match self.print_syntax(language) {
+            Ok(syntax) => syntax,
             Err(error) => { self.notify_editor_error(error.to_string(), cx); return; }
         };
-        let snapshot = PrintSnapshot { bytes, range, first_line, title, profile, controls, number, spans, tabs, settings };
+        let styles = vec![profile.clone()];
+        let snapshot = PrintSnapshot { bytes, range, first_line, title, profile, controls, number, syntax,
+            styles, active_fonts: vec![true], spans: Vec::new(), tabs, settings };
         self.printing = true;
         cx.notify();
+        let executor = cx.background_executor().clone();
+        let preparing = executor.spawn(async move { prepare_print_styles(snapshot) });
         cx.spawn(async move |view, cx| {
-            let result = print_text(snapshot, show_panel);
+            let result = async {
+                let snapshot = preparing.await?;
+                let state = prepare_print(snapshot)?;
+                let geometry = state.geometry(&state.info)?;
+                let document = state.document.clone();
+                let layout = executor.spawn(async move {
+                    objc2::rc::autoreleasepool(|_| document.paginate(geometry, &AtomicBool::new(false)))
+                }).await?;
+                *state.layout.borrow_mut() = Some(layout);
+                run_print(state, show_panel)
+            }.await;
             if let Err(error) = view.update(cx, |view, cx| {
                 view.printing = false;
-                match result {
-                    Ok(true) => {}
-                    Ok(false) => eprintln!("Print operation cancelled or did not complete"),
-                    Err(error) => {
-                        view.notify_editor_error(format!("Could not print: {error}"), cx);
-                    }
-                }
+                if let Err(error) = result { view.notify_editor_error(format!("Could not print: {error}"), cx); }
                 cx.notify();
-            }) {
-                eprintln!("printing lost its document: {error}");
-            }
-        })
-        .detach();
+            }) { eprintln!("printing lost its document: {error}"); }
+        }).detach();
     }
 
-    fn print_style_spans(&self, bytes: &crate::byte_buffer::ByteBuffer, language: crate::syntax::Language, profile: &crate::syntax::StyleAppearance) -> io::Result<Vec<PrintSpan>> {
-        let projection = crate::byte_projection::ByteProjection::from_bytes(bytes);
-        let text = projection.text().to_string();
-        let spans: Vec<PrintSpan> = if let crate::syntax::Language::UserDefined(id) = language {
-            let definition = self.udl.registry.definition(id).ok_or_else(|| io::Error::other("print user language is unavailable"))?;
-            crate::udl::lex(&text, definition).spans.into_iter().map(|span| PrintSpan {
-                range: span.range, appearance: crate::syntax::udl_appearance_with_profile(definition, span.style, profile, 0),
-            }).collect()
-        } else {
-            let id = match language { crate::syntax::Language::Builtin(id) => id, crate::syntax::Language::Json => 57, _ => return Ok(Vec::new()) };
-            let catalog = crate::languages::catalog().map_err(|error| io::Error::other(error.to_string()))?;
-            let definition = catalog.by_id(id).ok_or_else(|| io::Error::other("print language is unavailable"))?;
-            let mut definition = self.style_config.effective_language(definition, self.dark);
-            self.apply_editing_language_properties(&mut definition);
-            let result = crate::lexers::lex(&text, &definition).map_err(|error| io::Error::other(error.to_string()))?;
-            result.spans.into_iter().map(|span| PrintSpan {
-                range: span.range,
-                appearance: crate::builtin_language::style_appearance(&definition, span.style, self.dark, profile, 0),
-            }).collect()
-        };
-        spans.into_iter().map(|mut span| {
-            let selection = projection.source_selection(Selection { anchor: ByteOffset(span.range.start), head: ByteOffset(span.range.end) })
-                .map_err(|error| io::Error::other(error.to_string()))?.range();
-            span.range = selection.start.0..selection.end.0;
-            Ok(span)
-        }).collect()
+    fn print_syntax(&self, language: crate::syntax::Language) -> io::Result<PrintSyntax> {
+        if !print_language_has_styles(language) { return Ok(PrintSyntax::None); }
+        if let crate::syntax::Language::UserDefined(id) = language {
+            return self.udl.registry.definition(id).cloned().map(PrintSyntax::UserDefined)
+                .ok_or_else(|| io::Error::other("print user language is unavailable"));
+        }
+        let id = match language { crate::syntax::Language::Builtin(id) => id, crate::syntax::Language::Json => 57, _ => return Ok(PrintSyntax::None) };
+        let catalog = crate::languages::catalog().map_err(io::Error::other)?;
+        let definition = catalog.by_id(id).ok_or_else(|| io::Error::other("print language is unavailable"))?;
+        let mut definition = self.style_config.effective_language(definition, self.dark);
+        self.apply_editing_language_properties(&mut definition);
+        Ok(PrintSyntax::Builtin(definition, self.dark))
     }
 }

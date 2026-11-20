@@ -34,11 +34,39 @@ xcrun --find swift
 python3 --version
 ```
 
-Install rustup from [rustup.rs](https://rustup.rs/), then install the project toolchain and target:
+### Keep build files in one workspace
+
+Choose an absolute workspace path. Run this block in each terminal used for installation, builds or packaging, before running any Rust command:
 
 ```sh
-rustup toolchain install 1.98.1 --profile minimal
-rustup target add aarch64-apple-darwin --toolchain 1.98.1
+export WORKSPACE="$HOME/workspace/notepad-matrix-build"
+export CARGO_HOME="$WORKSPACE/cargo"
+export RUSTUP_HOME="$WORKSPACE/rustup"
+export CARGO_TARGET_DIR="$WORKSPACE/target"
+export TMPDIR="$WORKSPACE/tmp"
+export PATH="$CARGO_HOME/bin:$PATH"
+mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" "$CARGO_TARGET_DIR" "$TMPDIR" \
+  "$WORKSPACE/downloads" "$WORKSPACE/src"
+```
+
+| Directory | Contents |
+|---|---|
+| `$WORKSPACE/cargo` | Cargo configuration, command proxies, registry downloads and Git dependencies. |
+| `$WORKSPACE/rustup` | Rust toolchains, installed targets and rustup configuration. |
+| `$WORKSPACE/target` | Build artifacts, dependency builds and build-script output. |
+| `$WORKSPACE/tmp` | Temporary files for tools that use `TMPDIR`. |
+| `$WORKSPACE/downloads` | The rustup installation script. |
+| `$WORKSPACE/src` | Source checkout. |
+| `$WORKSPACE/dist` | Application bundles and DMGs created by the commands below. |
+
+These variables apply to the current terminal and its child processes. They do not move or delete existing `~/.cargo` or `~/.rustup` directories. Xcode, SDKs and caches managed separately by Apple tools remain outside this layout. See [rustup installation paths](https://rust-lang.github.io/rustup/installation/index.html#choosing-where-to-install) and [Cargo environment variables](https://doc.rust-lang.org/cargo/reference/environment-variables.html).
+
+On first use of this workspace, install rustup without changing shell startup files, then install the project toolchain and target:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSLo "$WORKSPACE/downloads/rustup-init.sh" https://sh.rustup.rs
+sh "$WORKSPACE/downloads/rustup-init.sh" -y --no-modify-path --default-toolchain none
+rustup toolchain install 1.98.1 --profile minimal --target aarch64-apple-darwin
 ```
 
 ### Source directory
@@ -46,7 +74,8 @@ rustup target add aarch64-apple-darwin --toolchain 1.98.1
 Get the source from the [official project repository](https://github.com/skyfiredao/notepad-matrix):
 
 ```sh
-git clone https://github.com/skyfiredao/notepad-matrix.git
+git clone https://github.com/skyfiredao/notepad-matrix.git "$WORKSPACE/src/notepad-matrix"
+cd "$WORKSPACE/src/notepad-matrix"
 ```
 
 Enter the project directory containing `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `src/`, and `assets/`. Run all remaining commands from that directory.
@@ -55,6 +84,8 @@ Enter the project directory containing `Cargo.toml`, `Cargo.lock`, `rust-toolcha
 rustc --version
 cargo --version
 rustup show active-toolchain
+rustup show home
+command -v cargo
 ```
 
 Builds use the repository's `Cargo.lock` and bundled resources.
@@ -71,19 +102,19 @@ cargo fetch --locked
 cargo build --locked --release --target aarch64-apple-darwin
 ```
 
-Default output:
+Output with the workspace environment above:
 
 ```text
-target/aarch64-apple-darwin/release/notepad-matrix
+$WORKSPACE/target/aarch64-apple-darwin/release/notepad-matrix
 ```
 
 Check its architecture:
 
 ```sh
-file target/aarch64-apple-darwin/release/notepad-matrix
+file "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix"
 ```
 
-The output should identify an ARM64 Mach-O executable. If you set `CARGO_TARGET_DIR`, update all later binary paths to match that output directory.
+The output should identify an ARM64 Mach-O executable. The commands below use the same `CARGO_TARGET_DIR`.
 
 Debug build:
 
@@ -91,21 +122,21 @@ Debug build:
 cargo build --locked --target aarch64-apple-darwin
 ```
 
-Debug output goes into `target/aarch64-apple-darwin/debug/`. Release builds use `opt-level=3`; see [release configuration](DESIGN.md#7-parse-resources-on-demand).
+Debug output goes into `$CARGO_TARGET_DIR/aarch64-apple-darwin/debug/`. Release builds use `opt-level=3`; see [release configuration](DESIGN.md#7-parse-resources-on-demand).
 
 ## 3. Run locally
 
 Start the editor or open a file:
 
 ```sh
-./target/aarch64-apple-darwin/release/notepad-matrix
-./target/aarch64-apple-darwin/release/notepad-matrix ./notes.txt
+"$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix"
+"$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" ./notes.txt
 ```
 
 Start an independent instance and skip the automatic session:
 
 ```sh
-./target/aarch64-apple-darwin/release/notepad-matrix -multiInst -nosession ./notes.txt
+"$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" -multiInst -nosession ./notes.txt
 ```
 
 See [command-line usage](README.md#command-line-usage).
@@ -117,8 +148,8 @@ Use the same toolchain environment and deployment target to run the repository s
 ```sh
 export MACOSX_DEPLOYMENT_TARGET=26.0
 python3 scripts/package-macos.py \
-  --binary target/aarch64-apple-darwin/release/notepad-matrix \
-  --output dist/macos-arm64
+  --binary "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" \
+  --output "$WORKSPACE/dist/macos-arm64"
 ```
 
 Use a new or empty output directory.
@@ -126,8 +157,8 @@ Use a new or empty output directory.
 Outputs:
 
 ```text
-dist/macos-arm64/notepad-matrix.app
-dist/macos-arm64/notepad-matrix.dmg
+$WORKSPACE/dist/macos-arm64/notepad-matrix.app
+$WORKSPACE/dist/macos-arm64/notepad-matrix.dmg
 ```
 
 The script:
@@ -141,8 +172,8 @@ The script:
 Verify the signature and launch the application:
 
 ```sh
-codesign --verify --deep --strict --verbose=2 dist/macos-arm64/notepad-matrix.app
-open dist/macos-arm64/notepad-matrix.app
+codesign --verify --deep --strict --verbose=2 "$WORKSPACE/dist/macos-arm64/notepad-matrix.app"
+open "$WORKSPACE/dist/macos-arm64/notepad-matrix.app"
 ```
 
 ### Optional App Sandbox development package
@@ -151,13 +182,13 @@ Use the same executable with `--sandbox` and a separate empty output directory:
 
 ```sh
 python3 scripts/package-macos.py \
-  --binary target/aarch64-apple-darwin/release/notepad-matrix \
+  --binary "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" \
   --sandbox --sign-identity - \
-  --output dist/macos-arm64-sandbox
-codesign --display --entitlements :- dist/macos-arm64-sandbox/notepad-matrix.app
+  --output "$WORKSPACE/dist/macos-arm64-sandbox"
+codesign --display --entitlements :- "$WORKSPACE/dist/macos-arm64-sandbox/notepad-matrix.app"
 ```
 
-The default output directories are `dist/` for ordinary packages and `dist-sandbox/` for sandbox packages. `--sign-identity 'Apple Development: …'` selects an installed signing identity.
+Without `--output`, the script writes ordinary packages to `dist/` and sandbox packages to `dist-sandbox/` in the project directory. The examples above set `--output` to keep packages in the workspace. `--sign-identity 'Apple Development: …'` selects an installed signing identity.
 
 The sandbox defaults are `com.apple.security.app-sandbox`, `com.apple.security.files.user-selected.read-write`, and `com.apple.security.print`. `--entitlements /absolute/path/custom.plist` is used with `--sandbox` to merge custom entries; the three base entries must remain `true`.
 
@@ -207,6 +238,7 @@ System procedure: [Apple: Safely open apps on your Mac](https://support.apple.co
 | Problem | Check and action |
 |---|---|
 | Wrong Rust version | Check the project directory and `rustup show active-toolchain`. Install the version in `rust-toolchain.toml`. |
+| Rust files appear outside the workspace | Re-run the workspace environment block in the same terminal before installation, fetching, building or packaging. Check that `rustup show home` reports `$RUSTUP_HOME` and `command -v cargo` reports `$CARGO_HOME/bin/cargo`. |
 | Missing SDK, Clang, or Swift | Check `xcode-select -p` and the `xcrun` commands above. Finish installing and initializing the Apple developer tools. |
 | Cargo download failure | Check the network and Cargo registry configuration. Complete `cargo fetch --locked` before using `--offline`. |
 | Running outside macOS fails | Build and run the graphical application on a Mac. |

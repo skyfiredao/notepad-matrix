@@ -1765,6 +1765,60 @@ Nur fortfahren, wenn man sich dieser Risiken bewusst ist."/>
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-close value="Schließen"/>
+			<matrix-retry value="Erneut versuchen"/>
+			<matrix-cancelled value="Abgebrochen"/>
+			<matrix-read-only value="Schreibgeschützt"/>
+			<matrix-find-status-details value="Statusdetails"/>
+			<matrix-find-resize-results value="Größe der Suchergebnisse ändern"/>
+			<matrix-find-backward-unavailable value="Die Rückwärtssuche mit regulären Ausdrücken ist deaktiviert"/>
+			<matrix-hash-select-files value="Dateien auswählen"/>
+			<matrix-hash-calculating value="Hashwert wird berechnet…"/>
+			<matrix-hash-selection-failed value="Dateiauswahl fehlgeschlagen: $ERROR$"/>
+			<matrix-hash-read-failed value="Folgende Dateien können nicht gelesen werden:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Fehlermeldung schließen"/>
+			<matrix-hash-file-paths value="Dateipfade (schreibgeschützt)"/>
+			<matrix-hash-digest-result value="Hashwert (schreibgeschützt)"/>
+			<matrix-hash-source-text value="Ausgangstext für den Hashwert"/>
+			<matrix-hash-selection-composition value="Die Hashberechnung der Auswahl während der Texteingabekomposition ist noch nicht implementiert"/>
+			<matrix-hash-selection-read-failed value="Auswahl kann nicht gelesen werden: $ERROR$"/>
+			<matrix-window-activation-failed value="Wechsel zur ausgewählten Datei nicht möglich"/>
+			<matrix-window-selection-unavailable value="Die ausgewählte Datei ist geschlossen oder kann nicht aktiviert werden"/>
+			<matrix-incremental-position value="Leiste der inkrementellen Suche verschieben"/>
+			<matrix-find-progress-bar value="Fortschrittsbalken"/>
+			<matrix-find-previous-search value="Vorherige Suche anzeigen"/>
+			<matrix-find-results-summary value="Suchergebnisse - ($INT_REPLACE$ Treffer)"/>
+			<matrix-udl-allow-code2-close value="Faltungsende für Code 2 zulassen"/>
+			<matrix-udl-allow-code2-middle value="Faltungsmitte für Code 2 zulassen"/>
+			<matrix-udl-allow-code2-open value="Faltungsanfang für Code 2 zulassen"/>
+			<matrix-udl-allow-comment-fold-close value="Faltungsende für Kommentare zulassen"/>
+			<matrix-udl-allow-comment-fold-middle value="Faltungsmitte für Kommentare zulassen"/>
+			<matrix-udl-allow-comment-fold-open value="Faltungsanfang für Kommentare zulassen"/>
+			<matrix-udl-choose-json value="UDL-Definitionsdatei im JSON-Format auswählen"/>
+			<matrix-udl-close value="Benutzerdefinierte Sprache schließen"/>
+			<matrix-udl-close-styler value="Stiloptionen schließen"/>
+			<matrix-udl-colors value="Farben"/>
+			<matrix-udl-dark-mode-language value="Sprache für den dunklen Modus"/>
+			<matrix-udl-definition-exported value="Definition exportiert"/>
+			<matrix-udl-definitions-saved value="Definitionen gespeichert"/>
+			<matrix-udl-enable-font value="Schriftart aktivieren"/>
+			<matrix-udl-error value="Fehler der benutzerdefinierten Sprache: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-Dateioperation fehlgeschlagen: $ERROR$"/>
+			<matrix-udl-file-progress value="Dateioperation läuft…"/>
+			<matrix-udl-import-rejected value="Import abgelehnt: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ Sprache(n) importiert"/>
+			<matrix-udl-live-edits value="Benutzerdefinierte Sprache — Änderungen gelten sofort nur für Dokumente, die diese Sprache verwenden"/>
+			<matrix-udl-loading value="Definitionen werden geladen…"/>
+			<matrix-udl-memory-only value="Definitionen sind nur im Arbeitsspeicher (kein Konfigurationsverzeichnis)"/>
+			<matrix-udl-missing-ids value="Fehlende IDs benutzerdefinierter Sprachen: $IDS$. Dokumenttext und gespeicherte Sprachidentitäten wurden beibehalten. Stellen Sie die Definitionen wieder her oder wählen Sie ausdrücklich eine andere Sprache."/>
+			<matrix-udl-open-panel-disconnected value="Verbindung zum UDL-Öffnen-Dialog unterbrochen: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Diese benannte Definition entfernen? Bestehende Dokumente behalten ihren Text und wechseln zur unbenannten benutzerdefinierten Sprache."/>
+			<matrix-udl-retry-file value="UDL-Dateioperation erneut versuchen"/>
+			<matrix-udl-save-panel-disconnected value="Verbindung zum UDL-Speichern-Dialog unterbrochen: $ERROR$"/>
+			<matrix-udl-unavailable value="Definitionen nicht verfügbar; korrigieren Sie udl.json und versuchen Sie es erneut."/>
+			<matrix-udl-use-background value="Hintergrundfarbe verwenden"/>
+			<matrix-udl-use-foreground value="Vordergrundfarbe verwenden"/>
+			<matrix-udl-working-copy value="Benutzerdefiniert (Arbeitskopie)"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are place holders, don't translate these place holders. -->
 			<word-chars-list-tip value="Das erlaubt es, zusätzliche Zeichen zur Liste der Wortzeichen hinzuzufügen. Die Zeichen werden bei der Doppelklick-Auswahl oder mit der aktivierten Option &quot;Übereinstimmung mit ganzem Wort&quot; berücksichtigt."/>
 

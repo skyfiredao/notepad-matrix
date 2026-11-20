@@ -914,5 +914,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<matrix-find-resize-results value="Mainīt meklēšanas rezultātu izmēru"/>
+			<common-ok value="Labi"/>
+			<common-cancel value="Atcelt"/>
+			<common-name value="Nosaukums"/>
+			<discover-file-candidates-title value="Iespējamo failu meklēšana…"/>
+			<matrix-close value="Aizvērt"/>
+			<matrix-retry value="Mēģināt vēlreiz"/>
+			<matrix-cancelled value="Atcelts"/>
+			<matrix-read-only value="Tikai lasāms"/>
+			<matrix-find-status-details value="Informācija par stāvokli"/>
+			<matrix-find-backward-unavailable value="Meklēšana atpakaļ ar regulārajām izteiksmēm ir atspējota"/>
+			<matrix-hash-select-files value="Atlasīt failus"/>
+			<matrix-hash-calculating value="Jaucējvērtības aprēķināšana…"/>
+			<matrix-hash-selection-failed value="Neizdevās atlasīt failus: $ERROR$"/>
+			<matrix-hash-read-failed value="Nevar nolasīt šādus failus:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Aizvērt kļūdas paziņojumu"/>
+			<matrix-hash-file-paths value="Failu ceļi (tikai lasāmi)"/>
+			<matrix-hash-digest-result value="Jaucējvērtības rezultāts (tikai lasāms)"/>
+			<matrix-hash-source-text value="Jaucējvērtības avota teksts"/>
+			<matrix-hash-selection-composition value="Atlases jaucējvērtības aprēķināšana aktīvas teksta kompozīcijas laikā vēl nav ieviesta"/>
+			<matrix-hash-selection-read-failed value="Nevar nolasīt atlasi: $ERROR$"/>
+			<matrix-window-activation-failed value="Nevar pārslēgties uz atlasīto failu"/>
+			<matrix-window-selection-unavailable value="Atlasītais fails ir aizvērts vai to nevar aktivizēt"/>
+			<matrix-incremental-position value="Pārvietot pakāpeniskās meklēšanas joslu"/>
+			<matrix-find-progress-bar value="Norises josla"/>
+			<matrix-find-previous-search value="Rādīt iepriekšējo meklēšanu"/>
+			<matrix-find-results-summary value="Meklēšanas rezultāti - ($INT_REPLACE$ atbilstības)"/>
+			<matrix-udl-allow-code2-close value="Atļaut 2. koda aizvēršanu"/>
+			<matrix-udl-allow-code2-middle value="Atļaut 2. koda vidu"/>
+			<matrix-udl-allow-code2-open value="Atļaut 2. koda atvēršanu"/>
+			<matrix-udl-allow-comment-fold-close value="Atļaut paskaidrojumu sakļāvuma beigas"/>
+			<matrix-udl-allow-comment-fold-middle value="Atļaut paskaidrojumu sakļāvuma vidu"/>
+			<matrix-udl-allow-comment-fold-open value="Atļaut paskaidrojumu sakļāvuma sākumu"/>
+			<matrix-udl-choose-json value="Izvēlēties JSON failu ar UDL definīciju"/>
+			<matrix-udl-close value="Aizvērt lietotāja definēto valodu"/>
+			<matrix-udl-close-styler value="Aizvērt stilu izveidi"/>
+			<matrix-udl-colors value="Krāsas"/>
+			<matrix-udl-dark-mode-language value="Tumšā režīma valoda"/>
+			<matrix-udl-definition-exported value="Definīcija eksportēta"/>
+			<matrix-udl-definitions-saved value="Definīcijas saglabātas"/>
+			<matrix-udl-enable-font value="Iespējot fontu"/>
+			<matrix-udl-error value="Lietotāja definētās valodas kļūda: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL faila darbība neizdevās: $ERROR$"/>
+			<matrix-udl-file-progress value="Notiek darbība ar failu…"/>
+			<matrix-udl-import-rejected value="Importēšana noraidīta: $ERROR$"/>
+			<matrix-udl-imported value="Importēto valodu skaits: $COUNT$"/>
+			<matrix-udl-live-edits value="Lietotāja definēta valoda — izmaiņas uzreiz piemēro tikai dokumentiem, kuros izmantota šī valoda"/>
+			<matrix-udl-loading value="Definīciju ielāde…"/>
+			<matrix-udl-memory-only value="Definīcijas ir tikai atmiņā (nav konfigurācijas mapes)"/>
+			<matrix-udl-missing-ids value="Trūkst lietotāja definēto valodu ID: $IDS$. Dokumentu teksts un saglabātās valodu identitātes ir saglabātas. Atjaunojiet definīcijas vai skaidri izvēlieties citu valodu."/>
+			<matrix-udl-open-panel-disconnected value="UDL atvēršanas panelis ir atvienots: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Noņemt šo nosaukto definīciju? Esošie dokumenti saglabā tekstu un pārslēdzas uz nenosaukto lietotāja definēto valodu."/>
+			<matrix-udl-retry-file value="Atkārtot UDL faila darbību"/>
+			<matrix-udl-save-panel-disconnected value="UDL saglabāšanas panelis ir atvienots: $ERROR$"/>
+			<matrix-udl-unavailable value="Definīcijas nav pieejamas; izlabojiet udl.json un mēģiniet vēlreiz."/>
+			<matrix-udl-use-background value="Lietot pamatni"/>
+			<matrix-udl-use-foreground value="Lietot priekšplānu"/>
+			<matrix-udl-working-copy value="Lietotāja definēta (darba kopija)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

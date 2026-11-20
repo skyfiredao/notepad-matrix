@@ -998,6 +998,7 @@ Your settings on cloud will be canceled. Please reset a coherent value via Prefe
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="گۆڕینی قەبارەی ئەنجامەکانی گەڕان"/>
 			<word-chars-list-tip value="This allows you to include additional character into current word characters while double clicking for selection or searching with &quot;Match whole word only&quot; option checked."/>
 			<word-chars-list-warning-begin value="Be aware: "/>
 			<!-- $INT_REPLACE$ is a place holder, don't translate it -->
@@ -1008,6 +1009,63 @@ Your settings on cloud will be canceled. Please reset a coherent value via Prefe
 			<cloud-invalid-warning value="Invalid path."/>
 			<cloud-restart-warning value="Please restart Notepad++ to take effect."/>
 			<shift-change-direction-tip value="Use Shift + Enter to search in the opposite direction"/>
+			<common-ok value="باشە"/>
+			<common-cancel value="هەڵوەشاندنەوە"/>
+			<common-name value="ناو"/>
+			<discover-file-candidates-title value="دۆزینەوەی فایلە گونجاوەکان…"/>
+			<matrix-close value="داخستن"/>
+			<matrix-retry value="هەوڵدانەوە"/>
+			<matrix-cancelled value="هەڵوەشایەوە"/>
+			<matrix-read-only value="تەنها خوێندنەوە"/>
+			<matrix-find-status-details value="وردەکارییەکانی دۆخ"/>
+			<matrix-find-backward-unavailable value="گەڕان بۆ دواوە بە دەربڕینە ڕێکەکان ناچالاک کراوە"/>
+			<matrix-hash-select-files value="هەڵبژاردنی فایلەکان"/>
+			<matrix-hash-calculating value="ژماردنی هاش…"/>
+			<matrix-hash-selection-failed value="هەڵبژاردنی فایل سەرکەوتوو نەبوو: $ERROR$"/>
+			<matrix-hash-read-failed value="ناتوانرێت ئەم فایلانە بخوێندرێنەوە:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="داخستنی هەڵە"/>
+			<matrix-hash-file-paths value="ڕێڕەوی فایلەکان (تەنها خوێندنەوە)"/>
+			<matrix-hash-digest-result value="ئەنجامی هاش (تەنها خوێندنەوە)"/>
+			<matrix-hash-source-text value="دەقی سەرچاوەی هاش"/>
+			<matrix-hash-selection-composition value="ژماردنی هاشی هەڵبژێردراو لە کاتی پێکهێنانی چالاکی دەقدا هێشتا جێبەجێ نەکراوە"/>
+			<matrix-hash-selection-read-failed value="ناتوانرێت هەڵبژێردراوەکە بخوێندرێتەوە: $ERROR$"/>
+			<matrix-window-activation-failed value="ناتوانرێت بگوازرێتەوە بۆ فایلە هەڵبژێردراوەکە"/>
+			<matrix-window-selection-unavailable value="فایلە هەڵبژێردراوەکە داخراوە یان ناتوانرێت چالاک بکرێت"/>
+			<matrix-incremental-position value="گواستنەوەی شریتی گەڕانی هەنگاو بە هەنگاو"/>
+			<matrix-find-progress-bar value="شریتی پێشکەوتن"/>
+			<matrix-find-previous-search value="پیشاندانی گەڕانی پێشوو"/>
+			<matrix-find-results-summary value="ئەنجامەکانی گەڕان - ($INT_REPLACE$ هاوتا)"/>
+			<matrix-udl-allow-code2-close value="ڕێگەدان بە داخستنی کۆدی 2"/>
+			<matrix-udl-allow-code2-middle value="ڕێگەدان بە ناوەڕاستی کۆدی 2"/>
+			<matrix-udl-allow-code2-open value="ڕێگەدان بە کردنەوەی کۆدی 2"/>
+			<matrix-udl-allow-comment-fold-close value="ڕێگەدان بە داخستنی لوولدانەوەی لێدوان"/>
+			<matrix-udl-allow-comment-fold-middle value="ڕێگەدان بە ناوەڕاستی لوولدانەوەی لێدوان"/>
+			<matrix-udl-allow-comment-fold-open value="ڕێگەدان بە کردنەوەی لوولدانەوەی لێدوان"/>
+			<matrix-udl-choose-json value="فایلی JSON بۆ پێناسەی UDL هەڵبژێرە"/>
+			<matrix-udl-close value="داخستنی زمانی پێناسەکراوی بەکارهێنەر"/>
+			<matrix-udl-close-styler value="داخستنی ڕێکخەری شێواز"/>
+			<matrix-udl-colors value="ڕەنگەکان"/>
+			<matrix-udl-dark-mode-language value="زمانی دۆخی تاریک"/>
+			<matrix-udl-definition-exported value="پێناسەکە هەناردە کرا"/>
+			<matrix-udl-definitions-saved value="پێناسەکان پاشەکەوت کران"/>
+			<matrix-udl-enable-font value="چالاککردنی فۆنت"/>
+			<matrix-udl-error value="هەڵەی زمانی پێناسەکراوی بەکارهێنەر: $ERROR$"/>
+			<matrix-udl-file-failed value="کرداری فایلی UDL سەرکەوتوو نەبوو: $ERROR$"/>
+			<matrix-udl-file-progress value="کرداری فایل لە ئەنجامداندایە…"/>
+			<matrix-udl-import-rejected value="هاوردەکردن ڕەت کرایەوە: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ زمان هاوردە کرا"/>
+			<matrix-udl-live-edits value="زمانی پێناسەکراوی بەکارهێنەر — دەستکارییەکان دەستبەجێ تەنها بۆ ئەو بەڵگەنامانە جێبەجێ دەبن کە ئەم زمانە بەکاردەهێنن"/>
+			<matrix-udl-loading value="بارکردنی پێناسەکان…"/>
+			<matrix-udl-memory-only value="پێناسەکان تەنها لە بیرگەدان (بوخچەی ڕێکخستن نییە)"/>
+			<matrix-udl-missing-ids value="ناسێنەرەکانی زمانی پێناسەکراوی بەکارهێنەر ونن: $IDS$. دەقی بەڵگەنامەکان و ناسنامە پاشەکەوتکراوەکانی زمانەکان پارێزراون. پێناسەکان بگەڕێنەوە یان بە ڕوونی زمانێکی دیکە هەڵبژێرە."/>
+			<matrix-udl-open-panel-disconnected value="پەیوەندی پانێڵی کردنەوەی UDL پچڕا: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="ئەم پێناسە ناودارە بسڕدرێتەوە؟ بەڵگەنامە هەبووەکان دەقەکەیان دەپارێزن و دەگۆڕدرێن بۆ زمانی بێناوی پێناسەکراوی بەکارهێنەر."/>
+			<matrix-udl-retry-file value="هەوڵدانەوەی کرداری فایلی UDL"/>
+			<matrix-udl-save-panel-disconnected value="پەیوەندی پانێڵی پاشەکەوتکردنی UDL پچڕا: $ERROR$"/>
+			<matrix-udl-unavailable value="پێناسەکان بەردەست نین؛ udl.json ڕاست بکەرەوە و هەوڵ بدەرەوە."/>
+			<matrix-udl-use-background value="بەکارهێنانی پاشبنەما"/>
+			<matrix-udl-use-foreground value="بەکارهێنانی پێشبەنەما"/>
+			<matrix-udl-working-copy value="پێناسەکراوی بەکارهێنەر (کۆپیی کار)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

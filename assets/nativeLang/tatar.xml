@@ -956,5 +956,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<matrix-find-resize-results value="Эзләү нәтиҗәләренең үлчәмен үзгәртергә"/>
+			<common-ok value="ОК"/>
+			<common-cancel value="Баш тарту"/>
+			<common-name value="Исем"/>
+			<discover-file-candidates-title value="Кандидат файллар эзләнә…"/>
+			<matrix-close value="Ябарга"/>
+			<matrix-retry value="Кабатлап карарга"/>
+			<matrix-cancelled value="Баш тартылды"/>
+			<matrix-read-only value="Уку өчен генә"/>
+			<matrix-find-status-details value="Халәт турында мәгълүмат"/>
+			<matrix-find-backward-unavailable value="Регуляр аңлатмалар белән артка эзләү сүндерелгән"/>
+			<matrix-hash-select-files value="Файлларны сайларга"/>
+			<matrix-hash-calculating value="Хеш исәпләнә…"/>
+			<matrix-hash-selection-failed value="Файлларны сайлап булмады: $ERROR$"/>
+			<matrix-hash-read-failed value="Түбәндәге файлларны укып булмый:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Хата хәбәрен ябарга"/>
+			<matrix-hash-file-paths value="Файл юллары (уку өчен генә)"/>
+			<matrix-hash-digest-result value="Хеш нәтиҗәсе (уку өчен генә)"/>
+			<matrix-hash-source-text value="Хешның чыганак тексты"/>
+			<matrix-hash-selection-composition value="Текстны актив төзү вакытында сайланган өлешнең хешын исәпләү әлегә гамәлгә ашырылмаган"/>
+			<matrix-hash-selection-read-failed value="Сайланган өлешне укып булмый: $ERROR$"/>
+			<matrix-window-activation-failed value="Сайланган файлга күчеп булмый"/>
+			<matrix-window-selection-unavailable value="Сайланган файл ябылган яки аны активлаштырып булмый"/>
+			<matrix-incremental-position value="Адымлап эзләү юлын күчерергә"/>
+			<matrix-find-progress-bar value="Барыш күрсәткече"/>
+			<matrix-find-previous-search value="Алдагы эзләүне күрсәтергә"/>
+			<matrix-find-results-summary value="Эзләү нәтиҗәләре - ($INT_REPLACE$ туры килү)"/>
+			<matrix-udl-allow-code2-close value="2 нче кодның ябылуын рөхсәт итәргә"/>
+			<matrix-udl-allow-code2-middle value="2 нче кодның уртасын рөхсәт итәргә"/>
+			<matrix-udl-allow-code2-open value="2 нче кодның ачылуын рөхсәт итәргә"/>
+			<matrix-udl-allow-comment-fold-close value="Аңлатма төргәгенең ябылуын рөхсәт итәргә"/>
+			<matrix-udl-allow-comment-fold-middle value="Аңлатма төргәгенең уртасын рөхсәт итәргә"/>
+			<matrix-udl-allow-comment-fold-open value="Аңлатма төргәгенең ачылуын рөхсәт итәргә"/>
+			<matrix-udl-choose-json value="JSON форматындагы UDL билгеләмә файлын сайларга"/>
+			<matrix-udl-close value="Кулланучы билгеләгән телне ябарга"/>
+			<matrix-udl-close-styler value="Стиль көйләгечен ябарга"/>
+			<matrix-udl-colors value="Төсләр"/>
+			<matrix-udl-dark-mode-language value="Караңгы режим теле"/>
+			<matrix-udl-definition-exported value="Билгеләмә экспортланды"/>
+			<matrix-udl-definitions-saved value="Билгеләмәләр сакланды"/>
+			<matrix-udl-enable-font value="Шрифтны кабызырга"/>
+			<matrix-udl-error value="Кулланучы билгеләгән тел хатасы: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL файл гамәле үтәлмәде: $ERROR$"/>
+			<matrix-udl-file-progress value="Файл гамәле башкарыла…"/>
+			<matrix-udl-import-rejected value="Импорт кире кагылды: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ тел импортланды"/>
+			<matrix-udl-live-edits value="Кулланучы билгеләгән тел — үзгәрешләр шушы телне кулланган документларга гына шунда ук кулланыла"/>
+			<matrix-udl-loading value="Билгеләмәләр йөкләнә…"/>
+			<matrix-udl-memory-only value="Билгеләмәләр хәтердә генә (көйләүләр каталогы юк)"/>
+			<matrix-udl-missing-ids value="Кулланучы билгеләгән телләрнең ID-лары җитми: $IDS$. Документларның тексты һәм сакланган тел үзбилгеләре саклап калынды. Билгеләмәләрне торгызыгыз яки башка телне ачыктан-ачык сайлагыз."/>
+			<matrix-udl-open-panel-disconnected value="UDL ачу панеле белән бәйләнеш өзелде: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Бу исемле билгеләмәне бетерергәме? Булган документлар үз текстын саклый һәм исемсез кулланучы билгеләгән телгә күчә."/>
+			<matrix-udl-retry-file value="UDL файл гамәлен кабатларга"/>
+			<matrix-udl-save-panel-disconnected value="UDL саклау панеле белән бәйләнеш өзелде: $ERROR$"/>
+			<matrix-udl-unavailable value="Билгеләмәләр кулланырлык түгел; udl.json файлын төзәтегез һәм кабатлап карагыз."/>
+			<matrix-udl-use-background value="Арткы планны кулланырга"/>
+			<matrix-udl-use-foreground value="Алгы планны кулланырга"/>
+			<matrix-udl-working-copy value="Кулланучы билгеләгән (эш күчермәсе)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

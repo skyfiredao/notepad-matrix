@@ -1828,6 +1828,61 @@ $STR_REPLACE$
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<discover-file-candidates-title value="搵緊符合條件嘅檔案..."/>
+			<matrix-close value="閂"/>
+			<matrix-retry value="再試"/>
+			<matrix-cancelled value="已取消"/>
+			<matrix-read-only value="唯讀"/>
+			<matrix-find-status-details value="詳細狀態"/>
+			<matrix-find-resize-results value="調整搜尋結果區域大小"/>
+			<matrix-find-backward-unavailable value="已停用反方向正則表達式搜尋"/>
+			<matrix-hash-select-files value="揀檔案"/>
+			<matrix-hash-calculating value="計緊摘要…"/>
+			<matrix-hash-selection-failed value="揀唔到檔案：$ERROR$"/>
+			<matrix-hash-read-failed value="讀唔到以下檔案：&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="閂錯誤提示"/>
+			<matrix-hash-file-paths value="檔案路徑（唯讀）"/>
+			<matrix-hash-digest-result value="摘要結果（唯讀）"/>
+			<matrix-hash-source-text value="用嚟計摘要嘅文字"/>
+			<matrix-hash-selection-composition value="仲未支援喺輸入法組字期間計所選文字嘅雜湊值"/>
+			<matrix-hash-selection-read-failed value="讀唔到所選文字：$ERROR$"/>
+			<matrix-window-activation-failed value="切換唔到去所揀嘅檔案"/>
+			<matrix-window-selection-unavailable value="所揀嘅檔案已經閂咗，或者啟用唔到"/>
+			<matrix-incremental-position value="移動漸進式搜尋列"/>
+			<matrix-find-progress-bar value="進度列"/>
+			<matrix-find-previous-search value="顯示上次搜尋"/>
+			<matrix-find-results-summary value="搜尋結果 -（搵到 $INT_REPLACE$ 處）"/>
+			<matrix-udl-allow-code2-close value="容許程式碼 2 摺疊結尾標記"/>
+			<matrix-udl-allow-code2-middle value="容許程式碼 2 摺疊中間標記"/>
+			<matrix-udl-allow-code2-open value="容許程式碼 2 摺疊開頭標記"/>
+			<matrix-udl-allow-comment-fold-close value="容許註解摺疊結尾標記"/>
+			<matrix-udl-allow-comment-fold-middle value="容許註解摺疊中間標記"/>
+			<matrix-udl-allow-comment-fold-open value="容許註解摺疊開頭標記"/>
+			<matrix-udl-choose-json value="揀個 JSON 格式嘅 UDL 定義檔"/>
+			<matrix-udl-close value="閂自訂程式語言"/>
+			<matrix-udl-close-styler value="閂樣式對話框"/>
+			<matrix-udl-colors value="顏色"/>
+			<matrix-udl-dark-mode-language value="深色模式語言"/>
+			<matrix-udl-definition-exported value="已匯出定義"/>
+			<matrix-udl-definitions-saved value="已儲存定義"/>
+			<matrix-udl-enable-font value="啟用字型"/>
+			<matrix-udl-error value="自訂程式語言出錯：$ERROR$"/>
+			<matrix-udl-file-failed value="UDL 檔案操作失敗：$ERROR$"/>
+			<matrix-udl-file-progress value="處理緊檔案…"/>
+			<matrix-udl-import-rejected value="匯入被拒絕：$ERROR$"/>
+			<matrix-udl-imported value="已匯入 $COUNT$ 種語言"/>
+			<matrix-udl-live-edits value="自訂程式語言 — 改動只會即時套用到用緊呢種語言嘅文件"/>
+			<matrix-udl-loading value="載入緊定義…"/>
+			<matrix-udl-memory-only value="定義只存喺記憶體（冇設定目錄）"/>
+			<matrix-udl-missing-ids value="搵唔到自訂程式語言 ID：$IDS$。文件文字同已儲存嘅語言識別都保留咗。請還原定義，或者明確揀另一種語言。"/>
+			<matrix-udl-open-panel-disconnected value="UDL 開啟面板斷咗連線：$ERROR$"/>
+			<matrix-udl-remove-confirmation value="要刪除呢個有名嘅定義？現有文件會保留文字，並轉用未命名嘅自訂程式語言。"/>
+			<matrix-udl-retry-file value="再試 UDL 檔案操作"/>
+			<matrix-udl-save-panel-disconnected value="UDL 儲存面板斷咗連線：$ERROR$"/>
+			<matrix-udl-unavailable value="用唔到定義；請改好 udl.json 再試。"/>
+			<matrix-udl-use-background value="用背景色"/>
+			<matrix-udl-use-foreground value="用前景色"/>
+			<matrix-udl-working-copy value="自訂程式語言（工作副本）"/>
 			<!-- $INT_REPLACE$ 同埋 $STR_REPLACE$ 係 placeholders 嚟，唔好改啊嗱 -->
 			<word-chars-list-tip value="呢度要嚟喺現時嘅單字字元清單附加字元，double-click 揀字又或者剔咗「符合完整單字」嚟搵嘢就會包埋。"/>
 

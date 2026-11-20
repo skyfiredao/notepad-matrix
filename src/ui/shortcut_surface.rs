@@ -149,6 +149,7 @@ pub(super) struct State {
     scroll_bounds: [Rc<Cell<gpui::Bounds<gpui::Pixels>>>; 3],
     focus: FocusHandle,
     grid_focus: FocusHandle,
+    dual_modifiers_focus: FocusHandle,
     key_focus: FocusHandle,
     key_list_focus: FocusHandle,
     filter: gpui::Entity<text_field::TextField>,
@@ -186,6 +187,7 @@ impl State {
             scroll_bounds: std::array::from_fn(|_| Rc::new(Cell::new(gpui::Bounds::default()))),
             focus: cx.focus_handle().tab_index(0).tab_stop(true),
             grid_focus: cx.focus_handle().tab_index(0).tab_stop(true),
+            dual_modifiers_focus: cx.focus_handle().tab_index(0).tab_stop(true),
             key_focus: cx.focus_handle().tab_index(0).tab_stop(true),
             key_list_focus: cx.focus_handle(),
             filter: cx.new(|cx| text_field::TextField::compact("Filter", "shortcut-filter", cx).without_history_arrow().with_compact_height(21.)),
@@ -222,6 +224,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn set_shortcut_runtime_defaults(&mut self, defaults: Vec<(Option<CommandKey>, KeyBinding)>, extra: Vec<(CommandKey, KeyBinding)>, cx: &mut Context<Self>) -> io::Result<()> {
+        self.shortcut_mapper.bindings.dual_modifiers = self.pref_bool(shortcuts::DUAL_MODIFIERS_SETTING, true);
         let mut defaults = defaults;
         let predicate = Some(Rc::new(gpui::KeyBindingContextPredicate::parse("MatrixEditor").map_err(|error| io::Error::other(error.to_string()))?));
         for item in shortcuts::menu_catalog(self.menu_bar.definitions()) {
@@ -294,7 +297,8 @@ impl MatrixWindow {
             }
         }
         match BindingSet::load(store, catalog, &names) {
-            Ok(bindings) => {
+            Ok(mut bindings) => {
+                bindings.dual_modifiers = self.pref_bool(shortcuts::DUAL_MODIFIERS_SETTING, true);
                 let native = if self.shortcut_mapper.defaults.is_empty() { Ok(None) } else {
                     let mut templates = self.shortcut_mapper.extra.clone();
                     templates.extend(shortcut_templates(&bindings));
@@ -354,6 +358,13 @@ impl MatrixWindow {
         self.shortcut_mapper.visible = false;
         for grab in &self.shortcut_mapper.scroll_grab { grab.set(None); }
         self.dismiss_floating(floating_windows::DialogKind::ShortcutMapper, window, cx);
+    }
+
+    fn toggle_shortcut_dual_modifiers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.shortcut_mapper.edit.is_some() || self.shortcut_mapper.confirm.is_some() { return; }
+        let enabled = !self.pref_bool(shortcuts::DUAL_MODIFIERS_SETTING, true);
+        if !self.set_preference(shortcuts::DUAL_MODIFIERS_SETTING, enabled.into(), window, cx) { return; }
+        self.refresh_shortcuts(window, cx);
     }
 
     pub(super) fn annotate_shortcut_bindings(&self, defaults: Vec<KeyBinding>) -> Vec<(Option<CommandKey>, KeyBinding)> {
@@ -449,11 +460,12 @@ impl MatrixWindow {
             return false;
         }
         if self.file_busy || self.close_dialog || self.save_all_dialog || self.macro_playing || self.editor().has_composition() { return false; }
-        let Some(item) = self.shortcut_mapper.bindings.shortcuts.iter().filter(|item| item.bindings.contains(&combo)).min_by_key(|item| item.key.page()).cloned() else { return false; };
-        if !self.editor_focus.is_focused(window) {
+        let editor_focused = self.editor_focus.is_focused(window);
+        let Some(item) = self.shortcut_mapper.bindings.shortcuts.iter().filter(|item| {
+            if editor_focused { return true; }
             let global = self.shortcut_mapper.defaults.iter().any(|(key, binding)| key.as_ref() == Some(&item.key) && binding.predicate().is_none());
-            if item.key.page() == 4 || !global { return false; }
-        }
+            item.key.page() != 4 && global
+        }).filter_map(|item| self.shortcut_mapper.bindings.runtime_binding_priority(item, combo).map(|priority| (priority, item))).min_by_key(|(priority, item)| (*priority, item.key.page())).map(|(_, item)| item.clone()) else { return false; };
         match &item.key {
             CommandKey::Scintilla { id, .. } if scintilla_action(*id).is_none() && !supplemental_scintilla(*id) => return false,
             CommandKey::Run(index) if self.shortcut_mapper.bindings.run_commands.get(*index).is_none() || self.batch_editing_blocked() => return false,
@@ -1019,7 +1031,10 @@ impl MatrixWindow {
         let foreground = rgb(if self.dark { 0xe0e0e0 } else { 0x202020 });
         let background = rgb(if self.dark { 0x282828 } else { 0xf0f0f0 });
         let border = rgb(if self.dark { 0x606060 } else { 0x808080 });
-        let button = |id: &'static str, label: &'static str, enabled: bool| div().id(id).role(Role::Button).aria_label(label).tab_index(if enabled { 0 } else { -1 }).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).px(px(14.)).py(px(3.)).border_1().border_color(border).text_color(if enabled { foreground } else { rgb(0x808080) }).child(label).on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, window, cx| { if enabled && matches!(event.keystroke.key.as_str(), "enter" | "space") { view.activate_shortcut_button(id, window, cx); cx.stop_propagation(); } }));
+        let dual_modifiers = self.pref_bool(shortcuts::DUAL_MODIFIERS_SETTING, true);
+        let dual_modifiers = div().id("shortcut-dual-modifiers").role(Role::CheckBox).aria_label("Ctrl / Cmd").aria_toggled(dual_modifiers.into()).track_focus(&state.dual_modifiers_focus).h(px(21.)).flex_shrink_0().flex().items_center().child(format!("{} Ctrl / Cmd", if dual_modifiers { "☑" } else { "☐" }))
+            .on_click(cx.listener(|view, _, window, cx| { view.shortcut_mapper.dual_modifiers_focus.focus(window, cx); view.toggle_shortcut_dual_modifiers(window, cx); }));
+        let button = |id: &'static str, label: &'static str, enabled: bool| div().id(id).role(Role::Button).aria_label(label).tab_index(if enabled { 0 } else { -1 }).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).px(px(14.)).py(px(3.)).border_1().border_color(border).text_color(if enabled { foreground } else { rgb(0x808080) }).flex().items_center().justify_center().child(label).on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, window, cx| { if enabled && matches!(event.keystroke.key.as_str(), "enter" | "space") { view.activate_shortcut_button(id, window, cx); cx.stop_propagation(); } }));
         let mut tabs = div().id("shortcut-mapper-tabs").flex().items_end().role(Role::TabList).h(px(21.)).min_h(px(21.)).ml(px(3.));
         for index in 0..shortcuts::PAGES.len() {
             let label = mapper_page(&locale, index);
@@ -1054,7 +1069,7 @@ impl MatrixWindow {
             let mut row = div().id(gpui::SharedString::from(format!("shortcut-row-{page}-{ordinal}"))).role(Role::ListBoxOption).aria_selected(selected).relative().flex().pl(px(widths[0])).flex_shrink_0().h(px(GRID_ROW_HEIGHT)).min_h(px(GRID_ROW_HEIGHT)).line_height(px(GRID_ROW_HEIGHT - 2.)).bg(row_background).text_color(if selected && grid_focused { rgb(0xffffff) } else { foreground }).child(column(item.localized_name(&locale), widths[1])).child(column(item.label(), widths[2]));
             if third.is_some() { row = row.child(column(mapper_category(&locale, item), widths[3])); }
             row = row.child(column((ordinal + 1).to_string(), widths[0]).absolute().left(-state.horizontal_scroll[page].offset().x).top(px(0.)).bg(background).text_color(foreground).text_right().border_color(rgb(if self.dark { 0x606060 } else { 0x787878 })));
-            rows = rows.child(row.on_mouse_down(MouseButton::Left, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| { view.shortcut_mapper.context_menu = None; view.shortcut_mapper.selected[page] = Some(key.clone()); view.shortcut_mapper.grid_focus.focus(window, cx); if event.click_count == 2 { view.begin_shortcut_edit(window, cx); } cx.stop_propagation(); cx.notify(); })).on_mouse_down(MouseButton::Right, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| { view.shortcut_mapper.selected[page] = Some(context_key.clone()); view.shortcut_mapper.context_menu = Some(event.position); view.shortcut_mapper.context_selected = 0; view.shortcut_mapper.grid_focus.focus(window, cx); cx.stop_propagation(); cx.notify(); })));
+            rows = rows.child(row.on_mouse_down(MouseButton::Left, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| { view.shortcut_mapper.context_menu = None; view.shortcut_mapper.selected[page] = Some(key.clone()); view.shortcut_mapper.grid_focus.focus(window, cx); if event.click_count == 2 { view.begin_shortcut_edit(window, cx); } cx.stop_propagation(); cx.notify(); })).on_mouse_down(MouseButton::Right, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| { view.shortcut_mapper.selected[page] = Some(context_key.clone()); view.shortcut_mapper.context_menu = Some(gpui::point(event.position.x, event.position.y - gpui::px(window_caption::HEIGHT))); view.shortcut_mapper.context_selected = 0; view.shortcut_mapper.grid_focus.focus(window, cx); cx.stop_propagation(); cx.notify(); })));
         }
         let selected = state.selected().filter(|item| item.matches_localized(&filter, &locale));
         let editing_bindings = state.edit.as_ref().map(|edit| [edit.combo]);
@@ -1106,7 +1121,7 @@ impl MatrixWindow {
                 "enter" if view.shortcut_mapper.edit.is_none() && view.shortcut_mapper.confirm.is_none() => { view.begin_shortcut_edit(window, cx); cx.stop_propagation(); }
                 _ => {},
             }
-        })).child(tabs).child(grid).child(information)
+        })).child(tabs).child(div().flex().flex_shrink_0().items_center().justify_end().h(px(24.)).child(dual_modifiers)).child(grid).child(information)
             .child(div().flex().items_center().h(px(21.)).min_h(px(21.)).mb(px(10.5)).gap(px(3.)).child(div().w(px(46.)).text_center().child(mapper_control(2607, "Filter:"))).child(div().flex_1().min_w(px(0.)).child(state.filter.clone())).child(button("shortcut-filter-clear", mapper_control(2609, "✕"), true).w(px(21.)).h(px(21.)).p(px(0.)).text_center().bg(background).on_click(cx.listener(|view, _, window, cx| view.activate_shortcut_button("shortcut-filter-clear", window, cx)))))
             .child(div().flex().flex_shrink_0().h(px(24.5)).justify_center().gap(px(14.))
                 .children([("shortcut-modify", modify_label, selected.is_some()), ("shortcut-clear", clear_label, selected.is_some() && page != 4), ("shortcut-delete", delete_label, selected.is_some() && matches!(page, 1 | 2)), ("shortcut-close", close_label, true)].into_iter().map(|(id, label, enabled)| button(id, label, enabled).w(px(80.)).h(px(24.5)).p(px(0.)).flex().items_center().justify_center().bg(rgb(if self.dark { 0x383838 } else if enabled { 0xe1e1e1 } else { 0xcccccc })).when(id == "shortcut-close", |button| button.border_color(rgb(0x0078d7))).on_click(cx.listener(move |view, _, window, cx| { if enabled { view.activate_shortcut_button(id, window, cx); } })))));
@@ -1171,13 +1186,13 @@ impl MatrixWindow {
                         cx.notify();
                     }
                 }));
-                editor = editor.child(list).child(button("shortcut-scintilla-add", add_label, edit.combo.valid() && edit.combo.key != 0 && !edit.bindings.contains(&edit.combo)).absolute().left(px(10.5)).top(px(126.)).w(px(73.5)).h(px(21.)).on_click(cx.listener(|view, _, _, cx| view.apply_shortcut_combo(true, cx)))).child(button("shortcut-scintilla-remove", remove_label, edit.bindings.len() > 1).absolute().left(px(94.5)).top(px(126.)).w(px(73.5)).h(px(21.)).on_click(cx.listener(|view, _, window, cx| view.activate_shortcut_button("shortcut-scintilla-remove", window, cx)))).child(button("shortcut-scintilla-apply", apply_label, edit.combo.valid() && (edit.combo.key != 0 || edit.bindings.len() == 1) && !edit.bindings.contains(&edit.combo)).absolute().left(px(344.75)).top(px(99.)).w(px(87.5)).h(px(21.)).on_click(cx.listener(|view, _, _, cx| view.apply_shortcut_combo(false, cx))));
+                editor = editor.child(list).child(button("shortcut-scintilla-add", add_label, edit.combo.valid() && edit.combo.key != 0 && !edit.bindings.contains(&edit.combo)).absolute().left(px(10.5)).top(px(126.)).w(px(73.5)).h(px(21.)).p(px(0.)).on_click(cx.listener(|view, _, _, cx| view.apply_shortcut_combo(true, cx)))).child(button("shortcut-scintilla-remove", remove_label, edit.bindings.len() > 1).absolute().left(px(94.5)).top(px(126.)).w(px(73.5)).h(px(21.)).p(px(0.)).on_click(cx.listener(|view, _, window, cx| view.activate_shortcut_button("shortcut-scintilla-remove", window, cx)))).child(button("shortcut-scintilla-apply", apply_label, edit.combo.valid() && (edit.combo.key != 0 || edit.bindings.len() == 1) && !edit.bindings.contains(&edit.combo)).absolute().left(px(344.75)).top(px(99.)).w(px(87.5)).h(px(21.)).p(px(0.)).on_click(cx.listener(|view, _, _, cx| view.apply_shortcut_combo(false, cx))));
             }
             let conflicts = state.bindings.conflicts(&edit.key, &[edit.combo]);
             let disabled = edit.warning_visible && if scintilla { edit.bindings.first().is_none_or(|combo| combo.key == 0) } else { edit.combo.key == 0 };
             let warning = if disabled { edit_control(5007, if scintilla { "This will remove shortcut from this command" } else { "This will disable the accelerator" }) } else if conflicts.is_empty() { "" } else { edit_control(5012, "CONFLICT FOUND!") };
             let name_valid = !matches!(edit.key, CommandKey::Macro(_) | CommandKey::Run(_)) || !state.name.read(cx).text().is_empty();
-            editor = editor.child(div().absolute().left(px(10.5)).top(px(if scintilla { 153. } else { 126. })).child(warning)).child(button("shortcut-edit-ok", ok_label, name_valid && (scintilla || edit.combo.valid())).absolute().left(px(if scintilla { 246.75 } else { 68.25 })).top(px(if scintilla { 126. } else { 99. })).w(px(87.5)).h(px(21.)).on_click(cx.listener(|view, _, window, cx| view.confirm_shortcut_edit(window, cx)))).child(button("shortcut-edit-cancel", cancel_label, true).absolute().left(px(if scintilla { 344.75 } else { 166.25 })).top(px(if scintilla { 126. } else { 99. })).w(px(87.5)).h(px(21.)).on_click(cx.listener(|view, _, window, cx| view.activate_shortcut_button("shortcut-edit-cancel", window, cx))));
+            editor = editor.child(div().absolute().left(px(10.5)).top(px(if scintilla { 153. } else { 126. })).child(warning)).child(button("shortcut-edit-ok", ok_label, name_valid && (scintilla || edit.combo.valid())).absolute().left(px(if scintilla { 246.75 } else { 68.25 })).top(px(if scintilla { 126. } else { 99. })).w(px(87.5)).h(px(21.)).p(px(0.)).on_click(cx.listener(|view, _, window, cx| view.confirm_shortcut_edit(window, cx)))).child(button("shortcut-edit-cancel", cancel_label, true).absolute().left(px(if scintilla { 344.75 } else { 166.25 })).top(px(if scintilla { 126. } else { 99. })).w(px(87.5)).h(px(21.)).p(px(0.)).on_click(cx.listener(|view, _, window, cx| view.activate_shortcut_button("shortcut-edit-cancel", window, cx))));
             if let Some(keys) = key_list { editor = editor.child(keys); }
             root = root.child(div().absolute().inset_0().flex().items_center().justify_center().child(editor));
         }

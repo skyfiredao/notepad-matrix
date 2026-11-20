@@ -885,5 +885,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="OK"/>
+			<common-cancel value="Semmet"/>
+			<common-name value="Isem"/>
+			<discover-file-candidates-title value="Anadi n yifuyla izemren ad mṣadan..."/>
+			<matrix-close value="Mdel"/>
+			<matrix-retry value="Ɛreḍ tikkelt-nniḍen"/>
+			<matrix-cancelled value="Yettwasefsex"/>
+			<matrix-read-only value="I tɣuri kan"/>
+			<matrix-find-status-details value="Talqayt n waddad"/>
+			<matrix-find-resize-results value="Beddel tiddi n yigmaḍ n unadi"/>
+			<matrix-find-backward-unavailable value="Anadi ɣer deffir s tenfaliyin tiluganin yensa"/>
+			<matrix-hash-select-files value="Fren ifuyla"/>
+			<matrix-hash-calculating value="Asiḍen n udsil umḍin…"/>
+			<matrix-hash-selection-failed value="Afran n yifuyla ur yeddi ara: $ERROR$"/>
+			<matrix-hash-read-failed value="D awezɣi taɣuri n yifuyla-a:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Mdel tuccḍa"/>
+			<matrix-hash-file-paths value="Iberdan n yifuyla (i tɣuri kan)"/>
+			<matrix-hash-digest-result value="Agmuḍ n udsil umḍin (i tɣuri kan)"/>
+			<matrix-hash-source-text value="Aḍris aɣbalu n udsil umḍin"/>
+			<matrix-hash-selection-composition value="Asiḍen n udsil umḍin n tefrant deg usuddes ur yettwasebded ara yakan"/>
+			<matrix-hash-selection-read-failed value="D awezɣi taɣuri n tefrant: $ERROR$"/>
+			<matrix-window-activation-failed value="D awezɣi tuɣalin ɣer ufaylu yettwafernen"/>
+			<matrix-window-selection-unavailable value="Afaylu yettwafernen yemdel neɣ ur yezmir ara ad yermed"/>
+			<matrix-incremental-position value="Mutti afeggag n unadi s tmerna"/>
+			<matrix-find-progress-bar value="Afeggag n usfari"/>
+			<matrix-find-previous-search value="Sken anadi yezrin"/>
+			<matrix-find-results-summary value="Igmaḍ n unadi - ($INT_REPLACE$ n yigmaḍ)"/>
+			<matrix-udl-allow-code2-close value="Sireg amdal n tengalt 2"/>
+			<matrix-udl-allow-code2-middle value="Sireg alemmas n tengalt 2"/>
+			<matrix-udl-allow-code2-open value="Sireg alday n tengalt 2"/>
+			<matrix-udl-allow-comment-fold-close value="Sireg amdal n uḍeɛɛef n yiwenniten"/>
+			<matrix-udl-allow-comment-fold-middle value="Sireg alemmas n uḍeɛɛef n yiwenniten"/>
+			<matrix-udl-allow-comment-fold-open value="Sireg alday n uḍeɛɛef n yiwenniten"/>
+			<matrix-udl-choose-json value="Fren afaylu JSON n tbadut UDL"/>
+			<matrix-udl-close value="Mdel tutlayt i d-yesbadu useqdac"/>
+			<matrix-udl-close-styler value="Mdel amaẓrag n uɣanib"/>
+			<matrix-udl-colors value="Initen"/>
+			<matrix-udl-dark-mode-language value="Tutlayt n uskar aberkan"/>
+			<matrix-udl-definition-exported value="Tabadut tettwasifeḍ"/>
+			<matrix-udl-definitions-saved value="Tibadutin ttwaseklsent"/>
+			<matrix-udl-enable-font value="Rmed tasefsit"/>
+			<matrix-udl-error value="Tuccḍa n tutlayt i d-yesbadu useqdac: $ERROR$"/>
+			<matrix-udl-file-failed value="Tamhelt n ufaylu UDL ur teddi ara: $ERROR$"/>
+			<matrix-udl-file-progress value="Tamhelt n ufaylu tetteddu…"/>
+			<matrix-udl-import-rejected value="Aktar yettwagi: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ n tutlayin ttwaketrent"/>
+			<matrix-udl-live-edits value="Tutlayt i d-yesbadu useqdac — ibeddilen ttwaseqdacen srid kan ɣef yisemliyen i yesseqdacen tutlayt-a"/>
+			<matrix-udl-loading value="Asali n tbadutin…"/>
+			<matrix-udl-memory-only value="Tibadutin llant deg tkatut kan (ulac akaram n twila)"/>
+			<matrix-udl-missing-ids value="Xuṣṣen yisulayen n tutlayin i d-yesbadu useqdac: $IDS$. Aḍris n yisemli d timagit n tutlayin yettwasekelsen qqimen akken llan. Err-d tibadutin neɣ fren s wudem aflalay tutlayt-nniḍen."/>
+			<matrix-udl-open-panel-disconnected value="Agalis n ulday UDL yenser: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Ad tekkseḍ tabadut-a yesɛan isem? Isemliyen yellan ad ḥerzen aḍris-nsen, ad uɣalen ɣer tutlayt war isem i d-yesbadu useqdac."/>
+			<matrix-udl-retry-file value="Ɛreḍ tikkelt-nniḍen tamhelt n ufaylu UDL"/>
+			<matrix-udl-save-panel-disconnected value="Agalis n usekles UDL yenser: $ERROR$"/>
+			<matrix-udl-unavailable value="Tibadutin ur wujident ara; seɣti udl.json sakin ɛreḍ tikkelt-nniḍen."/>
+			<matrix-udl-use-background value="Seqdec agilal"/>
+			<matrix-udl-use-foreground value="Seqdec aɣawas amezwaru"/>
+			<matrix-udl-working-copy value="Yesbadu-tt useqdac (anɣel n umahil)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

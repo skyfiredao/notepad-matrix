@@ -24,11 +24,11 @@ impl MatrixWindow {
         }
         let response = window.prompt(
             gpui::PromptLevel::Warning,
-            "替换确认",
-            Some("您是否要在所有打开的文档中替换所有匹配项？"),
+            self.find_text("replace-in-open-docs-confirm-title", "Are you sure?"),
+            Some(self.find_text("replace-in-open-docs-confirm-message", "Are you sure you want to replace all occurrences in all open documents?")),
             &[
-                gpui::PromptButton::ok("确定"),
-                gpui::PromptButton::cancel("取消"),
+                gpui::PromptButton::ok(self.find_text("common-ok", "OK")),
+                gpui::PromptButton::cancel(self.find_text("common-cancel", "Cancel")),
             ],
             cx,
         );
@@ -87,10 +87,11 @@ impl MatrixWindow {
             }
         }
         self.editor_changed(Ok(()), window, cx);
-        self.set_find_status(find_surface::FindStatus::Message, format!(
-            "替换所有打开文件: 已替换 {count} 个匹配项。{}",
-            errors.join("；")
-        ));
+        let mut message = crate::localization::Text::resource(if count == 1 { "find-status-replaceinopenedfiles-1-replaced" } else { "find-status-replaceinopenedfiles-nb-replaced" },
+                "Replace in Opened Files: $INT_REPLACE$ occurrences were replaced")
+                .replace("$INT_REPLACE$", crate::finder::commafy(count));
+        if !errors.is_empty() { message = message.with_suffix(format!(" {}", errors.join("; "))); }
+        self.set_find_status(find_surface::FindStatus::Message, message);
         cx.notify();
     }
 

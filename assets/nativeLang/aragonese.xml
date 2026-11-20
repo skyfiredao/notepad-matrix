@@ -824,6 +824,65 @@ By ChesÃƒÂºs D. Trigo [xuxinho7@gmail.com] & softaragones [softaragones@soft
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="Acceptar"/>
+			<common-cancel value="Cancelar"/>
+			<common-name value="Nombre"/>
+			<discover-file-candidates-title value="Descubrindo fichers candidatos..."/>
+			<matrix-close value="Zarrar"/>
+			<matrix-retry value="Tornar a intentar"/>
+			<matrix-cancelled value="Cancelau"/>
+			<matrix-read-only value="Nomás lectura"/>
+			<matrix-find-status-details value="Detalles d'o estau"/>
+			<matrix-find-resize-results value="Cambiar a grandaria d'os resultaus d'a busca"/>
+			<matrix-find-backward-unavailable value="A busca enta zaga con expresions regulars ye desactivada"/>
+			<matrix-hash-select-files value="Seleccionar fichers"/>
+			<matrix-hash-calculating value="Calculando a emprenta…"/>
+			<matrix-hash-selection-failed value="Ha fallau a selección de fichers: $ERROR$"/>
+			<matrix-hash-read-failed value="No se pueden leyer os siguients fichers:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Zarrar l'error"/>
+			<matrix-hash-file-paths value="Rutas de fichers (nomás lectura)"/>
+			<matrix-hash-digest-result value="Resultau d'a emprenta (nomás lectura)"/>
+			<matrix-hash-source-text value="Texto d'orichen d'a emprenta"/>
+			<matrix-hash-selection-composition value="O calculo d'a emprenta d'a selección mientres a composición activa encara no ye implementau"/>
+			<matrix-hash-selection-read-failed value="No se puede leyer a selección: $ERROR$"/>
+			<matrix-window-activation-failed value="No se puede cambiar a o fichero seleccionau"/>
+			<matrix-window-selection-unavailable value="O fichero seleccionau ye zarrau u no se puede activar"/>
+			<matrix-incremental-position value="Mover a barra de busca incremental"/>
+			<matrix-find-progress-bar value="Barra de progreso"/>
+			<matrix-find-previous-search value="Amostrar a busca anterior"/>
+			<matrix-find-results-summary value="Resultaus d'a busca - ($INT_REPLACE$ coincidencias)"/>
+			<matrix-udl-allow-code2-close value="Permitir a zarradura de codigo 2"/>
+			<matrix-udl-allow-code2-middle value="Permitir o meyo de codigo 2"/>
+			<matrix-udl-allow-code2-open value="Permitir a obridura de codigo 2"/>
+			<matrix-udl-allow-comment-fold-close value="Permitir a zarradura de plegau de comentarios"/>
+			<matrix-udl-allow-comment-fold-middle value="Permitir o meyo de plegau de comentarios"/>
+			<matrix-udl-allow-comment-fold-open value="Permitir a obridura de plegau de comentarios"/>
+			<matrix-udl-choose-json value="Trigar un fichero JSON de definición UDL"/>
+			<matrix-udl-close value="Zarrar o luengache definiu por l'usuario"/>
+			<matrix-udl-close-styler value="Zarrar o configurador d'estilo"/>
+			<matrix-udl-colors value="Colors"/>
+			<matrix-udl-dark-mode-language value="Luengache d'o modo fosco"/>
+			<matrix-udl-definition-exported value="Definición exportada"/>
+			<matrix-udl-definitions-saved value="Definicions alzadas"/>
+			<matrix-udl-enable-font value="Activar a letra"/>
+			<matrix-udl-error value="Error d'o luengache definiu por l'usuario: $ERROR$"/>
+			<matrix-udl-file-failed value="Ha fallau a operación de fichero UDL: $ERROR$"/>
+			<matrix-udl-file-progress value="Operación de fichero en curso…"/>
+			<matrix-udl-import-rejected value="Importación refusada: $ERROR$"/>
+			<matrix-udl-imported value="S'han importau $COUNT$ luengaches"/>
+			<matrix-udl-live-edits value="Luengache definiu por l'usuario — os cambios s'aplican a l'inte nomás a os documentos que fan servir iste luengache"/>
+			<matrix-udl-loading value="Cargando definicions…"/>
+			<matrix-udl-memory-only value="As definicions son nomás en memoria (sin directorio de configuración)"/>
+			<matrix-udl-missing-ids value="Faltan identificadors de luengaches definius por l'usuario: $IDS$. S'ha conservau o texto d'os documentos y as identidatz alzadas d'os luengaches. Restaura as definicions u triga explicitament unatro luengache."/>
+			<matrix-udl-open-panel-disconnected value="Panel d'obridura UDL desconnectau: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Eliminar ista definición con nombre? Os documentos existents conservan o suyo texto y cambian a o luengache definiu por l'usuario sin nombre."/>
+			<matrix-udl-retry-file value="Tornar a intentar a operación de fichero UDL"/>
+			<matrix-udl-save-panel-disconnected value="Panel d'alzau UDL desconnectau: $ERROR$"/>
+			<matrix-udl-unavailable value="Definicions no disponibles; corriche udl.json y torna a intentar-lo."/>
+			<matrix-udl-use-background value="Fer servir o fundo"/>
+			<matrix-udl-use-foreground value="Fer servir o primer plan"/>
+			<matrix-udl-working-copy value="Definiu por l'usuario (copia de treballo)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>
-

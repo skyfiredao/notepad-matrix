@@ -45,6 +45,10 @@ pub(super) fn font_family() -> String {
 
 pub(super) fn base_size() -> f32 { 12. * scale() }
 
+pub(super) fn line_height() -> Pixels { px(14.) }
+
+pub(super) fn control_height() -> Pixels { px(24.) }
+
 pub(super) fn scale() -> f32 {
     FONT.with(|font| font.get().map_or(1., |font| font.size / 8.))
 }

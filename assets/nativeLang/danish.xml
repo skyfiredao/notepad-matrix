@@ -1537,6 +1537,61 @@ Vil du gemme før du skifter tema?"/><!-- HowToReproduce: In the Style Configura
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Tilpas størrelsen på søgeresultater"/>
+			<discover-file-candidates-title value="Finder mulige filer…"/>
+			<matrix-close value="Luk"/>
+			<matrix-retry value="Prøv igen"/>
+			<matrix-cancelled value="Annulleret"/>
+			<matrix-read-only value="Skrivebeskyttet"/>
+			<matrix-find-status-details value="Statusoplysninger"/>
+			<matrix-find-backward-unavailable value="Baglæns søgning med regulære udtryk er deaktiveret"/>
+			<matrix-hash-select-files value="Vælg filer"/>
+			<matrix-hash-calculating value="Beregner hashværdi…"/>
+			<matrix-hash-selection-failed value="Filvalg mislykkedes: $ERROR$"/>
+			<matrix-hash-read-failed value="Følgende filer kunne ikke læses:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Luk fejlmeddelelse"/>
+			<matrix-hash-file-paths value="Filstier (skrivebeskyttet)"/>
+			<matrix-hash-digest-result value="Hashværdi (skrivebeskyttet)"/>
+			<matrix-hash-source-text value="Kildetekst til hashberegning"/>
+			<matrix-hash-selection-composition value="Hashberegning af markeringen under aktiv tekstkomposition er endnu ikke implementeret"/>
+			<matrix-hash-selection-read-failed value="Markeringen kunne ikke læses: $ERROR$"/>
+			<matrix-window-activation-failed value="Kunne ikke skifte til den valgte fil"/>
+			<matrix-window-selection-unavailable value="Den valgte fil er lukket eller kan ikke aktiveres"/>
+			<matrix-incremental-position value="Flyt den inkrementelle søgelinje"/>
+			<matrix-find-progress-bar value="Statuslinje"/>
+			<matrix-find-previous-search value="Vis forrige søgning"/>
+			<matrix-find-results-summary value="Søgeresultat - ($INT_REPLACE$ træf)"/>
+			<matrix-udl-allow-code2-close value="Tillad afslutning af kode 2"/>
+			<matrix-udl-allow-code2-middle value="Tillad midte af kode 2"/>
+			<matrix-udl-allow-code2-open value="Tillad start af kode 2"/>
+			<matrix-udl-allow-comment-fold-close value="Tillad afslutning af kommentarfoldning"/>
+			<matrix-udl-allow-comment-fold-middle value="Tillad midte af kommentarfoldning"/>
+			<matrix-udl-allow-comment-fold-open value="Tillad start af kommentarfoldning"/>
+			<matrix-udl-choose-json value="Vælg en JSON-fil med en UDL-definition"/>
+			<matrix-udl-close value="Luk brugerdefineret sprog"/>
+			<matrix-udl-close-styler value="Luk udseende"/>
+			<matrix-udl-colors value="Farver"/>
+			<matrix-udl-dark-mode-language value="Sprog til mørk tilstand"/>
+			<matrix-udl-definition-exported value="Definition eksporteret"/>
+			<matrix-udl-definitions-saved value="Definitioner gemt"/>
+			<matrix-udl-enable-font value="Aktivér skrifttype"/>
+			<matrix-udl-error value="Fejl i brugerdefineret sprog: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-filhandling mislykkedes: $ERROR$"/>
+			<matrix-udl-file-progress value="Filhandling i gang…"/>
+			<matrix-udl-import-rejected value="Import afvist: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ sprog importeret"/>
+			<matrix-udl-live-edits value="Brugerdefineret sprog — ændringer anvendes straks og kun på dokumenter, der bruger dette sprog"/>
+			<matrix-udl-loading value="Indlæser definitioner…"/>
+			<matrix-udl-memory-only value="Definitionerne findes kun i hukommelsen (ingen konfigurationsmappe)"/>
+			<matrix-udl-missing-ids value="Manglende ID'er for brugerdefinerede sprog: $IDS$. Dokumenttekst og gemte sprogidentiteter er bevaret. Gendan definitionerne, eller vælg udtrykkeligt et andet sprog."/>
+			<matrix-udl-open-panel-disconnected value="Forbindelsen til UDL-åbningspanelet blev afbrudt: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Fjern denne navngivne definition? Eksisterende dokumenter beholder teksten og skifter til det unavngivne brugerdefinerede sprog."/>
+			<matrix-udl-retry-file value="Prøv UDL-filhandlingen igen"/>
+			<matrix-udl-save-panel-disconnected value="Forbindelsen til UDL-gemmepanelet blev afbrudt: $ERROR$"/>
+			<matrix-udl-unavailable value="Definitioner er ikke tilgængelige; ret udl.json, og prøv igen."/>
+			<matrix-udl-use-background value="Brug baggrund"/>
+			<matrix-udl-use-foreground value="Brug forgrund"/>
+			<matrix-udl-working-copy value="Brugerdefineret (arbejdskopi)"/>
 			<!-- $INT_REPLACE$  and $STR_REPLACE$ are a place holders, don't translate these place holders -->
 			<word-chars-list-tip value="Giver mulighed for at inkludere ekstra tegn i aktuelt tegnsæt, ved dobbeltklik for markering, eller i søgning når &quot;Søg kun hele ord&quot; er valgt."/>
 

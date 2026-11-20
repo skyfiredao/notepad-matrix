@@ -1,6 +1,7 @@
 use super::*;
 use super::dialog_font::px;
 use crate::editor::EditError;
+use crate::localization::Text;
 
 pub(super) const DIALOG_WIDTH: f32 = 719.;
 pub(super) const DIALOG_HEIGHT: f32 = 342.;
@@ -90,6 +91,43 @@ pub(super) enum FindCheck {
     Wrap,
 }
 
+fn source_label(id: &str, label: &'static str) -> &'static str {
+    let source = match id {
+        "find-next" => Some(if label.starts_with('▼') { 1723 } else { 1 }),
+        "find-previous" => Some(1721),
+        "find-close" | "files-close" => Some(2),
+        "find-backward" => Some(1722),
+        "find-whole-word" | "files-whole-word" => Some(1603),
+        "find-match-case" | "files-match-case" => Some(1604),
+        "find-wrap" => Some(1606),
+        "find-count" => Some(1614),
+        "find-in-selection" => Some(1632),
+        "find-all-current" => Some(1641),
+        "find-all-open" => Some(1636),
+        "replace-one" => Some(1608),
+        "replace-all" => Some(1609),
+        "replace-all-open" => Some(1635),
+        "mark-all" => Some(1615),
+        "mark-clear" => Some(1633),
+        "mark-copy" => Some(1725),
+        "mark-bookmark" => Some(1616),
+        "mark-purge" => Some(1618),
+        "files-find-all" => Some(1656),
+        "files-replace-all" => Some(if label.contains("项目") { 1665 } else { 1660 }),
+        "project-search-replace" => Some(1665),
+        "files-recursive" => Some(1658),
+        "files-hidden" => Some(1659),
+        "find-dot-newline" => Some(1703),
+        "find-transparency" => Some(1686),
+        "project-search-1" => Some(1662),
+        "project-search-2" => Some(1663),
+        "project-search-3" => Some(1664),
+        _ => None,
+    };
+    source.and_then(|id| crate::localization::current_dialog_control("Find", id))
+        .unwrap_or_else(|| crate::localization::current_dialog_text(label))
+}
+
 pub(super) fn checkbox(
     id: &'static str,
     label: &'static str,
@@ -104,6 +142,7 @@ pub(super) fn checkbox_enabled(
     checked: bool,
     enabled: bool,
 ) -> gpui::Stateful<gpui::Div> {
+    let label = source_label(id, label);
     let search_control = id.starts_with("find-") && !id.starts_with("find-in-results-")
         || id.starts_with("mark-")
         || id.starts_with("files-") || id.starts_with("project-search-");
@@ -145,6 +184,7 @@ pub(super) fn input_row_with_label_width(
     label_width: f32,
     field: impl IntoElement,
 ) -> AnyElement {
+    let label = crate::localization::current_dialog_text(label);
     div()
         .absolute()
         .left(px(3.))
@@ -160,6 +200,7 @@ pub(super) fn input_row_with_label_width(
 }
 
 pub(super) fn radio(id: impl Into<gpui::ElementId>, label: &'static str, checked: bool) -> gpui::Stateful<gpui::Div> {
+    let label = crate::localization::current_dialog_text(label);
     div().id(id).role(Role::RadioButton).aria_label(label).aria_toggled(checked.into())
         .h(px(20.)).flex().items_center().gap(px(3.))
         .child(div().size(px(13.)).flex_shrink_0().rounded_full().border_1()
@@ -170,6 +211,7 @@ pub(super) fn radio(id: impl Into<gpui::ElementId>, label: &'static str, checked
 }
 
 pub(super) fn button(id: &'static str, label: &'static str, top: f32) -> gpui::Stateful<gpui::Div> {
+    let label = source_label(id, label);
     div()
         .id(id)
         .debug_selector(move || id.into())
@@ -187,7 +229,11 @@ pub(super) fn button(id: &'static str, label: &'static str, top: f32) -> gpui::S
         .rounded(px(3.))
         .border_color(rgb(0xadadad))
         .bg(rgb(0xfafafa))
-        .child(label)
+        .child(if matches!(id, "find-all-current" | "find-all-open" | "replace-all-open") {
+            div().w_full().min_w(px(0.)).px(px(4.)).text_center().child(label).into_any_element()
+        } else {
+            label.into_any_element()
+        })
 }
 
 pub(super) fn source_button(
@@ -220,7 +266,12 @@ pub(super) fn source_button_enabled(
         .a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } })
         .right(px(40.))
         .w(px(157.))
-        .h(px(23.))
+        .h(if matches!(id, "find-all-current" | "find-all-open" | "replace-all-open") {
+            dialog_font::line_height() * 2. + px(7.)
+        } else {
+            dialog_font::control_height()
+        })
+        .when(!matches!(id, "find-all-current" | "find-all-open" | "replace-all-open"), |button| button.whitespace_nowrap())
         .rounded(px(0.))
         .bg(rgb(0xe1e1e1))
         .when(enabled, |button| button
@@ -251,10 +302,11 @@ pub(super) fn search_mode(
     dot_focus: &FocusHandle,
     cx: &mut Context<MatrixWindow>,
 ) -> AnyElement {
+    let title = crate::localization::current_dialog_control("Find", 1624).unwrap_or("Search mode");
     div()
         .id("find-search-mode")
         .role(Role::Group)
-        .aria_label("查找模式")
+        .aria_label(title)
         .absolute()
         .left(px(11.))
         .top(px(230.))
@@ -276,7 +328,7 @@ pub(super) fn search_mode(
                 .top(px(0.))
                 .px(px(2.))
                 .bg(rgb(0xffffff))
-                .child("查找模式"),
+                .child(title),
         )
         .children(
             [
@@ -309,6 +361,8 @@ pub(super) fn search_mode(
             .into_iter()
             .enumerate()
             .map(|(index, (value, id, label, top))| {
+                let source_id = [1625, 1626, 1605][index];
+                let label = crate::localization::current_dialog_control("Find", source_id).unwrap_or(label);
                 let selected = mode == value;
                 div()
                     .id(id)
@@ -425,19 +479,46 @@ pub(super) fn bindings() -> Vec<KeyBinding> {
 }
 
 impl MatrixWindow {
-    pub(super) fn set_find_status(&mut self, status: FindStatus, message: impl Into<String>) {
+    pub(super) fn find_text(&self, id: &str, fallback: &'static str) -> &'static str {
+        crate::localization::localized_string(&self.native_locale(), id).unwrap_or(fallback)
+    }
+
+    pub(super) fn find_tab_title(&self, index: usize) -> &'static str {
+        let (attribute, fallback) = match index {
+            1 => ("titleReplace", "Replace"),
+            2 => ("titleFindInFiles", "Find in Files"),
+            3 => ("titleFindInProjects", "Find in Projects"),
+            4 => ("titleMark", "Mark"),
+            _ => ("titleFind", "Find"),
+        };
+        crate::localization::dialog_title_variant(&self.native_locale(), "Find", attribute).unwrap_or(fallback)
+    }
+
+    pub(super) fn find_dialog_title(&self) -> &'static str {
+        self.find_tab_title(self.find_tab_index())
+    }
+
+    pub(super) fn sync_find_field_labels(&self, cx: &mut Context<Self>) {
+        let locale = self.native_locale();
+        let find = crate::localization::dialog_control(&locale, "Find", 1620).unwrap_or("Find what:");
+        let replace = crate::localization::dialog_control(&locale, "Find", 1611).unwrap_or("Replace with:");
+        self.find_query.update(cx, |field, cx| field.set_label(find, cx));
+        self.replace_input.update(cx, |field, cx| field.set_label(replace, cx));
+    }
+
+    pub(super) fn set_find_status(&mut self, status: FindStatus, message: impl Into<Text>) {
         if status == FindStatus::NotFound && !self.mute_sounds {
             objc2_app_kit::NSBeep();
         }
         self.find_status = status;
-        self.find_status_tooltip.clear();
-        self.find_message = if status == FindStatus::NoMessage { String::new() } else { message.into() };
+        self.find_status_tooltip = "".into();
+        self.find_message = if status == FindStatus::NoMessage { "".into() } else { message.into() };
     }
 
     pub(super) fn find_field_warning(&mut self, show: bool, cx: &mut Context<Self>) {
         if show {
-            self.set_find_status(FindStatus::Warning, "粘贴的“查找内容”或“替换为”内容中存在不可见字符");
-            self.find_status_tooltip = "警告：搜索（或替换）字段中存在不可见字符。\n粘贴到该字段的文本包含不可见（可能是行结束）字符。如果您在不删除这些字符的情况下继续操作，它们将被包含在搜索（或替换）文本中。".into();
+            self.set_find_status(FindStatus::Warning, Text::resource("find-status-invisible-chars-findWhat", "Invisible characters in pasted search content"));
+            self.find_status_tooltip = Text::resource("find-status-invisible-chars-findWhat-tip", "Warning: Invisible characters in search or replace field.");
         } else if self.find_status == FindStatus::Warning {
             self.set_find_status(FindStatus::Message, "");
         }
@@ -446,15 +527,31 @@ impl MatrixWindow {
 
     pub(super) fn set_find_error(&mut self, error: &crate::search::SearchError) {
         let (message, detail) = match error {
-            crate::search::SearchError::Regex(detail) => ("查找: 无效的正则表达式。", detail),
-            crate::search::SearchError::RegexRuntime(detail) => ("查找: 搜索失败", detail),
+            crate::search::SearchError::Regex(detail) => (Text::resource("find-status-invalid-re", "Find: Invalid regular expression"), detail),
+            crate::search::SearchError::RegexRuntime(detail) => (Text::resource("find-status-search-failed", "Find: Search failed"), detail),
             crate::search::SearchError::InvalidSelection => {
-                self.set_find_status(FindStatus::NotFound, error.to_string());
+                self.set_find_status(FindStatus::NotFound,
+                    Text::resource("matrix-search-invalid-selection", "Search selection is not a valid text boundary"));
                 return;
             }
         };
         self.set_find_status(FindStatus::NotFound, message);
-        self.find_status_tooltip = detail.clone();
+        self.find_status_tooltip = detail.clone().into();
+    }
+
+    pub(super) fn set_serialized_find_error(&mut self, error: &str) {
+        let invalid_regex = crate::search::SearchError::Regex(String::new()).to_string();
+        let search_failed = crate::search::SearchError::RegexRuntime(String::new()).to_string();
+        if let Some(detail) = error.strip_prefix(invalid_regex.as_str()) {
+            self.set_find_error(&crate::search::SearchError::Regex(detail.to_owned()));
+        } else if let Some(detail) = error.strip_prefix(search_failed.as_str()) {
+            self.set_find_error(&crate::search::SearchError::RegexRuntime(detail.to_owned()));
+        } else if error == crate::search::SearchError::InvalidSelection.to_string() {
+            self.set_find_error(&crate::search::SearchError::InvalidSelection);
+        } else {
+            self.set_find_status(FindStatus::NotFound, Text::resource("find-status-search-failed", "Find: Search failed"));
+            self.find_status_tooltip = error.into();
+        }
     }
 
     fn set_find_replace_error(&mut self, error: &crate::search::ReplaceError) {
@@ -467,9 +564,9 @@ impl MatrixWindow {
     pub(super) fn set_find_scope_reason(&mut self, count: usize, empty_string_found: bool) {
         let most_lax = self.find_options.wrap && !self.find_options.match_case && !self.find_options.whole_word;
         if count == 0 && !most_lax {
-            self.find_status_tooltip = "找不到指定的内容。您可能忘记设置 “循环查找”(打开)、“匹配大小写”(关闭) 或 “全词匹配”(关闭)。".into();
+            self.find_status_tooltip = Text::resource("find-status-cannot-find-pebkac-maybe", "The given occurrence cannot be found.");
         } else if empty_string_found {
-            self.find_status_tooltip = "给定的正则表达式匹配空字符串。".into();
+            self.find_status_tooltip = Text::resource("find-status-regex-find-empty-string", "The given regular expression matches empty strings.");
         }
     }
 
@@ -492,20 +589,23 @@ impl MatrixWindow {
             }
         }
         self.set_find_status(FindStatus::NotFound,
-            format!("查找: 无法找到文本 “{visible}” {}", self.find_scope_description()));
+            Text::resource("find-status-cannot-find", "Find: Can't find the text \"$STR_REPLACE$\"")
+                .replace("$STR_REPLACE$", visible).with_scope(self.find_scope_resource()));
         self.set_find_scope_reason(0, false);
     }
 
     pub(super) fn render_find_status(&self, id: &'static str) -> AnyElement {
-        div().id(id).role(Role::Status).aria_label(self.find_message.clone())
+        let locale = self.native_locale();
+        let message = self.find_message.render(&locale);
+        let tooltip = self.find_status_tooltip.render(&locale);
+        div().id(id).role(Role::Status).aria_label(message.clone())
             .absolute().bottom(px(0.)).w_full().h(px(22.)).pl(px(3.)).pr(px(16.))
             .border_t_1().border_color(rgb(0xd7d7d7)).bg(rgb(0xf0f0f0))
             .text_color(self.find_status.color(self)).flex().items_center().gap(px(8.)).overflow_hidden().whitespace_nowrap()
-            .child(self.find_message.clone())
-            .when(!self.find_status_tooltip.is_empty(), |status| {
-                let tooltip = self.find_status_tooltip.clone();
+            .child(message)
+            .when(!tooltip.is_empty(), |status| {
                 status.child(div().id("find-status-info").size(px(16.)).flex_shrink_0()
-                    .aria_label("状态详情")
+                    .aria_label(self.find_text("matrix-find-status-details", "Status details"))
                     .tooltip(move |_, cx| icon_tooltip::view(tooltip.clone(), false, cx))
                     .child(gpui::img(toolbar_icons::ToolbarIcon::StatusInfo.image()).size_full()))
             }).into_any_element()
@@ -744,15 +844,15 @@ impl MatrixWindow {
         }
     }
 
-    pub(super) fn find_scope_description(&self) -> &'static str {
+    pub(super) fn find_scope_resource(&self) -> (&'static str, &'static str) {
         if self.find_in_selection_active {
-            "(在选区范围内)"
+            ("find-status-scope-selection", "in selected text")
         } else if self.find_options.wrap {
-            "(在整个文件范围内)"
+            ("find-status-scope-all", "in entire file")
         } else if self.find_backward {
-            "(从文件头到光标范围内)"
+            ("find-status-scope-backward", "from start-of-file to caret")
         } else {
-            "(从光标到文件尾范围内)"
+            ("find-status-scope-forward", "from caret to end-of-file")
         }
     }
 
@@ -782,14 +882,21 @@ impl MatrixWindow {
                 if !query.is_empty() {
                     self.set_scintilla_shortcut_raw_target(scope.start as i128..scope.end as i128);
                 }
-                crate::search::literal_ranges_in_bytes_with_state(&bytes, &query, scope.clone(), self.find_options, &mut regex_state)
-                    .map(|ranges| {
-                        if let Some(last) = ranges.last() {
+                let mut count = 0;
+                let mut empty_string_found = false;
+                let mut last = None;
+                crate::search::visit_literal_ranges_in_bytes_with_state(&bytes, &query, scope.clone(), self.find_options, &mut regex_state, |range| {
+                    count += 1;
+                    empty_string_found |= range.is_empty();
+                    last = Some(range);
+                    true
+                }).map(|()| {
+                        if let Some(last) = last {
                             let target = if last.end.0 == scope.end { last.start.0..last.end.0 }
                                 else { last.end.0..scope.end };
                             self.set_scintilla_shortcut_raw_target(target.start as i128..target.end as i128);
                         }
-                        (ranges.len(), ranges.iter().any(|range| range.is_empty()))
+                        (count, empty_string_found)
                     })
             });
         self.editor_mut().document_mut().set_regex_state(regex_state);
@@ -804,7 +911,8 @@ impl MatrixWindow {
                     grouped.push(digit);
                 }
                 self.set_find_status(FindStatus::Message,
-                    format!("计数: {grouped} 次匹配 {}", self.find_scope_description()));
+                    Text::resource(if count == 1 { "find-status-count-1-match" } else { "find-status-count-nb-matches" },
+                        "Count: $INT_REPLACE$ matches").replace("$INT_REPLACE$", grouped).with_scope(self.find_scope_resource()));
                 self.set_find_scope_reason(count, empty_string_found);
             }
             Err(error) => self.set_find_error(&error),
@@ -822,16 +930,21 @@ impl MatrixWindow {
         if !event.first_focus() || !changed {
             return false;
         }
-        let prompt = window.prompt(gpui::PromptLevel::Warning, "Search warning",
-            Some("The \"In selection\" checkbox state has been automatically modified.\r\nPlease verify the search condition before performing the action."), &["OK"], cx);
+        let locale = self.native_locale();
+        let prompt = window.prompt(gpui::PromptLevel::Warning,
+            crate::localization::dialog_title(&locale, "FindAutoChangeOfInSelectionWarning").unwrap_or("Search warning"),
+            Some(crate::localization::dialog_message(&locale, "FindAutoChangeOfInSelectionWarning")
+                .unwrap_or("The \"In selection\" checkbox state has been automatically modified.\r\nPlease verify the search condition before performing the action.")),
+            &[self.find_text("common-ok", "OK")], cx);
         self.file_busy = true;
         cx.spawn_in(window, async move |view, cx| {
             let answered = prompt.await;
             if let Err(error) = view.update_in(cx, |view, _, cx| {
                 view.file_busy = false;
                 if let Err(error) = answered {
-                    view.notify_editor_error(
-                        format!("Search warning prompt disconnected: {error}"),
+                    view.notify_localized_editor_error(
+                        Text::resource("matrix-search-warning-prompt-error", "Search warning prompt disconnected: $ERROR$")
+                            .replace("$ERROR$", error.to_string()),
                         cx,
                     );
                 }
@@ -867,8 +980,8 @@ impl MatrixWindow {
             return;
         }
         if self.editor().marked_range().is_some() {
-            self.notify_editor_error(
-                "Find during active document composition is not implemented yet".into(),
+            self.notify_localized_editor_error(
+                Text::resource("matrix-find-composition-unavailable", "Find during active document composition is not implemented yet"),
                 cx,
             );
             return;
@@ -911,7 +1024,7 @@ impl MatrixWindow {
             )
             && !self.find_regex_backward
         {
-            self.set_find_status(FindStatus::NotFound, "正则表达式反向查找已禁用");
+            self.set_find_status(FindStatus::NotFound, Text::resource("matrix-find-backward-unavailable", "Backward regular expression search is disabled"));
             cx.notify();
             return FindOutcome::Error;
         }
@@ -939,7 +1052,7 @@ impl MatrixWindow {
         }
         if self.editor().marked_range().is_some() {
             self.set_find_status(FindStatus::NotFound,
-                "Find during active document composition is not implemented yet");
+                Text::resource("matrix-find-composition-unavailable", "Find during active document composition is not implemented yet"));
             cx.notify();
             return FindOutcome::Error;
         }
@@ -976,12 +1089,12 @@ impl MatrixWindow {
                 self.editor_changed(result, window, cx);
                 let (status, message) = if found.wrapped {
                     if backwards {
-                        (FindStatus::TopReached, "查找: 已到达文档最顶部，找到从底部开始的第一个匹配项。")
+                        (FindStatus::TopReached, Text::resource("find-status-top-reached", "Find: Reached document beginning, first occurrence from the bottom found."))
                     } else {
-                        (FindStatus::EndReached, "查找: 已到达文档最底部，找到从顶部开始的第一个匹配项。")
+                        (FindStatus::EndReached, Text::resource("find-status-end-reached", "Find: Reached document end, first occurrence from the top found."))
                     }
                 } else {
-                    (FindStatus::NoMessage, "")
+                    (FindStatus::NoMessage, "".into())
                 };
                 self.set_find_status(status, message);
                 FindOutcome::Found
@@ -1023,7 +1136,7 @@ impl MatrixWindow {
         }
         if self.editor().marked_range().is_some() {
             self.set_find_status(FindStatus::NotFound,
-                "Replace during active document composition is not implemented yet");
+                Text::resource("matrix-replace-composition-unavailable", "Replace during active document composition is not implemented yet"));
             cx.notify();
             return;
         }
@@ -1043,7 +1156,7 @@ impl MatrixWindow {
             return;
         }
         if self.editor().document().is_read_only() {
-            self.set_find_status(FindStatus::NotFound, "替换: 无法替换文本，当前文件只读。");
+            self.set_find_status(FindStatus::NotFound, Text::resource("find-status-replace-readonly", "Replace: Cannot replace text. The current document is read only"));
             cx.notify();
             return;
         }
@@ -1088,7 +1201,7 @@ impl MatrixWindow {
                     }
                     self.editor_changed(result, window, cx);
                     if self.find_controls.replace_stop {
-                        self.set_find_status(FindStatus::Message, "替换: 已替换 1 个匹配项。");
+                        self.set_find_status(FindStatus::Message, Text::resource("find-status-replaced-without-continuing", "Replace: 1 occurrence was replaced."));
                         cx.notify();
                         return;
                     }
@@ -1096,12 +1209,12 @@ impl MatrixWindow {
                     if matches!(outcome, FindOutcome::Found | FindOutcome::NotFound) {
                         let (status, message) = match self.find_status {
                             FindStatus::EndReached => (FindStatus::EndReached,
-                                "替换: 替换到从上到下的首个匹配项。已查找至文档最底部。"),
+                                Text::resource("find-status-replace-end-reached", "Replace: Reached document end, started from top.")),
                             FindStatus::TopReached => (FindStatus::TopReached,
-                                "替换: 替换到从下到上的首个匹配项。已查找至文档最顶部。"),
+                                Text::resource("find-status-replace-top-reached", "Replace: Reached document beginning, started from bottom.")),
                             _ if outcome == FindOutcome::NotFound => (FindStatus::Message,
-                                "替换: 已替换 1 个匹配项，未找到更多匹配项。"),
-                            _ => (FindStatus::Message, "替换: 已替换 1 个匹配项，并找到了下一个。"),
+                                Text::resource("find-status-replaced-next-not-found", "Replace: 1 occurrence was replaced. No more occurrences were found.")),
+                            _ => (FindStatus::Message, Text::resource("find-status-replaced-next-found", "Replace: 1 occurrence was replaced. The next occurrence found.")),
                         };
                         self.set_find_status(status, message);
                     }
@@ -1125,7 +1238,7 @@ impl MatrixWindow {
                     self.set_scintilla_shortcut_raw_target(if self.find_backward { bytes.len() as i128..0 } else { 0..bytes.len() as i128 });
                 }
                 self.set_find_status(FindStatus::NotFound,
-                    format!("替换: 没有找到匹配项 {}", self.find_scope_description()));
+                    Text::resource("find-status-replace-not-found", "Replace: no occurrence was found").with_scope(self.find_scope_resource()));
                 self.set_find_scope_reason(0, false);
             }
             Err(error) => self.set_find_error(&error),
@@ -1147,7 +1260,7 @@ impl MatrixWindow {
             return;
         }
         if self.editor().document().is_read_only() {
-            self.set_find_status(FindStatus::NotFound, "替换: 无法替换文本，当前文件只读。");
+            self.set_find_status(FindStatus::NotFound, Text::resource("find-status-replaceall-readonly", "Replace All: Cannot replace text. The current document is read only"));
             cx.notify();
             return;
         }
@@ -1181,10 +1294,10 @@ impl MatrixWindow {
                     }
                 }
                 self.editor_changed(Ok(()), window, cx);
-                self.set_find_status(FindStatus::Message, format!(
-                    "全部替换: 已替换 {count} 个匹配项。 {}",
-                    self.find_scope_description()
-                ));
+                self.set_find_status(FindStatus::Message,
+                    Text::resource(if count == 1 { "find-status-replaceall-1-replaced" } else { "find-status-replaceall-nb-replaced" },
+                        "Replace All: $INT_REPLACE$ occurrences were replaced").replace("$INT_REPLACE$", crate::finder::commafy(count))
+                        .with_scope(self.find_scope_resource()));
                 self.set_find_scope_reason(count, false);
             }
             Err(error) => self.set_find_replace_error(&error),
@@ -1196,7 +1309,7 @@ impl MatrixWindow {
         div()
             .id("search-mode-tabs")
             .role(Role::TabList)
-            .aria_label("查找方式")
+            .aria_label(self.find_dialog_title())
             .track_focus(&self.find_tabs_focus)
             .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, window, cx| {
                 let current = view.find_tab_index();
@@ -1224,7 +1337,8 @@ impl MatrixWindow {
                     (4, "标记", 46.),
                 ]
                 .into_iter()
-                .map(|(index, label, width)| {
+                .map(|(index, _, width)| {
+                    let label = self.find_tab_title(index);
                     let selected = index == self.find_tab_index();
                     div()
                         .id(("search-mode", index))
@@ -1232,7 +1346,10 @@ impl MatrixWindow {
                         .aria_label(label)
                         .aria_selected(selected)
                         .relative()
-                        .w(px(width + if selected { 4. } else { 0. }))
+                        .min_w(px(width + if selected { 4. } else { 0. }))
+                        .px(px(6.))
+                        .whitespace_nowrap()
+                        .flex_shrink_0()
                         .h(px(if selected { 25. } else { 23. }))
                         .flex()
                         .items_center()
@@ -1340,24 +1457,19 @@ impl MatrixWindow {
         if !self.find_visible {
             return None;
         }
+        self.sync_find_field_labels(cx);
         Some(
             div()
                 .id("find-dialog")
                 .debug_selector(|| "find-dialog".into())
                 .role(Role::Dialog)
-                .aria_label(if self.find_mark_mode {
-                    "标记"
-                } else if self.find_replace_mode {
-                    "替换"
-                } else {
-                    "查找"
-                })
+                .aria_label(self.find_dialog_title())
                 .key_context("MatrixFind")
                 .size_full()
                 .relative()
-                .font_family(if self.editing_find_monospaced() { "Menlo".to_owned() } else { dialog_font::font_family() })
-                .text_size(px(13.))
-                .line_height(px(18.))
+                .font_family(dialog_font::font_family())
+                .text_size(gpui::px(dialog_font::base_size()))
+                .line_height(dialog_font::line_height())
                 .bg(rgb(0xffffff))
                 .text_color(rgb(0x202020))
                 .occlude()
@@ -1481,7 +1593,10 @@ impl MatrixWindow {
                                 157.
                             }))
                             .border_color(rgb(0x0078d7))
-                            .tooltip(|_, cx| icon_tooltip::view("使用 Shift+Enter 反向查找。", false, cx))
+                            .tooltip({
+                                let text = self.find_text("shift-change-direction-tip", "Use Shift+Enter to search in the opposite direction");
+                                move |_, cx| icon_tooltip::view(text, false, cx)
+                            })
                             .on_click(cx.listener(|view, _, window, cx| {
                                     view.find_button_command("find-next", window.modifiers().shift, window, cx)
                             })),
@@ -1494,7 +1609,7 @@ impl MatrixWindow {
                             source_button_enabled("find-previous", "▲", 36., self.find_regex_backward || !matches!(self.find_options.mode, crate::search::SearchMode::Regex { .. }))
                                 .right(px(168.))
                                 .w(px(29.))
-                                .aria_label("查找上一个")
+                                .aria_label(crate::localization::menu_command(&self.native_locale(), 43003).unwrap_or("Find Previous"))
                                 .on_click(cx.listener(|view, _, window, cx| {
                                     view.find_next(true, window, cx)
                                 })),
@@ -1510,8 +1625,11 @@ impl MatrixWindow {
                             .gap(px(0.))
                             .right(px(19.))
                             .top(px(37.))
-                            .aria_label("双按钮查找模式")
-                            .tooltip(|_, cx| icon_tooltip::view("双按钮查找模式", false, cx))
+                            .aria_label(self.find_text("two-find-buttons-tip", "2 find buttons mode"))
+                            .tooltip({
+                                let text = self.find_text("two-find-buttons-tip", "2 find buttons mode");
+                                move |_, cx| icon_tooltip::view(text, false, cx)
+                            })
                             .on_click(
                                 cx.listener(|view, _, window, cx| {
                                     view.find_controls.option_focus[5].focus(window, cx);
@@ -1539,7 +1657,6 @@ impl MatrixWindow {
                             ))
                             .when(!self.find_controls.compact, |dialog| dialog.child(
                                 source_button("find-all-current", "在当前文件中查找", 99.)
-                                    .h(px(35.))
                                     .on_click(cx.listener(|view, event, window, cx| {
                                         if !view.warn_find_scope_change(event, window, cx) {
                                             view.find_all_documents(false, window, cx);
@@ -1548,7 +1665,6 @@ impl MatrixWindow {
                             ))
                             .when(!self.find_controls.compact, |dialog| dialog.child(
                                 source_button("find-all-open", "查找所有打开文件(O)", 143.)
-                                    .h(px(34.))
                                     .on_click(cx.listener(|view, _, window, cx| {
                                         view.find_all_documents(true, window, cx);
                                     })),
@@ -1620,7 +1736,6 @@ impl MatrixWindow {
                         .when(!self.find_controls.compact, |dialog| {
                             dialog.child(
                                 source_button("replace-all-open", "替换所有打开文件(O)", 131.)
-                                    .h(px(34.))
                                     .on_click(cx.listener(|view, _, window, cx| {
                                         view.confirm_replace_open_documents(window, cx)
                                     })),

@@ -1817,6 +1817,61 @@ C, C++, Java, C#, Objective-C, PHP, JavaScript, JSP, CSS, Perl, Rust, PowerShell
 
 Əgər qabaqcıl rejimi seçsəniz, lakin yuxarıda qeyd edilən dillərdə işləmirsinizsə, girinti əsas rejimdə qalacaq."/>
 <global-override-tip value="Buradakı 'Global override' seçimini aktivləşdirmək bütün dillər üçün bu parametri dəyişəcək. Əslində istədiyiniz şey 'Default Style' ayarlarından istifadə etmək ola bilər"/>
+			<discover-file-candidates-title value="Uyğun ola biləcək fayllar axtarılır..."/>
+			<matrix-close value="Bağla"/>
+			<matrix-retry value="Yenidən cəhd et"/>
+			<matrix-cancelled value="Ləğv edildi"/>
+			<matrix-read-only value="Yalnız oxumaq üçün"/>
+			<matrix-find-status-details value="Vəziyyət təfərrüatları"/>
+			<matrix-find-backward-unavailable value="Müntəzəm ifadə ilə geriyə axtarış söndürülüb"/>
+			<matrix-hash-select-files value="Faylları seç"/>
+			<matrix-hash-calculating value="Heş dəyəri hesablanır…"/>
+			<matrix-hash-selection-failed value="Fayl seçimi uğursuz oldu: $ERROR$"/>
+			<matrix-hash-read-failed value="Aşağıdakı faylları oxumaq mümkün olmadı:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Xəta bildirişini bağla"/>
+			<matrix-hash-file-paths value="Fayl yolları (yalnız oxumaq üçün)"/>
+			<matrix-hash-digest-result value="Heş nəticəsi (yalnız oxumaq üçün)"/>
+			<matrix-hash-source-text value="Heş üçün mənbə mətni"/>
+			<matrix-hash-selection-composition value="Daxiletmə tərtibi aktiv olduqda seçilmiş mətnin heşinin hesablanması hələ həyata keçirilməyib"/>
+			<matrix-hash-selection-read-failed value="Seçilmiş mətni oxumaq mümkün olmadı: $ERROR$"/>
+			<matrix-window-activation-failed value="Seçilmiş fayla keçmək mümkün olmadı"/>
+			<matrix-window-selection-unavailable value="Seçilmiş fayl bağlanıb və ya aktivləşdirilə bilmir"/>
+			<matrix-incremental-position value="Artımlı axtarış zolağını köçür"/>
+			<matrix-find-progress-bar value="Gedişat zolağı"/>
+			<matrix-find-previous-search value="Əvvəlki axtarışı göstər"/>
+			<matrix-find-results-summary value="Axtarış nəticələri - ($INT_REPLACE$ uyğunluq)"/>
+			<matrix-udl-allow-code2-close value="Kod 2 bağlanmasına icazə ver"/>
+			<matrix-udl-allow-code2-middle value="Kod 2 orta hissəsinə icazə ver"/>
+			<matrix-udl-allow-code2-open value="Kod 2 açılmasına icazə ver"/>
+			<matrix-udl-allow-comment-fold-close value="Şərh qatlamasının bağlanmasına icazə ver"/>
+			<matrix-udl-allow-comment-fold-middle value="Şərh qatlamasının orta hissəsinə icazə ver"/>
+			<matrix-udl-allow-comment-fold-open value="Şərh qatlamasının açılmasına icazə ver"/>
+			<matrix-udl-choose-json value="JSON formatında UDL tərif faylı seç"/>
+			<matrix-udl-close value="İstifadəçi tərəfindən təyin edilmiş dili bağla"/>
+			<matrix-udl-close-styler value="Üslub tənzimləyicisini bağla"/>
+			<matrix-udl-colors value="Rənglər"/>
+			<matrix-udl-dark-mode-language value="Qaranlıq rejim dili"/>
+			<matrix-udl-definition-exported value="Tərif ixrac edildi"/>
+			<matrix-udl-definitions-saved value="Təriflər saxlanıldı"/>
+			<matrix-udl-enable-font value="Şrifti aktiv et"/>
+			<matrix-udl-error value="İstifadəçi tərəfindən təyin edilmiş dil xətası: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL fayl əməliyyatı uğursuz oldu: $ERROR$"/>
+			<matrix-udl-file-progress value="Fayl əməliyyatı davam edir…"/>
+			<matrix-udl-import-rejected value="İdxal rədd edildi: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ dil idxal edildi"/>
+			<matrix-udl-live-edits value="İstifadəçi tərəfindən təyin edilmiş dil — dəyişikliklər dərhal yalnız bu dildən istifadə edən sənədlərə tətbiq olunur"/>
+			<matrix-udl-loading value="Təriflər yüklənir…"/>
+			<matrix-udl-memory-only value="Təriflər yalnız yaddaşdadır (konfiqurasiya qovluğu yoxdur)"/>
+			<matrix-udl-missing-ids value="İstifadəçi tərəfindən təyin edilmiş dil identifikatorları çatışmır: $IDS$. Sənəd mətni və saxlanmış dil identifikatorları qorunub saxlanıldı. Tərifləri bərpa edin və ya açıq şəkildə başqa dil seçin."/>
+			<matrix-udl-open-panel-disconnected value="UDL açma panelinin bağlantısı kəsildi: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Bu adlandırılmış tərif silinsin? Mövcud sənədlər mətnini saxlayır və adsız istifadəçi tərəfindən təyin edilmiş dilə keçir."/>
+			<matrix-udl-retry-file value="UDL fayl əməliyyatını təkrarla"/>
+			<matrix-udl-save-panel-disconnected value="UDL saxlama panelinin bağlantısı kəsildi: $ERROR$"/>
+			<matrix-udl-unavailable value="Təriflər əlçatan deyil; udl.json faylını düzəldin və yenidən cəhd edin."/>
+			<matrix-udl-use-background value="Arxa fonu istifadə et"/>
+			<matrix-udl-use-foreground value="Ön planı istifadə et"/>
+			<matrix-udl-working-copy value="İstifadəçi tərəfindən təyin edilmiş (işçi nüsxə)"/>
+			<matrix-find-resize-results value="Axtarış nəticələrinin ölçüsünü dəyiş"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

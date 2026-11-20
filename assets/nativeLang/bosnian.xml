@@ -578,5 +578,65 @@
 				<Item id="2" name="Poništi"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<matrix-find-resize-results value="Promijeni veličinu rezultata pretraživanja"/>
+			<common-ok value="U redu"/>
+			<common-cancel value="Poništi"/>
+			<common-name value="Naziv"/>
+			<discover-file-candidates-title value="Otkrivanje mogućih datoteka…"/>
+			<matrix-close value="Zatvori"/>
+			<matrix-retry value="Pokušaj ponovo"/>
+			<matrix-cancelled value="Otkazano"/>
+			<matrix-read-only value="Samo za čitanje"/>
+			<matrix-find-status-details value="Pojedinosti o stanju"/>
+			<matrix-find-backward-unavailable value="Pretraživanje regularnim izrazima unazad je onemogućeno"/>
+			<matrix-hash-select-files value="Odaberi datoteke"/>
+			<matrix-hash-calculating value="Izračunavanje sažetka…"/>
+			<matrix-hash-selection-failed value="Odabir datoteka nije uspio: $ERROR$"/>
+			<matrix-hash-read-failed value="Nije moguće pročitati sljedeće datoteke:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Zatvori poruku o grešci"/>
+			<matrix-hash-file-paths value="Putanje datoteka (samo za čitanje)"/>
+			<matrix-hash-digest-result value="Rezultat sažetka (samo za čitanje)"/>
+			<matrix-hash-source-text value="Izvorni tekst sažetka"/>
+			<matrix-hash-selection-composition value="Izračunavanje sažetka odabira tokom aktivnog sastavljanja teksta još nije implementirano"/>
+			<matrix-hash-selection-read-failed value="Nije moguće pročitati odabir: $ERROR$"/>
+			<matrix-window-activation-failed value="Nije moguće preći na odabranu datoteku"/>
+			<matrix-window-selection-unavailable value="Odabrana datoteka je zatvorena ili se ne može aktivirati"/>
+			<matrix-incremental-position value="Premjesti traku postepenog pretraživanja"/>
+			<matrix-find-progress-bar value="Traka napretka"/>
+			<matrix-find-previous-search value="Prikaži prethodno pretraživanje"/>
+			<matrix-find-results-summary value="Rezultati pretraživanja - ($INT_REPLACE$ podudaranja)"/>
+			<matrix-udl-allow-code2-close value="Dozvoli zatvaranje koda 2"/>
+			<matrix-udl-allow-code2-middle value="Dozvoli sredinu koda 2"/>
+			<matrix-udl-allow-code2-open value="Dozvoli otvaranje koda 2"/>
+			<matrix-udl-allow-comment-fold-close value="Dozvoli kraj sklapanja komentara"/>
+			<matrix-udl-allow-comment-fold-middle value="Dozvoli sredinu sklapanja komentara"/>
+			<matrix-udl-allow-comment-fold-open value="Dozvoli početak sklapanja komentara"/>
+			<matrix-udl-choose-json value="Odaberi JSON datoteku s UDL definicijom"/>
+			<matrix-udl-close value="Zatvori korisnikom određeni jezik"/>
+			<matrix-udl-close-styler value="Zatvori uređivač sloga"/>
+			<matrix-udl-colors value="Boje"/>
+			<matrix-udl-dark-mode-language value="Jezik za tamni način rada"/>
+			<matrix-udl-definition-exported value="Definicija je izvezena"/>
+			<matrix-udl-definitions-saved value="Definicije su snimljene"/>
+			<matrix-udl-enable-font value="Omogući font"/>
+			<matrix-udl-error value="Greška korisnikom određenog jezika: $ERROR$"/>
+			<matrix-udl-file-failed value="Operacija s UDL datotekom nije uspjela: $ERROR$"/>
+			<matrix-udl-file-progress value="Operacija s datotekom je u toku…"/>
+			<matrix-udl-import-rejected value="Uvoz je odbijen: $ERROR$"/>
+			<matrix-udl-imported value="Uvezeno jezika: $COUNT$"/>
+			<matrix-udl-live-edits value="Korisnikom određeni jezik — izmjene se odmah primjenjuju samo na dokumente koji koriste ovaj jezik"/>
+			<matrix-udl-loading value="Učitavanje definicija…"/>
+			<matrix-udl-memory-only value="Definicije su samo u memoriji (nema konfiguracijske mape)"/>
+			<matrix-udl-missing-ids value="Nedostaju ID-ovi korisnikom određenih jezika: $IDS$. Tekst dokumenata i snimljeni identiteti jezika su sačuvani. Vratite definicije ili izričito odaberite drugi jezik."/>
+			<matrix-udl-open-panel-disconnected value="Panel za otvaranje UDL-a je odspojen: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Ukloniti ovu imenovanu definiciju? Postojeći dokumenti zadržavaju tekst i prelaze na neimenovani korisnikom određeni jezik."/>
+			<matrix-udl-retry-file value="Ponovi operaciju s UDL datotekom"/>
+			<matrix-udl-save-panel-disconnected value="Panel za snimanje UDL-a je odspojen: $ERROR$"/>
+			<matrix-udl-unavailable value="Definicije nisu dostupne; ispravite udl.json i pokušajte ponovo."/>
+			<matrix-udl-use-background value="Koristi pozadinu"/>
+			<matrix-udl-use-foreground value="Koristi boju teksta"/>
+			<matrix-udl-working-copy value="Korisnikom određeno (radna kopija)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

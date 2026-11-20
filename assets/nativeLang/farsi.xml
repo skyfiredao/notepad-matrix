@@ -958,5 +958,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="تایید"/>
+			<common-cancel value="لغو"/>
+			<common-name value="نام"/>
+			<discover-file-candidates-title value="در حال یافتن پرونده‌های احتمالی..."/>
+			<matrix-close value="بستن"/>
+			<matrix-retry value="تلاش دوباره"/>
+			<matrix-cancelled value="لغو شد"/>
+			<matrix-read-only value="فقط-خواندنی"/>
+			<matrix-find-status-details value="جزئیات وضعیت"/>
+			<matrix-find-resize-results value="تغییر اندازهٔ نتایج جستجو"/>
+			<matrix-find-backward-unavailable value="جستجوی رو به عقب با عبارت منظم غیرفعال است"/>
+			<matrix-hash-select-files value="انتخاب پرونده‌ها"/>
+			<matrix-hash-calculating value="در حال محاسبهٔ چکیده…"/>
+			<matrix-hash-selection-failed value="انتخاب پرونده ناموفق بود: $ERROR$"/>
+			<matrix-hash-read-failed value="خواندن این پرونده‌ها ممکن نیست:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="بستن خطا"/>
+			<matrix-hash-file-paths value="مسیر پرونده‌ها (فقط-خواندنی)"/>
+			<matrix-hash-digest-result value="نتیجهٔ چکیده (فقط-خواندنی)"/>
+			<matrix-hash-source-text value="متن مبدأ چکیده"/>
+			<matrix-hash-selection-composition value="محاسبهٔ هش انتخاب هنگام ترکیب فعال متن هنوز پیاده‌سازی نشده است"/>
+			<matrix-hash-selection-read-failed value="خواندن انتخاب ممکن نیست: $ERROR$"/>
+			<matrix-window-activation-failed value="رفتن به پروندهٔ انتخاب‌شده ممکن نیست"/>
+			<matrix-window-selection-unavailable value="پروندهٔ انتخاب‌شده بسته است یا فعال نمی‌شود"/>
+			<matrix-incremental-position value="جابجایی نوار جستجوی تدریجی"/>
+			<matrix-find-progress-bar value="نوار پیشرفت"/>
+			<matrix-find-previous-search value="نمایش جستجوی پیشین"/>
+			<matrix-find-results-summary value="نتایج جستجو - ($INT_REPLACE$ مورد)"/>
+			<matrix-udl-allow-code2-close value="اجازهٔ پایان کد 2"/>
+			<matrix-udl-allow-code2-middle value="اجازهٔ میانهٔ کد 2"/>
+			<matrix-udl-allow-code2-open value="اجازهٔ آغاز کد 2"/>
+			<matrix-udl-allow-comment-fold-close value="اجازهٔ پایان تاشدن توضیح"/>
+			<matrix-udl-allow-comment-fold-middle value="اجازهٔ میانهٔ تاشدن توضیح"/>
+			<matrix-udl-allow-comment-fold-open value="اجازهٔ آغاز تاشدن توضیح"/>
+			<matrix-udl-choose-json value="انتخاب پروندهٔ تعریف UDL با قالب JSON"/>
+			<matrix-udl-close value="بستن زبان تعریف‌شده توسط کاربر"/>
+			<matrix-udl-close-styler value="بستن تنظیم‌گر سبک"/>
+			<matrix-udl-colors value="رنگ‌ها"/>
+			<matrix-udl-dark-mode-language value="زبان حالت تیره"/>
+			<matrix-udl-definition-exported value="تعریف صادر شد"/>
+			<matrix-udl-definitions-saved value="تعریف‌ها ذخیره شدند"/>
+			<matrix-udl-enable-font value="فعال‌سازی قلم"/>
+			<matrix-udl-error value="خطای زبان تعریف‌شده توسط کاربر: $ERROR$"/>
+			<matrix-udl-file-failed value="عملیات پروندهٔ UDL ناموفق بود: $ERROR$"/>
+			<matrix-udl-file-progress value="عملیات پرونده در جریان است…"/>
+			<matrix-udl-import-rejected value="وارد کردن رد شد: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ زبان وارد شد"/>
+			<matrix-udl-live-edits value="زبان تعریف‌شده توسط کاربر — ویرایش‌ها فقط در سندهای این زبان بی‌درنگ اعمال می‌شوند"/>
+			<matrix-udl-loading value="در حال بارگذاری تعریف‌ها…"/>
+			<matrix-udl-memory-only value="تعریف‌ها فقط در حافظه هستند (پوشهٔ پیکربندی وجود ندارد)"/>
+			<matrix-udl-missing-ids value="شناسه‌های زبان تعریف‌شده توسط کاربر یافت نشدند: $IDS$. متن سند و شناسه‌های ذخیره‌شدهٔ زبان حفظ شدند. تعریف‌ها را بازیابی کنید یا زبان دیگری را صریحاً برگزینید."/>
+			<matrix-udl-open-panel-disconnected value="ارتباط پنجرهٔ باز کردن UDL قطع شد: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="این تعریف نام‌دار حذف شود؟ سندهای موجود متن خود را نگه می‌دارند و به زبان بی‌نام تعریف‌شده توسط کاربر تغییر می‌کنند."/>
+			<matrix-udl-retry-file value="تلاش دوباره برای عملیات پروندهٔ UDL"/>
+			<matrix-udl-save-panel-disconnected value="ارتباط پنجرهٔ ذخیرهٔ UDL قطع شد: $ERROR$"/>
+			<matrix-udl-unavailable value="تعریف‌ها در دسترس نیستند؛ udl.json را اصلاح کنید و دوباره تلاش کنید."/>
+			<matrix-udl-use-background value="استفاده از پس‌زمینه"/>
+			<matrix-udl-use-foreground value="استفاده از پیش‌زمینه"/>
+			<matrix-udl-working-copy value="تعریف‌شده توسط کاربر (نسخهٔ کاری)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

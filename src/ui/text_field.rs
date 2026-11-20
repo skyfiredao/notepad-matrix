@@ -302,8 +302,10 @@ impl TextField {
         cx.notify();
     }
     pub(super) fn set_label(&mut self, label: &'static str, cx: &mut Context<Self>) {
-        self.label = label;
-        cx.notify();
+        if self.label != label {
+            self.label = label;
+            cx.notify();
+        }
     }
     pub(super) fn set_enabled(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.enabled = enabled;

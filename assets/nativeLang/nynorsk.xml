@@ -691,5 +691,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<matrix-close value="Lukk"/>
+			<matrix-retry value="Prøv på nytt"/>
+			<matrix-cancelled value="Avbrote"/>
+			<matrix-read-only value="Skriveverna"/>
+			<matrix-find-status-details value="Statusdetaljar"/>
+			<matrix-find-backward-unavailable value="Baklengssøk med regulære uttrykk er slått av"/>
+			<matrix-hash-select-files value="Vel filer"/>
+			<matrix-hash-calculating value="Reknar ut fingeravtrykk…"/>
+			<matrix-hash-selection-failed value="Klarte ikkje å velje filer: $ERROR$"/>
+			<matrix-hash-read-failed value="Kan ikkje lese desse filene:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Lukk feilmeldinga"/>
+			<matrix-hash-file-paths value="Filstiar (skriveverna)"/>
+			<matrix-hash-digest-result value="Utrekna fingeravtrykk (skriveverna)"/>
+			<matrix-hash-source-text value="Kjeldetekst for fingeravtrykk"/>
+			<matrix-hash-selection-composition value="Utrekning av fingeravtrykk for merkt tekst under aktiv tekstkomponering er enno ikkje implementert"/>
+			<matrix-hash-selection-read-failed value="Kan ikkje lese merkt tekst: $ERROR$"/>
+			<matrix-window-activation-failed value="Kan ikkje byte til den valde fila"/>
+			<matrix-window-selection-unavailable value="Den valde fila er lukka eller kan ikkje aktiverast"/>
+			<matrix-incremental-position value="Flytt linja for inkrementelt søk"/>
+			<matrix-find-progress-bar value="Framdriftsindikator"/>
+			<matrix-find-previous-search value="Vis førre søk"/>
+			<matrix-find-resize-results value="Endra storleiken på søkjeresultata"/>
+			<matrix-find-results-summary value="Søkjeresultat - ($INT_REPLACE$ treff)"/>
+			<matrix-udl-allow-code2-close value="Tillat slutt på kodeblokk 2"/>
+			<matrix-udl-allow-code2-middle value="Tillat midtdel i kodeblokk 2"/>
+			<matrix-udl-allow-code2-open value="Tillat start på kodeblokk 2"/>
+			<matrix-udl-allow-comment-fold-close value="Tillat slutt på kommentarfalding"/>
+			<matrix-udl-allow-comment-fold-middle value="Tillat midtdel i kommentarfalding"/>
+			<matrix-udl-allow-comment-fold-open value="Tillat start på kommentarfalding"/>
+			<matrix-udl-choose-json value="Vel ei JSON-fil med ein UDL-definisjon"/>
+			<matrix-udl-close value="Lukk brukardefinert språk"/>
+			<matrix-udl-close-styler value="Lukk stilredigeringa"/>
+			<matrix-udl-colors value="Fargar"/>
+			<matrix-udl-dark-mode-language value="Språk for mørk modus"/>
+			<matrix-udl-definition-exported value="Definisjonen er eksportert"/>
+			<matrix-udl-definitions-saved value="Definisjonane er lagra"/>
+			<matrix-udl-enable-font value="Bruk skrifttype"/>
+			<matrix-udl-error value="Feil i brukardefinert språk: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-filoperasjonen feila: $ERROR$"/>
+			<matrix-udl-file-progress value="Filoperasjon går føre seg…"/>
+			<matrix-udl-import-rejected value="Importen vart avvist: $ERROR$"/>
+			<matrix-udl-imported value="Tal på importerte språk: $COUNT$"/>
+			<matrix-udl-live-edits value="Brukardefinert språk — endringar vert brukte med ein gong berre i dokument som nyttar dette språket"/>
+			<matrix-udl-loading value="Lastar definisjonar…"/>
+			<matrix-udl-memory-only value="Definisjonane finst berre i minnet (inga oppsettsmappe)"/>
+			<matrix-udl-missing-ids value="Manglande ID-ar for brukardefinerte språk: $IDS$. Dokumentteksten og dei lagra språkidentitetane er tekne vare på. Gjenopprett definisjonane eller vel eit anna språk uttrykkjeleg i Språk-menyen."/>
+			<matrix-udl-open-panel-disconnected value="UDL-opningsdialogen vart fråkopla: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Vil du fjerne denne namngjevne definisjonen? Eksisterande dokument tek vare på teksten og byter til det unamngjevne brukardefinerte språket."/>
+			<matrix-udl-retry-file value="Prøv UDL-filoperasjonen på nytt"/>
+			<matrix-udl-save-panel-disconnected value="UDL-lagringsdialogen vart fråkopla: $ERROR$"/>
+			<matrix-udl-unavailable value="Definisjonane er ikkje tilgjengelege; rett udl.json og prøv på nytt."/>
+			<matrix-udl-use-background value="Bruk bakgrunnsfarge"/>
+			<matrix-udl-use-foreground value="Bruk framgrunnsfarge"/>
+			<matrix-udl-working-copy value="Brukardefinert (arbeidskopi)"/>
+			<common-ok value="OK"/>
+			<common-cancel value="Avbryt"/>
+			<common-name value="Namn"/>
+			<discover-file-candidates-title value="Finn aktuelle filer…"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

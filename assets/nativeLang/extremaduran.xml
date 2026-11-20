@@ -444,5 +444,65 @@
 				<Item id="2" name="Canzelal"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<matrix-find-resize-results value="Escambial el tamañu de los resultaus del landéu"/>
+			<common-ok value="Vali"/>
+			<common-cancel value="Canzelal"/>
+			<common-name value="Nombri"/>
+			<discover-file-candidates-title value="Landéu de ficherus posiblis…"/>
+			<matrix-close value="Fechal"/>
+			<matrix-retry value="Tornal a provaal"/>
+			<matrix-cancelled value="Cancelau"/>
+			<matrix-read-only value="Sólu lehtura"/>
+			<matrix-find-status-details value="Detallis del estau"/>
+			<matrix-find-backward-unavailable value="El landéu p'atrás con espresionis regularis está desativau"/>
+			<matrix-hash-select-files value="Selezional ficherus"/>
+			<matrix-hash-calculating value="Carculandu la güella…"/>
+			<matrix-hash-selection-failed value="Falló la selezión de ficherus: $ERROR$"/>
+			<matrix-hash-read-failed value="Nu se puein leel estus ficherus:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Fechal el erru"/>
+			<matrix-hash-file-paths value="Rutas de ficherus (sólu lehtura)"/>
+			<matrix-hash-digest-result value="Resultau de la güella (sólu lehtura)"/>
+			<matrix-hash-source-text value="Testu d'orihin de la güella"/>
+			<matrix-hash-selection-composition value="Entovía nu está implementau el carculu de la güella de la selezión duranti la composizión ativa de testu"/>
+			<matrix-hash-selection-read-failed value="Nu se puei leel la selezión: $ERROR$"/>
+			<matrix-window-activation-failed value="Nu se puei escambial al ficheru selezionau"/>
+			<matrix-window-selection-unavailable value="El ficheru selezionau está fechau u nu se puei atival"/>
+			<matrix-incremental-position value="Movel la barra de landéu incremental"/>
+			<matrix-find-progress-bar value="Barra de progressu"/>
+			<matrix-find-previous-search value="Muestral el landéu anteriol"/>
+			<matrix-find-results-summary value="Resultaus del landéu - ($INT_REPLACE$ coincidenzias)"/>
+			<matrix-udl-allow-code2-close value="Permitil el fechamientu de cóigu 2"/>
+			<matrix-udl-allow-code2-middle value="Permitil el mediu de cóigu 2"/>
+			<matrix-udl-allow-code2-open value="Permitil l'abertura de cóigu 2"/>
+			<matrix-udl-allow-comment-fold-close value="Permitil el fechamientu del plegau de comentarius"/>
+			<matrix-udl-allow-comment-fold-middle value="Permitil el mediu del plegau de comentarius"/>
+			<matrix-udl-allow-comment-fold-open value="Permitil l'abertura del plegau de comentarius"/>
+			<matrix-udl-choose-json value="Escogel un ficheru JSON de definizión UDL"/>
+			<matrix-udl-close value="Fechal la luenga definía pol usuariu"/>
+			<matrix-udl-close-styler value="Fechal el configuraol d'estilus"/>
+			<matrix-udl-colors value="Coloris"/>
+			<matrix-udl-dark-mode-language value="Luenga pal mó escuru"/>
+			<matrix-udl-definition-exported value="Definizión esportá"/>
+			<matrix-udl-definitions-saved value="Definizionis guardás"/>
+			<matrix-udl-enable-font value="Atival la tipografía"/>
+			<matrix-udl-error value="Erru de luenga definía pol usuariu: $ERROR$"/>
+			<matrix-udl-file-failed value="Falló la operazión del ficheru UDL: $ERROR$"/>
+			<matrix-udl-file-progress value="Operazión de ficheru en cursu…"/>
+			<matrix-udl-import-rejected value="Importazión refugá: $ERROR$"/>
+			<matrix-udl-imported value="Luengas importás: $COUNT$"/>
+			<matrix-udl-live-edits value="Luenga definía pol usuariu — los cambius s'aprican al momentu sólu a los documentus que gastan esta luenga"/>
+			<matrix-udl-loading value="Cargandu definizionis…"/>
+			<matrix-udl-memory-only value="Las definizionis están sólu ena memoria (sin direhtoriu de configurazión)"/>
+			<matrix-udl-missing-ids value="Fartan ID de luengas definías pol usuariu: $IDS$. S'an conservau el testu de los documentus i las identiais de luenga guardás. Restoral las definizionis u escogel espresamenti otra luenga."/>
+			<matrix-udl-open-panel-disconnected value="El panel d'abril UDL s'a desconehtau: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Eliminal esta definizión con nombri? Los documentus esistentis conservan el testu i escambian a la luenga definía pol usuariu sin nombri."/>
+			<matrix-udl-retry-file value="Tornal a provaal la operazión del ficheru UDL"/>
+			<matrix-udl-save-panel-disconnected value="El panel de guardal UDL s'a desconehtau: $ERROR$"/>
+			<matrix-udl-unavailable value="Definizionis nu disponiblis; corregil udl.json i tornal a provaal."/>
+			<matrix-udl-use-background value="Gastal el fondu"/>
+			<matrix-udl-use-foreground value="Gastal el primer planu"/>
+			<matrix-udl-working-copy value="Definíu pol usuariu (copia de trabahu)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

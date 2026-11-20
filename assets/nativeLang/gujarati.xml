@@ -882,5 +882,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="ઓકે"/>
+			<common-cancel value="કેન્સલ"/>
+			<common-name value="નામ"/>
+			<discover-file-candidates-title value="સંભવિત ફાઇલો શોધી રહ્યા છીએ..."/>
+			<matrix-close value="બંધ કરો"/>
+			<matrix-retry value="ફરી પ્રયાસ કરો"/>
+			<matrix-cancelled value="રદ કરેલ"/>
+			<matrix-read-only value="ફક્ત વાંચવા માટે"/>
+			<matrix-find-status-details value="સ્થિતિની વિગતો"/>
+			<matrix-find-resize-results value="શોધનાં પરિણામોનું કદ બદલો"/>
+			<matrix-find-backward-unavailable value="નિયમિત અભિવ્યક્તિ વડે પાછળની તરફ શોધ અક્ષમ છે"/>
+			<matrix-hash-select-files value="ફાઇલો પસંદ કરો"/>
+			<matrix-hash-calculating value="હૅશની ગણતરી થઈ રહી છે…"/>
+			<matrix-hash-selection-failed value="ફાઇલની પસંદગી નિષ્ફળ: $ERROR$"/>
+			<matrix-hash-read-failed value="નીચેની ફાઇલો વાંચી શકાતી નથી:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="ભૂલ બંધ કરો"/>
+			<matrix-hash-file-paths value="ફાઇલના પાથ (ફક્ત વાંચવા માટે)"/>
+			<matrix-hash-digest-result value="હૅશનું પરિણામ (ફક્ત વાંચવા માટે)"/>
+			<matrix-hash-source-text value="હૅશ માટેનું મૂળ લખાણ"/>
+			<matrix-hash-selection-composition value="લખાણનું સંયોજન ચાલુ હોય ત્યારે પસંદગીના હૅશની ગણતરી હજી અમલમાં નથી"/>
+			<matrix-hash-selection-read-failed value="પસંદગી વાંચી શકાતી નથી: $ERROR$"/>
+			<matrix-window-activation-failed value="પસંદ કરેલી ફાઇલ પર જઈ શકાતું નથી"/>
+			<matrix-window-selection-unavailable value="પસંદ કરેલી ફાઇલ બંધ છે અથવા સક્રિય કરી શકાતી નથી"/>
+			<matrix-incremental-position value="ક્રમશઃ શોધની પટ્ટી ખસેડો"/>
+			<matrix-find-progress-bar value="પ્રગતિ પટ્ટી"/>
+			<matrix-find-previous-search value="અગાઉની શોધ બતાવો"/>
+			<matrix-find-results-summary value="શોધનાં પરિણામો - ($INT_REPLACE$ મેળ)"/>
+			<matrix-udl-allow-code2-close value="કોડ 2 બંધ કરવાની મંજૂરી આપો"/>
+			<matrix-udl-allow-code2-middle value="કોડ 2 ના મધ્ય ભાગને મંજૂરી આપો"/>
+			<matrix-udl-allow-code2-open value="કોડ 2 ખોલવાની મંજૂરી આપો"/>
+			<matrix-udl-allow-comment-fold-close value="ટિપ્પણી ફોલ્ડ બંધ કરવાની મંજૂરી આપો"/>
+			<matrix-udl-allow-comment-fold-middle value="ટિપ્પણી ફોલ્ડના મધ્ય ભાગને મંજૂરી આપો"/>
+			<matrix-udl-allow-comment-fold-open value="ટિપ્પણી ફોલ્ડ ખોલવાની મંજૂરી આપો"/>
+			<matrix-udl-choose-json value="JSON સ્વરૂપની UDL વ્યાખ્યા ફાઇલ પસંદ કરો"/>
+			<matrix-udl-close value="વપરાશકર્તાએ વ્યાખ્યાયિત કરેલી ભાષા બંધ કરો"/>
+			<matrix-udl-close-styler value="શૈલી સંપાદક બંધ કરો"/>
+			<matrix-udl-colors value="રંગો"/>
+			<matrix-udl-dark-mode-language value="ઘેરા મોડની ભાષા"/>
+			<matrix-udl-definition-exported value="વ્યાખ્યા નિકાસ થઈ"/>
+			<matrix-udl-definitions-saved value="વ્યાખ્યાઓ સાચવી"/>
+			<matrix-udl-enable-font value="ફોન્ટ સક્રિય કરો"/>
+			<matrix-udl-error value="વપરાશકર્તાએ વ્યાખ્યાયિત કરેલી ભાષામાં ભૂલ: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ફાઇલની ક્રિયા નિષ્ફળ: $ERROR$"/>
+			<matrix-udl-file-progress value="ફાઇલની ક્રિયા ચાલુ છે…"/>
+			<matrix-udl-import-rejected value="આયાત નકારવામાં આવી: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ ભાષાઓ આયાત કરી"/>
+			<matrix-udl-live-edits value="વપરાશકર્તાએ વ્યાખ્યાયિત કરેલી ભાષા — ફેરફારો ફક્ત આ ભાષા વાપરતા દસ્તાવેજો પર તરત લાગુ પડે છે"/>
+			<matrix-udl-loading value="વ્યાખ્યાઓ લોડ થઈ રહી છે…"/>
+			<matrix-udl-memory-only value="વ્યાખ્યાઓ ફક્ત મેમરીમાં છે (રૂપરેખાંકન ડિરેક્ટરી નથી)"/>
+			<matrix-udl-missing-ids value="વપરાશકર્તાએ વ્યાખ્યાયિત કરેલી ભાષાના ઓળખકર્તા ખૂટે છે: $IDS$. દસ્તાવેજનું લખાણ અને સાચવેલી ભાષાની ઓળખ જાળવવામાં આવી છે. વ્યાખ્યાઓ પુનઃસ્થાપિત કરો અથવા સ્પષ્ટપણે બીજી ભાષા પસંદ કરો."/>
+			<matrix-udl-open-panel-disconnected value="UDL ખોલવાની પેનલનું જોડાણ તૂટ્યું: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="આ નામવાળી વ્યાખ્યા દૂર કરવી છે? હાલના દસ્તાવેજો પોતાનું લખાણ જાળવી રાખશે અને નામ વગરની વપરાશકર્તાએ વ્યાખ્યાયિત કરેલી ભાષામાં બદલાશે."/>
+			<matrix-udl-retry-file value="UDL ફાઇલની ક્રિયા ફરી અજમાવો"/>
+			<matrix-udl-save-panel-disconnected value="UDL સાચવવાની પેનલનું જોડાણ તૂટ્યું: $ERROR$"/>
+			<matrix-udl-unavailable value="વ્યાખ્યાઓ ઉપલબ્ધ નથી; udl.json સુધારો અને ફરી પ્રયાસ કરો."/>
+			<matrix-udl-use-background value="પૃષ્ઠભૂમિ વાપરો"/>
+			<matrix-udl-use-foreground value="અગ્રભૂમિ વાપરો"/>
+			<matrix-udl-working-copy value="વપરાશકર્તાએ વ્યાખ્યાયિત કરેલ (કાર્યકારી નકલ)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

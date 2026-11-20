@@ -80,6 +80,8 @@ impl MatrixWindow {
             return;
         }
         match id {
+            46300 => self.open_udl_folder(cx),
+            46301 => cx.open_url("https://github.com/notepad-plus-plus/userDefinedLanguages"),
             43054 => {
                 self.show_find(window, cx);
                 self.find_mark_mode = true;
@@ -331,7 +333,8 @@ impl MatrixWindow {
                     .set_indicators(0, ranges, false);
                 self.editor_changed(result, window, cx);
                 self.set_find_status(find_surface::FindStatus::Message,
-                    format!("标记: {count} 次匹配 {}", self.find_scope_description()));
+                    crate::localization::Text::resource(if count == 1 { "find-status-mark-1-match" } else { "find-status-mark-nb-matches" },
+                        "Mark: $INT_REPLACE$ matches").replace("$INT_REPLACE$", crate::finder::commafy(count)).with_scope(self.find_scope_resource()));
                 self.set_find_scope_reason(count, empty_string_found);
             }
             Err(error) => self.set_find_error(&error),

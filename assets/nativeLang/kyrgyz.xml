@@ -564,5 +564,65 @@
 				<Item id="2" name="Кайтар"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="OK"/>
+			<common-cancel value="Кайтар"/>
+			<common-name value="Аты"/>
+			<discover-file-candidates-title value="Ылайык келиши мүмкүн болгон файлдар изделүүдө..."/>
+			<matrix-close value="Жап"/>
+			<matrix-retry value="Кайра аракет кыл"/>
+			<matrix-cancelled value="Жокко чыгарылды"/>
+			<matrix-read-only value="Окуганга гана"/>
+			<matrix-find-status-details value="Абалдын чоо-жайы"/>
+			<matrix-find-backward-unavailable value="Регулярдык туюнтма менен артка издөө өчүрүлгөн"/>
+			<matrix-hash-select-files value="Файлдарды танда"/>
+			<matrix-hash-calculating value="Хэш мааниси эсептелүүдө…"/>
+			<matrix-hash-selection-failed value="Файл тандалган жок: $ERROR$"/>
+			<matrix-hash-read-failed value="Төмөнкү файлдарды окуу мүмкүн эмес:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Ката билдирүүсүн жап"/>
+			<matrix-hash-file-paths value="Файл жолдору (окуганга гана)"/>
+			<matrix-hash-digest-result value="Хэш жыйынтыгы (окуганга гана)"/>
+			<matrix-hash-source-text value="Хэштин баштапкы тексти"/>
+			<matrix-hash-selection-composition value="Киргизүү түзүлүп жатканда тандалган тексттин хэшин эсептөө азырынча ишке ашырыла элек"/>
+			<matrix-hash-selection-read-failed value="Тандалган текстти окуу мүмкүн эмес: $ERROR$"/>
+			<matrix-window-activation-failed value="Тандалган файлга өтүү мүмкүн эмес"/>
+			<matrix-window-selection-unavailable value="Тандалган файл жабылган же аны активдештирүү мүмкүн эмес"/>
+			<matrix-incremental-position value="Кадамдык издөө тилкесин жылдыр"/>
+			<matrix-find-progress-bar value="Аткарылыш тилкеси"/>
+			<matrix-find-previous-search value="Мурунку издөөнү көрсөт"/>
+			<matrix-find-results-summary value="Издөө жыйынтыктары - ($INT_REPLACE$ дал келүү)"/>
+			<matrix-udl-allow-code2-close value="2-коддун жабылышына уруксат бер"/>
+			<matrix-udl-allow-code2-middle value="2-коддун орто бөлүгүнө уруксат бер"/>
+			<matrix-udl-allow-code2-open value="2-коддун ачылышына уруксат бер"/>
+			<matrix-udl-allow-comment-fold-close value="Комментарийди бүктөөнүн жабылышына уруксат бер"/>
+			<matrix-udl-allow-comment-fold-middle value="Комментарийди бүктөөнүн орто бөлүгүнө уруксат бер"/>
+			<matrix-udl-allow-comment-fold-open value="Комментарийди бүктөөнүн ачылышына уруксат бер"/>
+			<matrix-udl-choose-json value="JSON форматындагы UDL аныктама файлын танда"/>
+			<matrix-udl-close value="Колдонуучу аныктаган тилди жап"/>
+			<matrix-udl-close-styler value="Стиль жөндөгүчүн жап"/>
+			<matrix-udl-colors value="Түстөр"/>
+			<matrix-udl-dark-mode-language value="Караңгы режимдин тили"/>
+			<matrix-udl-definition-exported value="Аныктама экспорттолду"/>
+			<matrix-udl-definitions-saved value="Аныктамалар сакталды"/>
+			<matrix-udl-enable-font value="Арипти иштет"/>
+			<matrix-udl-error value="Колдонуучу аныктаган тилдин катасы: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL файл аракети аткарылган жок: $ERROR$"/>
+			<matrix-udl-file-progress value="Файл аракети аткарылууда…"/>
+			<matrix-udl-import-rejected value="Импорт четке кагылды: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ тил импорттолду"/>
+			<matrix-udl-live-edits value="Колдонуучу аныктаган тил — өзгөртүүлөр ушул тилди колдонгон документтерге гана дароо колдонулат"/>
+			<matrix-udl-loading value="Аныктамалар жүктөлүүдө…"/>
+			<matrix-udl-memory-only value="Аныктамалар эстутумда гана (жөндөө каталогу жок)"/>
+			<matrix-udl-missing-ids value="Колдонуучу аныктаган тилдин идентификаторлору жок: $IDS$. Документтин тексти жана сакталган тилдин идентификаторлору сакталды. Аныктамаларды калыбына келтириңиз же башка тилди ачык тандаңыз."/>
+			<matrix-udl-open-panel-disconnected value="UDL ачуу панелинин байланышы үзүлдү: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Бул аталган аныктама өчүрүлсүнбү? Учурдагы документтер текстин сактап, аты жок колдонуучу аныктаган тилге өтөт."/>
+			<matrix-udl-retry-file value="UDL файл аракетин кайтала"/>
+			<matrix-udl-save-panel-disconnected value="UDL сактоо панелинин байланышы үзүлдү: $ERROR$"/>
+			<matrix-udl-unavailable value="Аныктамалар жеткиликсиз; udl.json файлын оңдоп, кайра аракет кылыңыз."/>
+			<matrix-udl-use-background value="Фондун түсүн колдон"/>
+			<matrix-udl-use-foreground value="Бетки түстү колдон"/>
+			<matrix-udl-working-copy value="Колдонуучу аныктаган (жумушчу көчүрмө)"/>
+			<matrix-find-resize-results value="Издөө жыйынтыктарынын өлчөмүн өзгөрт"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

@@ -471,5 +471,65 @@
 				<Item id="2" name="Of&amp;briechen"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<matrix-find-resize-results value="Gréisst vun de Sichresultater änneren"/>
+			<common-ok value="OK"/>
+			<common-cancel value="Ofbriechen"/>
+			<common-name value="Numm"/>
+			<discover-file-candidates-title value="Méiglech Dateie ginn ermëttelt…"/>
+			<matrix-close value="Zoumaachen"/>
+			<matrix-retry value="Nach eng Kéier probéieren"/>
+			<matrix-cancelled value="Ofgebrach"/>
+			<matrix-read-only value="Nëmme liesen"/>
+			<matrix-find-status-details value="Detailer zum Status"/>
+			<matrix-find-backward-unavailable value="D'Réckwärtssich mat regulären Ausdréck ass desaktivéiert"/>
+			<matrix-hash-select-files value="Dateien auswielen"/>
+			<matrix-hash-calculating value="Hashwäert gëtt berechent…"/>
+			<matrix-hash-selection-failed value="Auswiele vun den Dateien ass feelgeschloen: $ERROR$"/>
+			<matrix-hash-read-failed value="Déi follgend Dateie kënnen net gelies ginn:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Feelermeldung zoumaachen"/>
+			<matrix-hash-file-paths value="Dateipied (nëmme liesen)"/>
+			<matrix-hash-digest-result value="Hashresultat (nëmme liesen)"/>
+			<matrix-hash-source-text value="Quelltext fir den Hashwäert"/>
+			<matrix-hash-selection-composition value="D'Berechnung vum Hashwäert vun der Auswiel bei aktiver Textkompositioun ass nach net ëmgesat"/>
+			<matrix-hash-selection-read-failed value="D'Auswiel kann net gelies ginn: $ERROR$"/>
+			<matrix-window-activation-failed value="Et kann net op déi ausgewielten Datei gewiesselt ginn"/>
+			<matrix-window-selection-unavailable value="Déi ausgewielten Datei ass zou oder kann net aktivéiert ginn"/>
+			<matrix-incremental-position value="Leescht fir déi inkrementell Sich verréckelen"/>
+			<matrix-find-progress-bar value="Fortschrëttsleescht"/>
+			<matrix-find-previous-search value="Vireg Sich weisen"/>
+			<matrix-find-results-summary value="Sichresultater - ($INT_REPLACE$ Treffer)"/>
+			<matrix-udl-allow-code2-close value="Enn vum Code 2 erlaben"/>
+			<matrix-udl-allow-code2-middle value="Mëtt vum Code 2 erlaben"/>
+			<matrix-udl-allow-code2-open value="Ufank vum Code 2 erlaben"/>
+			<matrix-udl-allow-comment-fold-close value="Enn vun der Kommentarfaltung erlaben"/>
+			<matrix-udl-allow-comment-fold-middle value="Mëtt vun der Kommentarfaltung erlaben"/>
+			<matrix-udl-allow-comment-fold-open value="Ufank vun der Kommentarfaltung erlaben"/>
+			<matrix-udl-choose-json value="Eng JSON-Datei mat enger UDL-Definitioun auswielen"/>
+			<matrix-udl-close value="Benotzerdefinéiert Sprooch zoumaachen"/>
+			<matrix-udl-close-styler value="Stilastellungen zoumaachen"/>
+			<matrix-udl-colors value="Faarfen"/>
+			<matrix-udl-dark-mode-language value="Sprooch fir den donkele Modus"/>
+			<matrix-udl-definition-exported value="Definitioun exportéiert"/>
+			<matrix-udl-definitions-saved value="Definitioune gespäichert"/>
+			<matrix-udl-enable-font value="Schrëft aktivéieren"/>
+			<matrix-udl-error value="Feeler an der benotzerdefinéierter Sprooch: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-Dateioperatioun ass feelgeschloen: $ERROR$"/>
+			<matrix-udl-file-progress value="Dateioperatioun leeft…"/>
+			<matrix-udl-import-rejected value="Import ofgeleent: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ Sproochen importéiert"/>
+			<matrix-udl-live-edits value="Benotzerdefinéiert Sprooch — Ännerunge gëllen direkt nëmme fir Dokumenter, déi dës Sprooch benotzen"/>
+			<matrix-udl-loading value="Definitioune gi gelueden…"/>
+			<matrix-udl-memory-only value="Definitioune sinn nëmmen am Späicher (kee Konfiguratiounsdossier)"/>
+			<matrix-udl-missing-ids value="IDe vu benotzerdefinéierte Sprooche feelen: $IDS$. Den Dokumenttext an déi gespäichert Sproochidentitéite goufe bäibehalen. Stellt d'Definitiounen erëm hier oder wielt ausdrécklech eng aner Sprooch."/>
+			<matrix-udl-open-panel-disconnected value="D'Verbindung mam UDL-Opmaachpanel gouf getrennt: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Dës benannt Definitioun ewechhuelen? Bestoend Dokumenter behalen hiren Text a wiesselen op déi onbenannt benotzerdefinéiert Sprooch."/>
+			<matrix-udl-retry-file value="UDL-Dateioperatioun nach eng Kéier probéieren"/>
+			<matrix-udl-save-panel-disconnected value="D'Verbindung mam UDL-Späicherpanel gouf getrennt: $ERROR$"/>
+			<matrix-udl-unavailable value="Definitioune sinn net disponibel; verbessert udl.json a probéiert nach eng Kéier."/>
+			<matrix-udl-use-background value="Hannergrond benotzen"/>
+			<matrix-udl-use-foreground value="Vierdergrond benotzen"/>
+			<matrix-udl-working-copy value="Benotzerdefinéiert (Aarbechtskopie)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

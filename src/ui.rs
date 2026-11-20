@@ -24,6 +24,8 @@ mod about_surface;
 mod bookmark_surface;
 mod builtin_language_surface;
 mod caption_icons;
+mod window_caption;
+mod window_size_indicator;
 mod character_panel_surface;
 mod character_range_surface;
 mod clipboard_surface;
@@ -73,6 +75,7 @@ mod native_path_prompt;
 mod native_app_launch;
 mod panel_surface;
 mod preferences_surface;
+mod config_directory_ui;
 mod preferences_appearance_surface;
 mod preferences_editing_surface;
 mod preferences_files_surface;
@@ -242,6 +245,8 @@ actions!(
         CancelClose,
         DiscardClose,
         SaveAndClose,
+        SaveAllAndClose,
+        DiscardAllAndClose,
         NewFile,
         OpenFile,
         NextBuffer,
@@ -310,7 +315,7 @@ struct MatrixWindow {
     editor_chrome: editor_surface::EditorChrome,
     editor_bounds: Option<gpui::Bounds<gpui::Pixels>>,
     editor_dragging: bool,
-    editor_error: Option<String>,
+    editor_error: Option<crate::localization::Text>,
     editor_error_revision: u64,
     editor_painted_revision: Option<crate::input::DisplayRevision>,
     editor_accessibility: Option<(crate::input::DisplayRevision, gpui::SharedString)>,
@@ -326,6 +331,8 @@ struct MatrixWindow {
     launch_receiver: Option<gpui::Task<()>>,
     printing: bool,
     close_dialog: bool,
+    close_multi: bool,
+    close_all_answer: Option<file_actions::CloseAllAnswer>,
     close_choice: usize,
     close_focus: FocusHandle,
     close_after_save: bool,
@@ -333,6 +340,7 @@ struct MatrixWindow {
     close_tabs_queue: std::collections::VecDeque<crate::workspace::BufferId>,
     conditional_close: Option<file_actions::ConditionalClose>,
     close_discarded: std::collections::BTreeSet<crate::workspace::BufferId>,
+    _window_size_indicator: Option<window_size_indicator::WindowSizeIndicator>,
     tab_scroll: gpui::ScrollHandle,
     tab_overflow: [bool; 2],
     tab_scroll_repeat: Option<gpui::Task<()>>,
@@ -402,9 +410,9 @@ struct MatrixWindow {
     find_fill_threshold: usize,
     find_fill_selected: bool,
     find_fill_caret: bool,
-    find_message: String,
+    find_message: crate::localization::Text,
     find_status: find_surface::FindStatus,
-    find_status_tooltip: String,
+    find_status_tooltip: crate::localization::Text,
     goto_visible: bool,
     goto: goto_surface::State,
     goto_input: gpui::Entity<text_field::TextField>,
@@ -412,6 +420,7 @@ struct MatrixWindow {
     mute_sounds: bool,
     preferences_visible: bool,
     preferences: preferences_surface::State,
+    config_directory: config_directory_ui::ConfigDirectoryState,
     style_config: style_config_surface::State,
     shortcut_mapper: shortcut_surface::State,
     context_menu: crate::context_menu::ContextMenu,
@@ -506,6 +515,13 @@ impl MatrixWindow {
             }
         })
         .detach();
+        let window_size_indicator = match window_size_indicator::WindowSizeIndicator::new(window) {
+            Ok(indicator) => Some(indicator),
+            Err(error) => {
+                eprintln!("could not install window size indicator: {error}");
+                None
+            }
+        };
         Self {
             document_window: Window::window_handle(window),
             floating_windows: std::collections::BTreeMap::new(),
@@ -556,6 +572,8 @@ impl MatrixWindow {
             launch_receiver: None,
             printing: false,
             close_dialog: false,
+            close_multi: false,
+            close_all_answer: None,
             close_choice: 0,
             close_focus: cx.focus_handle(),
             close_after_save: false,
@@ -563,6 +581,7 @@ impl MatrixWindow {
             close_tabs_queue: std::collections::VecDeque::new(),
             conditional_close: None,
             close_discarded: std::collections::BTreeSet::new(),
+            _window_size_indicator: window_size_indicator,
             tab_scroll: gpui::ScrollHandle::new(),
             tab_overflow: [false; 2],
             tab_scroll_repeat: None,
@@ -637,9 +656,9 @@ impl MatrixWindow {
             find_fill_threshold: 1024,
             find_fill_selected: true,
             find_fill_caret: true,
-            find_message: String::new(),
+            find_message: "".into(),
             find_status: find_surface::FindStatus::NoMessage,
-            find_status_tooltip: String::new(),
+            find_status_tooltip: "".into(),
             goto_visible: false,
             goto: goto_surface::State::new(cx),
             goto_input: cx
@@ -648,6 +667,7 @@ impl MatrixWindow {
             mute_sounds: false,
             preferences_visible: false,
             preferences: preferences_surface::State::new(cx),
+            config_directory: config_directory_ui::ConfigDirectoryState::new(cx),
             style_config: style_config_surface::State::new(cx),
             shortcut_mapper: shortcut_surface::State::new(cx),
             context_menu: crate::context_menu::ContextMenu::default(),
@@ -704,6 +724,7 @@ impl MatrixWindow {
             || self.application_quit_pending
             || self.macro_interaction_blocked()
             || self.window_manager_blocks_document()
+            || self.udl.styler_visible
     }
 
     fn editor_mut(&mut self) -> &mut EditorSession {
@@ -1163,7 +1184,7 @@ impl Render for MatrixWindow {
         let caption_background = if self.dark {
             toolbar
         } else if caption_active {
-            0x357ec7
+            window_caption::BACKGROUND
         } else {
             0xf0f0f0
         };
@@ -1182,6 +1203,7 @@ impl Render for MatrixWindow {
         let editing_toolbar = self.view_chrome_visible().then(|| toolbar_surface::render(self, window, cx));
         self.reconcile_editor_panes();
         let editor = self.render_split_editors(window, cx);
+        let docked_udl = self.render_docked_udl(window, cx);
         let panels_left = self.view_panels_other_pane_visible().then(|| self.render_panel_region(crate::panel_layout::DockSide::Left, cx));
         let panels_right = self.view_panels_other_pane_visible().then(|| self.render_panel_region(crate::panel_layout::DockSide::Right, cx));
         let panels_top = self.view_panels_other_pane_visible().then(|| self.render_panel_region(crate::panel_layout::DockSide::Top, cx));
@@ -1194,7 +1216,6 @@ impl Render for MatrixWindow {
             (None, incremental)
         };
         let status_bar = (self.status_visible && self.view_tabs_status_visible()).then(|| self.render_status(cx));
-        let dark = self.dark;
         let button = |id: &'static str,
                       label: &'static str,
                       icon: caption_icons::Icon,
@@ -1205,7 +1226,6 @@ impl Render for MatrixWindow {
                 .debug_selector(move || id.into())
                 .role(Role::Button)
                 .aria_label(label)
-                .tooltip(move |_, cx| icon_tooltip::view(label, dark, cx))
                 .w(px(width))
                 .h(px(30.))
                 .flex_shrink_0()
@@ -1827,7 +1847,7 @@ impl Render for MatrixWindow {
             }))
             .on_modifiers_changed(cx.listener(
                 |view, event: &gpui::ModifiersChangedEvent, window, cx| {
-                    if !event.modifiers.control {
+                    if !event.modifiers.control && !event.modifiers.platform {
                         view.finish_document_switcher(true, window, cx);
                     }
                     if event.modifiers.alt {
@@ -1895,9 +1915,10 @@ impl Render for MatrixWindow {
                             .items_center()
                             .px(px(8.))
                             .gap(px(5.))
-                            .on_mouse_down(MouseButton::Left, |_, window, _| {
+                            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, window, cx| {
+                                cx.stop_propagation();
                                 window.start_window_move()
-                            })
+                            }))
                             .child(
                                 gpui::img(toolbar_icons::ToolbarIcon::Application.image())
                                     .size(px(16.)),
@@ -1997,6 +2018,7 @@ impl Render for MatrixWindow {
                                     .w_full()
                                     .children(panels_left)
                                     .child(editor)
+                                    .children(docked_udl)
                                     .children(panels_right),
                             )
                             .children(panels_bottom),
@@ -2070,6 +2092,7 @@ fn discard_host_composition(window: &Window) -> io::Result<bool> {
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut launch = crate::launch::LaunchOptions::parse(std::env::args_os().skip(1))?;
     let home = crate::file_access::home_directory()?;
+    crate::config_directory::initialize(&home)?;
     let mut settings = ConfigStore::under_home(&home).load_settings()?;
     let normalize_threshold = |settings: &mut serde_json::Value| {
         let mut changed = false;
@@ -2258,6 +2281,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             KeyBinding::new("escape", CloseGoTo, Some("MatrixGoTo")),
             KeyBinding::new("escape", ClosePreferences, Some("MatrixPreferences")),
             KeyBinding::new("escape", CloseMarkdownPreview, Some("MatrixMarkdown")),
+            KeyBinding::new("cmd-c", markdown_surface::CopyMarkdownPreview, Some("MatrixMarkdown")),
+            KeyBinding::new("ctrl-c", markdown_surface::CopyMarkdownPreview, Some("MatrixMarkdown")),
+            KeyBinding::new("cmd-a", markdown_surface::SelectAllMarkdownPreview, Some("MatrixMarkdown")),
+            KeyBinding::new("ctrl-a", markdown_surface::SelectAllMarkdownPreview, Some("MatrixMarkdown")),
         ]);
         original_bindings.extend([
             KeyBinding::new("alt-f4", CloseWindow, None),

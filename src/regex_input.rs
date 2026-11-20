@@ -2,7 +2,7 @@ use crate::byte_buffer::ByteBuffer;
 
 #[derive(Clone)]
 pub(crate) struct Utf8DocumentIterator<'a> {
-    bytes: &'a ByteBuffer,
+    cursor: crate::byte_buffer::ByteCursor<'a>,
     position: usize,
     end: usize,
     character_index: usize,
@@ -17,7 +17,7 @@ impl<'a> Utf8DocumentIterator<'a> {
             return Err("The regex range is outside the document".to_owned());
         }
         let mut iterator = Self {
-            bytes,
+            cursor: crate::byte_buffer::ByteCursor::new(bytes),
             position: position.min(end),
             end,
             character_index: 0,
@@ -65,7 +65,7 @@ impl<'a> Utf8DocumentIterator<'a> {
         } else {
             self.position = self.position.checked_sub(1)
                 .ok_or_else(|| "The regex iterator is before the document".to_owned())?;
-            while self.position > 0 && self.bytes.byte(self.position).is_some_and(|byte| byte & 0xc0 == 0x80) {
+            while self.position > 0 && self.cursor.byte(self.position).is_some_and(|byte| byte & 0xc0 == 0x80) {
                 self.position -= 1;
             }
             self.read_character();
@@ -104,7 +104,7 @@ impl<'a> Utf8DocumentIterator<'a> {
     }
 
     fn read_character(&mut self) {
-        let first = self.bytes.byte(self.position).unwrap_or(0);
+        let first = self.cursor.byte(self.position).unwrap_or(0);
         if first & 0x80 == 0 {
             self.utf8_length = 1;
             self.utf16_length = 1;
@@ -128,7 +128,7 @@ impl<'a> Utf8DocumentIterator<'a> {
         while count > 1 && position < self.end {
             count -= 1;
             position += 1;
-            let byte = self.bytes.byte(position).unwrap_or(0);
+            let byte = self.cursor.byte(position).unwrap_or(0);
             if byte & 0xc0 != 0x80 {
                 break;
             }

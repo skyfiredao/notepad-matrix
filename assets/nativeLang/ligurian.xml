@@ -577,5 +577,65 @@
 				<Item id="2" name="Anulla"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="D'acòrdio"/>
+			<common-cancel value="Anulla"/>
+			<common-name value="Nomme"/>
+			<discover-file-candidates-title value="Riçerca di file candidæ..."/>
+			<matrix-close value="Særa"/>
+			<matrix-retry value="Preuva torna"/>
+			<matrix-cancelled value="Anullòu"/>
+			<matrix-read-only value="Sola letua"/>
+			<matrix-find-status-details value="Detalli do stato"/>
+			<matrix-find-resize-results value="Cangia a dimenscion di rizultati da riçerca"/>
+			<matrix-find-backward-unavailable value="A riçerca inderê con espressioin regolæ a l'é dizabilitâ"/>
+			<matrix-hash-select-files value="Seleçionn-a i file"/>
+			<matrix-hash-calculating value="Càrculo de l'inpronta…"/>
+			<matrix-hash-selection-failed value="Seleçion di file no riescîa: $ERROR$"/>
+			<matrix-hash-read-failed value="No se peu lêze sti file:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Særa l'erô"/>
+			<matrix-hash-file-paths value="Percorsci di file (sola letua)"/>
+			<matrix-hash-digest-result value="Rizultato de l'inpronta (sola letua)"/>
+			<matrix-hash-source-text value="Testo d'origgine de l'inpronta"/>
+			<matrix-hash-selection-composition value="O càrculo de l'inpronta da seleçion durante a conpoziçion ativa o no l'é ancon inplementòu"/>
+			<matrix-hash-selection-read-failed value="No se peu lêze a seleçion: $ERROR$"/>
+			<matrix-window-activation-failed value="No se peu passâ ao file seleçionòu"/>
+			<matrix-window-selection-unavailable value="O file seleçionòu o l'é seròu ò o no se peu ativâ"/>
+			<matrix-incremental-position value="Mescia a bara de riçerca incrementâ"/>
+			<matrix-find-progress-bar value="Bara de progresso"/>
+			<matrix-find-previous-search value="Mostra a riçerca de primma"/>
+			<matrix-find-results-summary value="Rizultati da riçerca - ($INT_REPLACE$ corispondense)"/>
+			<matrix-udl-allow-code2-close value="Permetti a seratua do còdice 2"/>
+			<matrix-udl-allow-code2-middle value="Permetti o mezo do còdice 2"/>
+			<matrix-udl-allow-code2-open value="Permetti l'avertua do còdice 2"/>
+			<matrix-udl-allow-comment-fold-close value="Permetti a seratua do ripiegamento di comenti"/>
+			<matrix-udl-allow-comment-fold-middle value="Permetti o mezo do ripiegamento di comenti"/>
+			<matrix-udl-allow-comment-fold-open value="Permetti l'avertua do ripiegamento di comenti"/>
+			<matrix-udl-choose-json value="Çerni un file JSON de definiçion UDL"/>
+			<matrix-udl-close value="Særa o lengoaggio personalizòu"/>
+			<matrix-udl-close-styler value="Særa o configuratô de stili"/>
+			<matrix-udl-colors value="Coî"/>
+			<matrix-udl-dark-mode-language value="Lengoaggio do mòddo scuo"/>
+			<matrix-udl-definition-exported value="Definiçion esportâ"/>
+			<matrix-udl-definitions-saved value="Definiçioin sarvæ"/>
+			<matrix-udl-enable-font value="Abilita o caratere"/>
+			<matrix-udl-error value="Erô do lengoaggio personalizòu: $ERROR$"/>
+			<matrix-udl-file-failed value="Operaçion de file UDL no riescîa: $ERROR$"/>
+			<matrix-udl-file-progress value="Operaçion de file in corso…"/>
+			<matrix-udl-import-rejected value="Inportaçion refuâ: $ERROR$"/>
+			<matrix-udl-imported value="Inportæ $COUNT$ lengoaggi"/>
+			<matrix-udl-live-edits value="Lengoaggio personalizòu — e modiffiche s'àplican de lungo solo ai documenti ch'adeuvian sto lengoaggio"/>
+			<matrix-udl-loading value="Caregamento de definiçioin…"/>
+			<matrix-udl-memory-only value="E definiçioin en solo inta memöia (nisciunn-a cartèlla de configuraçion)"/>
+			<matrix-udl-missing-ids value="Mancan i identificatoî di lengoaggi personalizæ: $IDS$. O testo di documenti e e identitæ sarvæ di lengoaggi son stæ conservæ. Repiggia e definiçioin ò çerni esplicitamente un atro lengoaggio."/>
+			<matrix-udl-open-panel-disconnected value="Pannello d'avertua UDL disconesso: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Levâ sta definiçion co-o nomme? I documenti za prezenti mantegnan o testo e passan ao lengoaggio personalizòu sensa nomme."/>
+			<matrix-udl-retry-file value="Preuva torna l'operaçion de file UDL"/>
+			<matrix-udl-save-panel-disconnected value="Pannello de sarvataggio UDL disconesso: $ERROR$"/>
+			<matrix-udl-unavailable value="Definiçioin no disponibili; corezzi udl.json e preuva torna."/>
+			<matrix-udl-use-background value="Adeuvia o sfondo"/>
+			<matrix-udl-use-foreground value="Adeuvia o primmo cian"/>
+			<matrix-udl-working-copy value="Personalizòu (còpia de travaggio)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

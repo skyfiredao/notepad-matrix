@@ -2,6 +2,7 @@ use super::*;
 use gpui::{Pixels, point};
 use super::dialog_font::px;
 use crate::workspace::{BufferId, ViewId};
+use crate::localization::Text;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -30,7 +31,7 @@ struct PendingSave {
 
 struct SaveFailure {
     name: String,
-    errors: Vec<String>,
+    errors: Vec<Text>,
 }
 
 struct Batch {
@@ -68,7 +69,7 @@ pub(super) struct State {
     context_selected: usize,
     batch: Option<Batch>,
     advance_queued: bool,
-    message: String,
+    message: Option<Text>,
     save_errors: BTreeMap<BufferId, SaveFailure>,
     error_scroll: gpui::ScrollHandle,
 }
@@ -82,7 +83,7 @@ impl State {
             header_drag: None, focus: cx.focus_handle().tab_index(0).tab_stop(true),
             button_focus: std::array::from_fn(|_| cx.focus_handle().tab_index(0).tab_stop(true)),
             scroll: gpui::UniformListScrollHandle::new(), horizontal_scroll: gpui::ScrollHandle::new(),
-            context: None, context_selected: 0, batch: None, advance_queued: false, message: String::new(),
+            context: None, context_selected: 0, batch: None, advance_queued: false, message: None,
             save_errors: BTreeMap::new(), error_scroll: gpui::ScrollHandle::new(),
         }
     }
@@ -153,8 +154,8 @@ impl MatrixWindow {
 
     pub(super) fn window_manager_title(&self) -> String {
         let locale = self.native_locale();
-        format!("{} - {} {}", crate::localization::dialog_title(&locale, "Window").unwrap_or("文件窗口"),
-            named(&locale, "NbDocsTotal", "总计:"), self.workspace.view_buffer_ids(self.window_manager.view).len())
+        format!("{} - {} {}", crate::localization::dialog_title(&locale, "Window").unwrap_or("Windows"),
+            named(&locale, "NbDocsTotal", "total documents:"), self.workspace.view_buffer_ids(self.window_manager.view).len())
     }
 
     pub(super) fn window_manager_focus(&self) -> FocusHandle { self.window_manager.focus.clone() }
@@ -186,7 +187,7 @@ impl MatrixWindow {
         self.window_manager.cursor = Some(self.workspace.active().id());
         self.window_manager.anchor = self.window_manager.cursor;
         self.window_manager.context = None;
-        self.window_manager.message.clear();
+        self.window_manager.message = None;
         self.window_manager.save_errors.clear();
         self.window_manager.error_scroll.set_offset(point(px(0.), px(0.)));
         self.refresh_window_manager_rows();
@@ -268,7 +269,7 @@ impl MatrixWindow {
             if !self.workspace.view_buffer_ids(self.window_manager.view).contains(&id) { continue; }
             if operation == Operation::Save && !self.workspace.buffers().iter().any(|buffer| buffer.id() == id && buffer.is_modified()) { continue; }
             if !self.activate_window_manager_buffer(id, window, cx) {
-                self.window_manager.message = self.editor_error.clone().unwrap_or_else(|| "无法切换到所选文件".into());
+                self.window_manager.message = Some(self.editor_error.clone().unwrap_or_else(|| Text::resource("matrix-window-activation-failed", "Unable to switch to the selected file")));
                 self.window_manager.batch = None;
                 cx.notify();
                 return;
@@ -300,9 +301,9 @@ impl MatrixWindow {
 
     fn window_manager_message(&self) -> String {
         let mut messages = self.window_manager.save_errors.iter().map(|(id, failure)| {
-            format!("{} [#{}]：{}", failure.name, id.0, failure.errors.join("；"))
+            format!("{} [#{}]：{}", failure.name, id.0, failure.errors.iter().map(|error| error.render(&self.native_locale())).collect::<Vec<_>>().join("；"))
         }).collect::<Vec<_>>();
-        if !self.window_manager.message.is_empty() { messages.push(self.window_manager.message.clone()); }
+        if let Some(message) = &self.window_manager.message { messages.push(message.render(&self.native_locale())); }
         messages.join("\n")
     }
 
@@ -345,7 +346,7 @@ impl MatrixWindow {
         if targets.is_empty() { return; }
         let first_selected = self.window_manager.rows.iter().position(|row| self.window_manager.selected.contains(&row.id)).unwrap_or(0);
         self.window_manager.context = None;
-        self.window_manager.message.clear();
+        self.window_manager.message = None;
         self.window_manager.batch = Some(Batch { operation, targets, restore: self.workspace.active_id_in_view(self.window_manager.view), first_selected,
             original: self.window_manager.rows.iter().map(|row| row.id).collect(), pending_save: None });
         self.advance_window_manager_batch(window, cx);
@@ -371,7 +372,7 @@ impl MatrixWindow {
             self.dismiss_floating(floating_windows::DialogKind::WindowManager, window, cx);
         } else {
             self.refresh_window_manager_rows();
-            self.window_manager.message = "所选文件已关闭或无法激活".into();
+            self.window_manager.message = Some(Text::resource("matrix-window-selection-unavailable", "The selected file is closed or cannot be activated"));
             cx.notify();
         }
     }
@@ -487,7 +488,7 @@ impl MatrixWindow {
             let count = self.window_manager.rows.len();
             if count == 0 { return; }
             let current = self.window_manager.rows.iter().position(|row| Some(row.id) == self.window_manager.cursor).unwrap_or(0);
-            let page = ((dialog_font::logical(window.viewport_size().height) - 52.) / 22.).floor().max(1.) as usize;
+            let page = ((dialog_font::logical(self.auxiliary_client_size(window).height) - 52.) / 22.).floor().max(1.) as usize;
             let index = match key {
                 "up" => Some(current.saturating_sub(1)), "down" => Some((current + 1).min(count - 1)),
                 "home" => Some(0), "end" => Some(count - 1),
@@ -552,7 +553,7 @@ impl MatrixWindow {
         let widths = self.window_manager.widths;
         let columns = self.window_manager.columns;
         let total_width = widths.iter().sum::<f32>();
-        let names = [named(&locale, "ColumnName", "文件名"), named(&locale, "ColumnPath", "路径"), named(&locale, "ColumnType", "类型"), named(&locale, "ColumnSize", "大小"), named(&locale, "ColumnDateTime", "修改时间")];
+        let names = [named(&locale, "ColumnName", "Name"), named(&locale, "ColumnPath", "Path"), named(&locale, "ColumnType", "Type"), named(&locale, "ColumnSize", "Size"), named(&locale, "ColumnDateTime", "Modified time")];
         let sort = self.window_manager.sort;
         let header = div().id("window-manager-header").flex().flex_shrink_0().h(px(24.)).w(px(total_width)).bg(rgb(background))
             .children(columns.into_iter().map(|column| {
@@ -576,7 +577,10 @@ impl MatrixWindow {
                 let id = row.id;
                 let selected = view.window_manager.selected.contains(&id);
                 let cursor = view.window_manager.cursor == Some(id);
-                let values = [format!("{}{}", row.name, if row.dirty { "*" } else if row.read_only { " [Read Only]" } else { "" }), row.path, row.language, row.size.to_string(), format_time(row.modified)];
+                let marker = if row.dirty { "*".to_owned() } else if row.read_only {
+                    format!(" [{}]", crate::localization::localized_string(&view.native_locale(), "matrix-read-only").unwrap_or("Read Only"))
+                } else { String::new() };
+                let values = [format!("{}{marker}", row.name), row.path, row.language, row.size.to_string(), format_time(row.modified)];
                 Some(div().id(("window-manager-row", id.0)).role(Role::Row).aria_label(values[0].clone()).aria_selected(selected)
                     .h(px(22.)).w(px(total_width)).flex().whitespace_nowrap()
                     .bg(rgb(if selected { if view.dark { 0x35475d } else { 0xcce8ff } } else { list_background }))
@@ -593,7 +597,8 @@ impl MatrixWindow {
                         if view.window_manager.batch.is_some() || view.window_manager_busy() { return; }
                         if !view.window_manager.selected.contains(&id) { view.select_window_manager_row(id, false, false, cx); }
                         view.window_manager.context_selected = 0;
-                        view.window_manager.context = Some(point(event.position.x.min(window.viewport_size().width - px(180.)).max(px(0.)), event.position.y.min(window.viewport_size().height - px(54.)).max(px(0.))));
+                        let client = view.auxiliary_client_size(window);
+                        view.window_manager.context = Some(point(event.position.x.min(client.width - px(180.)).max(px(0.)), (event.position.y - gpui::px(window_caption::HEIGHT)).min(client.height - px(54.)).max(px(0.))));
                         cx.notify(); cx.stop_propagation();
                     })))
             }).collect::<Vec<_>>()
@@ -638,24 +643,24 @@ impl MatrixWindow {
                     .w_full().min_h(px(44.)).max_h(px(144.)).flex_shrink_0().overflow_y_scroll().track_scroll(&self.window_manager.error_scroll)
                     .border_1().border_color(rgb(border)).p(px(6.)).text_color(rgb(if self.dark { 0xff9999 } else { 0xb00000 })).child(message))))
             .child(div().flex().flex_col().h_full().gap(px(8.))
-                .child(button(0, label(&locale, 1, "转到文件"), enabled && selected == 1)
+                .child(button(0, label(&locale, 1, "Activate"), enabled && selected == 1)
                     .on_click(cx.listener(|view, _, window, cx| view.activate_window_manager_selection(window, cx))))
-                .child(button(1, label(&locale, 7002, "保存文件"), enabled && selected > 0)
+                .child(button(1, label(&locale, 7002, "Save"), enabled && selected > 0)
                     .on_click(cx.listener(|view, _, window, cx| view.begin_window_manager_batch(Operation::Save, window, cx))))
-                .child(button(2, label(&locale, 7003, "关闭文件"), enabled && selected > 0)
+                .child(button(2, label(&locale, 7003, "Close window(s)"), enabled && selected > 0)
                     .on_click(cx.listener(|view, _, window, cx| view.begin_window_manager_batch(Operation::Close, window, cx))))
-                .child(button(3, label(&locale, 7004, "文件排序"), enabled)
+                .child(button(3, label(&locale, 7004, "Sort tabs"), enabled)
                     .on_click(cx.listener(|view, _, window, cx| view.sort_window_manager_tabs(window, cx))))
                 .child(div().flex_1())
-                .child(button(4, label(&locale, 2, "确定"), self.window_manager.batch.is_none())
+                .child(button(4, label(&locale, 2, "OK"), self.window_manager.batch.is_none())
                     .on_click(cx.listener(|view, _, window, cx| { if view.window_manager.batch.is_none() { view.dismiss_floating(floating_windows::DialogKind::WindowManager, window, cx); } }))));
         if let Some(position) = self.window_manager.context {
             root = root.child(div().id("window-manager-context").role(Role::Menu).absolute().left(position.x).top(position.y).w(px(180.)).py(px(2.))
                 .border_1().border_color(rgb(border)).bg(rgb(background)).occlude()
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(div().id("window-manager-copy-name").role(Role::MenuItem).h(px(24.)).px(px(12.)).flex().items_center().text_color(rgb(if selected == 0 { 0x808080 } else if self.dark { 0xffffff } else { 0x202020 })).a11y_synthetic_children(move |builder| { if selected == 0 { builder.parent_node().set_disabled(); } }).when(self.window_manager.context_selected == 0, |row| row.bg(rgb(0x91c9f7))).hover(|row| row.bg(rgb(0x91c9f7))).child(named(&locale, "MenuCopyName", "复制名称"))
+                .child(div().id("window-manager-copy-name").role(Role::MenuItem).h(px(24.)).px(px(12.)).flex().items_center().text_color(rgb(if selected == 0 { 0x808080 } else if self.dark { 0xffffff } else { 0x202020 })).a11y_synthetic_children(move |builder| { if selected == 0 { builder.parent_node().set_disabled(); } }).when(self.window_manager.context_selected == 0, |row| row.bg(rgb(0x91c9f7))).hover(|row| row.bg(rgb(0x91c9f7))).child(named(&locale, "MenuCopyName", "Copy Name(s)"))
                     .on_click(cx.listener(|view, _, _, cx| view.copy_window_manager_selection(false, cx))))
-                .child(div().id("window-manager-copy-path").role(Role::MenuItem).h(px(24.)).px(px(12.)).flex().items_center().text_color(rgb(if selected == 0 { 0x808080 } else if self.dark { 0xffffff } else { 0x202020 })).a11y_synthetic_children(move |builder| { if selected == 0 { builder.parent_node().set_disabled(); } }).when(self.window_manager.context_selected == 1, |row| row.bg(rgb(0x91c9f7))).hover(|row| row.bg(rgb(0x91c9f7))).child(named(&locale, "MenuCopyPath", "复制路径"))
+                .child(div().id("window-manager-copy-path").role(Role::MenuItem).h(px(24.)).px(px(12.)).flex().items_center().text_color(rgb(if selected == 0 { 0x808080 } else if self.dark { 0xffffff } else { 0x202020 })).a11y_synthetic_children(move |builder| { if selected == 0 { builder.parent_node().set_disabled(); } }).when(self.window_manager.context_selected == 1, |row| row.bg(rgb(0x91c9f7))).hover(|row| row.bg(rgb(0x91c9f7))).child(named(&locale, "MenuCopyPath", "Copy Pathname(s)"))
                     .on_click(cx.listener(|view, _, _, cx| view.copy_window_manager_selection(true, cx)))));
         }
         Some(root.into_any_element())

@@ -11,6 +11,7 @@ use crate::style_config::{Node, read_xml};
 pub const MACRO_BASE: u32 = 20000;
 pub const RUN_BASE: u32 = 21000;
 pub const PAGES: [&str; 5] = ["Main menu", "Macros", "Run commands", "Plugin commands", "Scintilla commands"];
+pub const DUAL_MODIFIERS_SETTING: &str = "ShortcutMapper.dualModifiers";
 
 thread_local! {
     static KEY_MAPPING: RefCell<Option<KeyMapping>> = const { RefCell::new(None) };
@@ -130,6 +131,11 @@ impl KeyCombo {
     pub fn needs_keypad_adapter(self) -> bool { matches!(self.key, 96..=107 | 109..=111) }
 
     pub fn needs_native_adapter(self) -> bool { self.needs_keypad_adapter() || matches!(self.key, 186..=192 | 219..=222 | 226) }
+
+    pub fn builtin_alias(self) -> Option<Self> {
+        if self.key == 0 || self.ctrl == self.cmd || (!self.alt && !self.shift && matches!(self.key, b'Q' | b'M')) { return None; }
+        Some(Self { ctrl: self.cmd, cmd: self.ctrl, ..self })
+    }
 
     pub fn conflicts_with(self, other: Self) -> bool {
         if self.key == 0 || other.key == 0 || (self.ctrl, self.alt, self.shift, self.cmd) != (other.ctrl, other.alt, other.shift, other.cmd) { return false; }
@@ -281,12 +287,13 @@ pub struct RunCommand { pub name: String, pub command: String, pub bindings: Vec
 pub struct BindingSet {
     pub shortcuts: Vec<Shortcut>,
     pub run_commands: Vec<RunCommand>,
+    pub dual_modifiers: bool,
     overrides: BTreeMap<CommandKey, Vec<KeyCombo>>,
     document: Node,
 }
 
 impl Default for BindingSet {
-    fn default() -> Self { Self { shortcuts: Vec::new(), run_commands: Vec::new(), overrides: BTreeMap::new(), document: Node { name: "NotepadPlus".into(), ..Node::default() } } }
+    fn default() -> Self { Self { shortcuts: Vec::new(), run_commands: Vec::new(), dual_modifiers: true, overrides: BTreeMap::new(), document: Node { name: "NotepadPlus".into(), ..Node::default() } } }
 }
 
 impl BindingSet {
@@ -355,6 +362,21 @@ impl BindingSet {
     }
 
     pub fn override_for(&self, key: &CommandKey) -> Option<&[KeyCombo]> { self.overrides.get(key).map(Vec::as_slice) }
+
+    fn reserved_bindings(&self) -> impl Iterator<Item = KeyCombo> + '_ {
+        self.shortcuts.iter().filter_map(|item| self.override_for(&item.key)).flatten().copied().filter(|combo| combo.key != 0)
+    }
+
+    fn runtime_alias_reserved(&self, combo: KeyCombo) -> bool {
+        self.reserved_bindings().any(|reserved| reserved.conflicts_with(combo))
+    }
+
+    pub fn runtime_binding_priority(&self, item: &Shortcut, combo: KeyCombo) -> Option<u8> {
+        let overridden = self.override_for(&item.key).is_some();
+        if item.bindings.contains(&combo) { return Some(if overridden { 0 } else { 1 }); }
+        if !self.dual_modifiers || overridden || matches!(item.key, CommandKey::Macro(_) | CommandKey::Run(_)) || self.runtime_alias_reserved(combo) { return None; }
+        item.bindings.iter().any(|source| source.builtin_alias() == Some(combo)).then_some(2)
+    }
 
     pub fn add_run(&mut self, name: &str, command: &str, mut combo: KeyCombo) -> io::Result<usize> {
         if name.is_empty() || name.encode_utf16().count() >= 128 || name.contains('\0') { return Err(invalid("Name must contain 1 to 127 characters")); }
@@ -730,12 +752,14 @@ pub fn scintilla_key_for_action(name: &str) -> Option<CommandKey> {
 impl BindingSet {
     pub fn native_bindings(&self, defaults: Vec<(Option<CommandKey>, gpui::KeyBinding)>, extra: Vec<(CommandKey, gpui::KeyBinding)>, cx: &gpui::App) -> io::Result<Vec<gpui::KeyBinding>> {
         let mut result = Vec::new();
+        let mut builtin = Vec::new();
         let mut replaced = BTreeSet::new();
         let registered = defaults.iter().filter_map(|(key, _)| key.clone()).collect::<BTreeSet<_>>();
         for (key, binding) in defaults.into_iter().chain(extra.into_iter().filter(|(key, _)| self.override_for(key).is_some() && !registered.contains(key)).map(|(key, binding)| (Some(key), binding))) {
-            let Some(key) = key else { result.push(binding); continue; };
-            let Some(combos) = self.override_for(&key) else {
-                if binding.keystrokes().len() != 1 || !KeyCombo::parse_source(&binding.keystrokes()[0].unparse(gpui::OperatingSystem::Mac)).is_some_and(KeyCombo::needs_native_adapter) { result.push(binding); }
+            let Some(combos) = key.as_ref().and_then(|key| self.override_for(key)) else {
+                if key.is_some() && binding.keystrokes().len() == 1 && KeyCombo::parse_source(&binding.keystrokes()[0].unparse(gpui::OperatingSystem::Mac)).is_some_and(KeyCombo::needs_native_adapter) { continue; }
+                if self.dual_modifiers && !matches!(key, Some(CommandKey::Macro(_) | CommandKey::Run(_))) { builtin.push(binding.clone()); }
+                result.push(binding);
                 continue;
             };
             let predicate = binding.predicate();
@@ -746,6 +770,20 @@ impl BindingSet {
                 let Some(keystroke) = combo.keystroke() else { return Err(invalid(format!("Unsupported native key {}", key_name(combo.key)))); };
                 result.push(gpui::KeyBinding::load(&keystroke, binding.action().boxed_clone(), predicate.clone(), false, binding.action_input(), cx).map_err(|error| invalid(error.to_string()))?);
             }
+        }
+        for binding in builtin {
+            if binding.keystrokes().len() != 1 { continue; }
+            let mut stroke = binding.keystrokes()[0].inner().clone();
+            let Some(alias) = KeyCombo::parse_source(&stroke.unparse(gpui::OperatingSystem::Mac)).and_then(KeyCombo::builtin_alias) else { continue; };
+            if self.runtime_alias_reserved(alias) { continue; }
+            stroke.modifiers.control = alias.ctrl;
+            stroke.modifiers.platform = alias.cmd;
+            if self.reserved_bindings().filter_map(KeyCombo::keystroke).filter_map(|source| gpui::Keystroke::parse_with_os(&source, gpui::OperatingSystem::Mac).ok()).any(|reserved| reserved.key == stroke.key && reserved.modifiers == stroke.modifiers) { continue; }
+            let source = stroke.unparse(gpui::OperatingSystem::Mac);
+            let mut alias = gpui::KeyBinding::load(&source, binding.action().boxed_clone(), binding.predicate(), false, binding.action_input(), cx).map_err(|error| invalid(error.to_string()))?;
+            if let Some(meta) = binding.meta() { alias.set_meta(meta); }
+            if result.iter().any(|existing| existing.keystrokes() == alias.keystrokes() && existing.predicate() == alias.predicate() && existing.action().partial_eq(alias.action()) && existing.action_input() == alias.action_input()) { continue; }
+            result.push(alias);
         }
         Ok(result)
     }

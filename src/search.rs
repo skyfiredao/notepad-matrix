@@ -264,7 +264,11 @@ pub(crate) fn literal_ranges_in_bytes_with_state(bytes: &crate::byte_buffer::Byt
     Ok(ranges)
 }
 
-pub(crate) fn visit_literal_ranges_in_bytes_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &str, scope: Range<usize>, options: LiteralOptions, state: &mut RegexState, mut visit: impl FnMut(Range<ByteOffset>) -> bool) -> Result<(), SearchError> {
+pub(crate) fn visit_literal_ranges_in_bytes_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &str, scope: Range<usize>, options: LiteralOptions, state: &mut RegexState, visit: impl FnMut(Range<ByteOffset>) -> bool) -> Result<(), SearchError> {
+    visit_literal_ranges_in_bytes_cancellable_with_state(bytes, query, scope, options, state, || false, visit)
+}
+
+pub(crate) fn visit_literal_ranges_in_bytes_cancellable_with_state(bytes: &crate::byte_buffer::ByteBuffer, query: &str, scope: Range<usize>, options: LiteralOptions, state: &mut RegexState, mut should_stop: impl FnMut() -> bool, mut visit: impl FnMut(Range<ByteOffset>) -> bool) -> Result<(), SearchError> {
     if scope.start > scope.end || scope.end > bytes.len() { return Err(SearchError::InvalidSelection); }
     if query.is_empty() { return Ok(()); }
     if matches!(options.mode, SearchMode::Regex { .. }) {
@@ -274,7 +278,7 @@ pub(crate) fn visit_literal_ranges_in_bytes_with_state(bytes: &crate::byte_buffe
     let query = options.mode.decode(query);
     if query.is_empty() { return Ok(()); }
     let mut at = scope.start;
-    while let Some(found) = bytes.find_literal_bytes(query.as_bytes(), at, scope.end, options.match_case, options.whole_word, false)
+    while let Some(found) = bytes.find_literal_bytes_cancellable(query.as_bytes(), at, scope.end, options.match_case, options.whole_word, false, &mut should_stop)
         .map_err(|_| SearchError::InvalidSelection)? {
         at = found.end;
         if !visit(ByteOffset(found.start)..ByteOffset(found.end)) { break; }

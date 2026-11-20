@@ -582,5 +582,65 @@
 				<Item id="2" name="Scancele"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<matrix-find-resize-results value="Ridimensione i risultâts de ricercje"/>
+			<common-ok value="Va ben"/>
+			<common-cancel value="Scancele"/>
+			<common-name value="Non"/>
+			<discover-file-candidates-title value="Daûr a cjatâ i file candidâts…"/>
+			<matrix-close value="Siere"/>
+			<matrix-retry value="Torne prove"/>
+			<matrix-cancelled value="Anulât"/>
+			<matrix-read-only value="Dome leture"/>
+			<matrix-find-status-details value="Detais dal stât"/>
+			<matrix-find-backward-unavailable value="La ricercje indaûr cun espressions regolârs e je disabilitade"/>
+			<matrix-hash-select-files value="Selezione i file"/>
+			<matrix-hash-calculating value="Calcul de impronte…"/>
+			<matrix-hash-selection-failed value="Selezion dai file falide: $ERROR$"/>
+			<matrix-hash-read-failed value="Impussibil lei chescj file:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Siere l’erôr"/>
+			<matrix-hash-file-paths value="Percors dai file (dome leture)"/>
+			<matrix-hash-digest-result value="Risultât de impronte (dome leture)"/>
+			<matrix-hash-source-text value="Test origjinâl de impronte"/>
+			<matrix-hash-selection-composition value="Il calcul de impronte de selezion dilunc la composizion nol è ancjemò implementât"/>
+			<matrix-hash-selection-read-failed value="Impussibil lei la selezion: $ERROR$"/>
+			<matrix-window-activation-failed value="Impussibil passâ al file selezionât"/>
+			<matrix-window-selection-unavailable value="Il file selezionât al è sierât o nol pues jessi ativât"/>
+			<matrix-incremental-position value="Sposte la sbare de ricercje incrementâl"/>
+			<matrix-find-progress-bar value="Sbare di avanzament"/>
+			<matrix-find-previous-search value="Mostre la ricercje precedente"/>
+			<matrix-find-results-summary value="Risultâts de ricercje - ($INT_REPLACE$ corispondencis)"/>
+			<matrix-udl-allow-code2-close value="Permet la sieradure dal codiç 2"/>
+			<matrix-udl-allow-code2-middle value="Permet la part centrâl dal codiç 2"/>
+			<matrix-udl-allow-code2-open value="Permet la vierzidure dal codiç 2"/>
+			<matrix-udl-allow-comment-fold-close value="Permet la sieradure de contrazion dai coments"/>
+			<matrix-udl-allow-comment-fold-middle value="Permet la part centrâl de contrazion dai coments"/>
+			<matrix-udl-allow-comment-fold-open value="Permet la vierzidure de contrazion dai coments"/>
+			<matrix-udl-choose-json value="Sielç un file JSON di definizion UDL"/>
+			<matrix-udl-close value="Siere il lengaç definît dal utent"/>
+			<matrix-udl-close-styler value="Siere il configuradôr dai stîi"/>
+			<matrix-udl-colors value="Colôrs"/>
+			<matrix-udl-dark-mode-language value="Lengaç in modalitât scure"/>
+			<matrix-udl-definition-exported value="Definizion espuartade"/>
+			<matrix-udl-definitions-saved value="Definizions salvadis"/>
+			<matrix-udl-enable-font value="Abilite il caratar"/>
+			<matrix-udl-error value="Erôr dal lengaç definît dal utent: $ERROR$"/>
+			<matrix-udl-file-failed value="Operazion sul file UDL falide: $ERROR$"/>
+			<matrix-udl-file-progress value="Operazion sul file in vore…"/>
+			<matrix-udl-import-rejected value="Importazion refudade: $ERROR$"/>
+			<matrix-udl-imported value="Importâts $COUNT$ lengaçs"/>
+			<matrix-udl-live-edits value="Lengaç definît dal utent — lis modifichis si aplichin subite dome ai documents che a doprin chest lengaç"/>
+			<matrix-udl-loading value="Daûr a cjariâ lis definizions…"/>
+			<matrix-udl-memory-only value="Lis definizions a son dome in memorie (nissune cartele di configurazion)"/>
+			<matrix-udl-missing-ids value="A mancjin i ID dai lengaçs definîts dal utent: $IDS$. Il test dai documents e lis identitâts dai lengaçs salvadis a son stâts conservâts. Ripristine lis definizions o sielç in maniere esplicite un altri lengaç."/>
+			<matrix-udl-open-panel-disconnected value="Panel di vierzidure UDL disconetût: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Eliminâ cheste definizion cun non? I documents esistents a tegnin il lôr test e a passin al lengaç definît dal utent cence non."/>
+			<matrix-udl-retry-file value="Torne prove la operazion sul file UDL"/>
+			<matrix-udl-save-panel-disconnected value="Panel di salvament UDL disconetût: $ERROR$"/>
+			<matrix-udl-unavailable value="Definizions no disponibilis; coreç udl.json e torne prove."/>
+			<matrix-udl-use-background value="Dopre il fonts"/>
+			<matrix-udl-use-foreground value="Dopre il prin plan"/>
+			<matrix-udl-working-copy value="Definît dal utent (copie di lavôr)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

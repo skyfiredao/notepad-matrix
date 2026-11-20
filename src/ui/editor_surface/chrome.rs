@@ -1,13 +1,12 @@
 use std::ops::Range;
 
 pub const BASE_FONT_SIZE: f32 = 16.;
-pub const DEFAULT_EDITOR_FONT_FAMILY: &str = "Helvetica";
+pub const DEFAULT_EDITOR_FONT_FAMILY: &str = "Menlo";
 pub const GUTTER_LEFT: f32 = 0.;
 pub const GUTTER_WIDTH: f32 = 32. + 16. + 9. + 14.;
 pub const TEXT_LEFT: f32 = GUTTER_LEFT + GUTTER_WIDTH + 1.;
 pub const TEXT_RIGHT_PADDING: f32 = 4.;
 pub const TEXT_TOP: f32 = 3.;
-pub const TEXT_VERTICAL_PADDING: f32 = TEXT_TOP * 2.;
 pub const SCROLLBAR_SIZE: f32 = 16.;
 
 pub fn scrollbar_track(extent: f32) -> Range<f32> {

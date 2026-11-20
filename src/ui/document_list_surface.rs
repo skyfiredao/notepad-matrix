@@ -70,12 +70,14 @@ impl MatrixWindow {
         let background = if self.dark { 0x282828 } else { 0xffffff };
         let selected = if self.dark { 0x404b5a } else { 0xcce8ff };
         let dark = self.dark;
+        let locale = self.native_locale();
+        let filename = crate::localization::dialog_name(&locale, "DocList/ColumnName").unwrap_or("Filename");
         Some(
             div()
                 .id("document-list-panel")
                 .debug_selector(|| "document-list-panel".into())
                 .role(Role::Group)
-                .aria_label("Document List")
+                .aria_label(self.panel_title(crate::panel_layout::PanelId::DocumentList))
                 .w_full()
                 .flex_shrink_0()
                 .h_full()
@@ -90,7 +92,7 @@ impl MatrixWindow {
                     div()
                         .id("document-list-filename")
                         .role(Role::ColumnHeader)
-                        .aria_label("Filename")
+                        .aria_label(filename)
                         .h(px(24.))
                         .flex_shrink_0()
                         .px(px(6.))
@@ -98,7 +100,7 @@ impl MatrixWindow {
                         .items_center()
                         .justify_between()
                         .border_b_1().border_color(rgb(if dark { 0x555555 } else { 0xd4d0c8 }))
-                        .child("文件名")
+                        .child(filename)
                         .child(match self.panels.document_list_sort { 1 => "⌃", 2 => "⌄", _ => "" })
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.panels.document_list_sort = (view.panels.document_list_sort + 1) % 3;
@@ -110,7 +112,7 @@ impl MatrixWindow {
                     div()
                         .id("document-list-options")
                         .role(Role::ListBox)
-                        .aria_label("Open documents")
+                        .aria_label(crate::localization::localized_string(&locale, "document-list-open-documents-label").unwrap_or("Open documents"))
                         .flex_1()
                         .min_h(px(0.))
                         .child(

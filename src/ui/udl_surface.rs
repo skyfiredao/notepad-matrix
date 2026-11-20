@@ -1,13 +1,37 @@
 use super::*;
 use super::dialog_font::px;
-use crate::udl_controls::{self, Control, Kind, Page, STYLE_NAMES};
+use crate::localization::{Text, localized_string};
+use crate::udl_controls::{self, Control, Kind, Page};
 use crate::udl_registry::{SaveReceipt, UdlRegistry};
 use std::collections::{BTreeMap, VecDeque};
 #[path = "../udl_association.rs"]
 mod associations;
+#[path = "udl_localization.rs"]
+mod localization;
+#[path = "udl_field.rs"]
+mod field;
+#[path = "udl_pages_surface.rs"]
+mod pages;
+#[path = "udl_styler_surface.rs"]
+mod styler;
+#[path = "udl_main_surface.rs"]
+mod main;
+#[path = "udl_docking_surface.rs"]
+mod docking;
 
-struct BoundField {
-    field: gpui::Entity<text_field::TextField>,
+pub(super) fn du(value: f32) -> gpui::Pixels { px(value * 1.5) }
+
+pub(super) const WIDTH: f32 = 760.;
+pub(super) const HEIGHT: f32 = 760.;
+pub(super) const NAME_WIDTH: f32 = 320.;
+pub(super) const NAME_HEIGHT: f32 = 120.;
+
+fn at((x, y, width, height): (f32, f32, f32, f32)) -> gpui::Div {
+    div().absolute().left(du(x)).top(du(y)).w(du(width)).h(du(height))
+}
+
+struct SourceField {
+    field: gpui::Entity<field::Field>,
     _changed: gpui::Subscription,
 }
 
@@ -29,12 +53,18 @@ pub(super) struct UdlState {
     pub(super) syntax_cache: Option<super::language_surface::UdlSyntaxCache>,
     pub visible: bool,
     pub styler_visible: bool,
+    pub(super) docked: bool,
+    transparent: bool,
+    opacity: u8,
+    main: main::State,
+    styler: styler::State,
     pub focus: FocusHandle,
     pub styler_focus: FocusHandle,
     selected: u64,
     page: Page,
     style: usize,
-    fields: BTreeMap<String, BoundField>,
+    source_fields: BTreeMap<String, SourceField>,
+    radio_focus: BTreeMap<String, [FocusHandle; 3]>,
     name: gpui::Entity<text_field::TextField>,
     root: Option<PathBuf>,
     generation: u64,
@@ -46,12 +76,13 @@ pub(super) struct UdlState {
     task: Option<gpui::Task<()>>,
     prompt_task: Option<gpui::Task<()>>,
     prompting: bool,
-    error: Option<String>,
-    message: Option<String>,
+    error: Option<Text>,
+    message: Option<Text>,
+    error_notice_source: Option<Text>,
     confirm_remove: bool,
     menu_languages: Option<Vec<(u64, String)>>,
     missing: Vec<(crate::workspace::BufferId, u64)>,
-    missing_warning: Option<String>,
+    missing_warning: Option<Text>,
     needs_style_invalidation: bool,
     close_requested: bool,
     close_resume_queued: bool,
@@ -64,13 +95,19 @@ impl UdlState {
             syntax_cache: None,
             visible: false,
             styler_visible: false,
+            docked: false,
+            transparent: false,
+            opacity: 150,
+            main: main::State::new(),
+            styler: styler::State::new(),
             focus: cx.focus_handle(),
             styler_focus: cx.focus_handle(),
             selected: 0,
             page: Page::FolderDefault,
             style: 0,
-            fields: BTreeMap::new(),
-            name: cx.new(|cx| text_field::TextField::new("Language name", "udl-name", cx)),
+            source_fields: BTreeMap::new(),
+            radio_focus: BTreeMap::new(),
+            name: cx.new(|cx| text_field::TextField::compact(crate::localization::dialog_control("english", "UserDefine", 20007).unwrap_or("User language"), "udl-name", cx).without_history_arrow().with_compact_height(dialog_font::logical(dialog_font::control_height())).with_max_utf16(63)),
             root: None,
             generation: 0,
             ready: false,
@@ -83,6 +120,7 @@ impl UdlState {
             prompting: false,
             error: None,
             message: None,
+            error_notice_source: None,
             confirm_remove: false,
             menu_languages: None,
             missing: Vec::new(),
@@ -96,12 +134,23 @@ impl UdlState {
 }
 
 impl MatrixWindow {
+    pub(super) fn open_udl_folder(&mut self, cx: &mut Context<Self>) {
+        let Some(store) = self.settings_store.as_ref() else { return; };
+        if let Err(error) = crate::native_app_open::open_default(store.root()) {
+            self.udl.error = Some(Text::resource("matrix-udl-error", "User-defined language error: $ERROR$")
+                .replace("$ERROR$", error.to_string()));
+            self.notify_udl_error(cx);
+        }
+    }
+
     pub(super) fn refresh_udl_registry(&mut self, cx: &mut Context<Self>) {
         let root = self
             .settings_store
             .as_ref()
             .map(|store| store.root().to_path_buf());
         if self.udl.root != root {
+            if self.udl.styler_visible { self.finish_udl_styler(false, cx); }
+            self.dismiss_udl_name(cx);
             self.udl.root = root;
             self.udl.generation = self.udl.generation.wrapping_add(1);
             self.udl.ready = false;
@@ -112,7 +161,7 @@ impl MatrixWindow {
             self.udl.syntax_cache = None;
             self.udl.needs_style_invalidation = true;
             self.udl.selected = 0;
-            self.udl.fields.clear();
+            self.udl.source_fields.clear();
             self.udl.error = None;
             self.udl.close_failed_revision = None;
         }
@@ -143,26 +192,22 @@ impl MatrixWindow {
             if result.changed {
                 self.udl.needs_style_invalidation = true;
             }
+            let missing_warning = if result.missing.is_empty() {
+                None
+            } else {
+                Some(Text::resource(
+                    "matrix-udl-missing-ids",
+                    "Missing user-defined language ID(s): $IDS$. Document text and saved language identities were preserved. Restore the definitions or explicitly select another Language.",
+                ).replace("$IDS$", result.missing.iter().map(|(_, id)| id.to_string()).collect::<Vec<_>>().join(", ")))
+            };
             if result.missing != self.udl.missing {
                 self.udl.missing = result.missing;
-                if self.editor_error == self.udl.missing_warning {
-                    self.editor_error = None;
+                if let Some(previous) = self.udl.missing_warning.take() {
+                    self.clear_editor_error_source(&previous);
                 }
-                self.udl.missing_warning = if self.udl.missing.is_empty() {
-                    None
-                } else {
-                    Some(format!(
-                        "Missing user-defined language ID(s): {}. Document text and saved language identities were preserved. Restore the definitions or explicitly select another Language.",
-                        self.udl
-                            .missing
-                            .iter()
-                            .map(|(_, id)| id.to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ))
-                };
+                self.udl.missing_warning = missing_warning;
                 if let Some(error) = self.udl.missing_warning.clone() {
-                    self.notify_editor_error(error, cx);
+                    self.notify_localized_editor_error(error, cx);
                 }
             }
         }
@@ -174,6 +219,8 @@ impl MatrixWindow {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        if self.udl.styler_visible { self.finish_udl_styler(false, cx); }
+        self.dismiss_udl_name(cx);
         self.udl.close_requested = false;
         self.refresh_udl_registry(cx);
         self.udl.close_requested = true;
@@ -235,7 +282,7 @@ impl MatrixWindow {
     }
 
     fn start_udl_io(&mut self, cx: &mut Context<Self>) {
-        if self.udl.busy {
+        if self.udl.busy || self.udl.styler_visible {
             return;
         }
         let root = self.udl.root.clone();
@@ -245,8 +292,7 @@ impl MatrixWindow {
             .map(PathBuf::from);
         if home.is_none() && self.udl.pending_save {
             self.udl.pending_save = false;
-            self.udl.message =
-                Some("Definitions are in memory only (no configuration directory)".into());
+            self.udl.message = Some(Text::resource("matrix-udl-memory-only", "Definitions are in memory only (no configuration directory)"));
         }
         let job = self.udl.jobs.pop_front().or_else(|| {
             if self.udl.pending_save && self.udl.ready {
@@ -261,6 +307,11 @@ impl MatrixWindow {
         };
         let generation = self.udl.generation;
         let saving = matches!(&job, IoJob::Save(_));
+        let file_export = match &job {
+            IoJob::Import(_) => Some(false),
+            IoJob::Export(_, _) => Some(true),
+            _ => None,
+        };
         self.udl.busy = true;
         let worker = cx.background_executor().spawn(async move {
             match job {
@@ -320,42 +371,47 @@ impl MatrixWindow {
                         view.udl.registry = registry;
                         view.udl.needs_style_invalidation = true;
                         view.udl.ready = true;
-                        view.udl.fields.clear();
+                        view.udl.source_fields.clear();
                         view.udl.error = None;
                     }
                     Ok(IoOutcome::Imported(value)) => match view.udl.registry.import_json(&value) {
-                        Ok(ids) => {
+                        Ok(_) => {
                             view.udl.pending_save = true;
                             view.udl.error = None;
-                            view.udl.message = Some(format!("Imported {} language(s)", ids.len()));
+                            view.prompt_udl_file_result(false, true, None, cx);
                         }
-                        Err(error) => view.udl.error = Some(format!("Import rejected: {error}")),
+                        Err(error) => {
+                            view.udl.error = Some(Text::resource("matrix-udl-import-rejected", "Import rejected: $ERROR$").replace("$ERROR$", error.to_string()));
+                            view.notify_udl_error(cx);
+                            view.prompt_udl_file_result(false, false, Some(error.to_string()), cx);
+                        }
                     },
                     Ok(IoOutcome::Saved(receipt)) => {
                         match view.udl.registry.acknowledge_save(&receipt) {
                             Ok(()) => {
-                                if view.editor_error == view.udl.error {
-                                    view.editor_error = None;
+                                if let Some(previous) = view.udl.error_notice_source.take() {
+                                    view.clear_editor_error_source(&previous);
                                 }
                                 view.udl.error = None;
-                                view.udl.message = Some("Definitions saved".into());
+                                view.udl.message = Some(Text::resource("matrix-udl-definitions-saved", "Definitions saved"));
                             }
                             Err(error) => {
                                 save_failed = true;
-                                let message = error.to_string();
-                                view.udl.error = Some(message.clone());
-                                view.notify_editor_error(message, cx);
+                                view.udl.error = Some(Text::resource("matrix-udl-error", "User-defined language error: $ERROR$").replace("$ERROR$", error.to_string()));
+                                view.notify_udl_error(cx);
                             }
                         }
                     }
                     Ok(IoOutcome::Exported) => {
-                        view.udl.message = Some("Definition exported".into())
+                        view.prompt_udl_file_result(true, true, None, cx);
                     }
                     Err(error) => {
                         save_failed = saving;
-                        let message = format!("UDL file operation failed: {error}");
-                        view.udl.error = Some(message.clone());
-                        view.notify_editor_error(message, cx);
+                        view.udl.error = Some(Text::resource("matrix-udl-file-failed", "UDL file operation failed: $ERROR$").replace("$ERROR$", error.to_string()));
+                        view.notify_udl_error(cx);
+                        if let Some(export) = file_export {
+                            view.prompt_udl_file_result(export, false, Some(error.to_string()), cx);
+                        }
                     }
                 }
                 if view.udl.close_requested && save_failed {
@@ -363,7 +419,7 @@ impl MatrixWindow {
                     view.udl.pending_save = false;
                     view.udl.jobs.retain(|job| !matches!(job, IoJob::Save(_)));
                     if let Some(error) = &view.udl.error {
-                        eprintln!("UDL exit save failed; existing udl.json was preserved: {error}");
+                        eprintln!("UDL exit save failed; existing udl.json was preserved: {}", error.render(&view.native_locale()));
                     }
                 }
                 if view.udl.pending_save && !view.udl.registry.has_unsaved_changes() {
@@ -376,6 +432,55 @@ impl MatrixWindow {
                 eprintln!("UDL completion lost its owner: {error}");
             }
         }));
+    }
+
+    fn notify_udl_error(&mut self, cx: &mut Context<Self>) {
+        if let Some(error) = self.udl.error.clone() {
+            self.udl.error_notice_source = Some(error.clone());
+            self.notify_localized_editor_error(error, cx);
+        }
+    }
+
+    fn prompt_udl_file_result(
+        &mut self,
+        export: bool,
+        success: bool,
+        detail: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let (key, fallback) = match (export, success) {
+            (false, true) => ("UDL_importSuccessful", "Import successful."),
+            (false, false) => ("UDL_importFails", "Failed to import."),
+            (true, true) => ("UDL_exportSuccessful", "Export successful."),
+            (true, false) => ("UDL_exportFails", "Failed to export."),
+        };
+        let locale = self.native_locale();
+        let title = crate::localization::dialog_title(&locale, key).unwrap_or("User Defined Language");
+        let mut message = crate::localization::dialog_message(&locale, key).unwrap_or(fallback).to_owned();
+        if let Some(detail) = detail.filter(|detail| !detail.is_empty()) {
+            message.push_str("\n\n");
+            message.push_str(&detail);
+        }
+        let ok = localized_string(&locale, "common-ok").unwrap_or("OK");
+        let root = self.document_window;
+        let owner = cx.weak_entity();
+        cx.defer(move |cx| {
+            if !cx.windows().contains(&root) { return; }
+            match root.update(cx, |_, window, cx| {
+                owner.update(cx, |_, cx| {
+                    let level = if success { gpui::PromptLevel::Info } else { gpui::PromptLevel::Warning };
+                    let response = window.prompt(level, title, Some(&message), &[gpui::PromptButton::ok(ok)], cx);
+                    cx.spawn(async move |_, _| {
+                        if let Err(error) = response.await {
+                            eprintln!("UDL file result prompt disconnected: {error}");
+                        }
+                    }).detach();
+                })
+            }) {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) | Err(error) => eprintln!("UDL file result prompt lost its owner: {error}"),
+            }
+        });
     }
 
     pub(super) fn show_udl(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -393,7 +498,11 @@ impl MatrixWindow {
         }
         self.refresh_udl_registry(cx);
         self.udl.visible = true;
-        self.present_floating(floating_windows::DialogKind::Udl, window, cx);
+        if self.udl.docked {
+            self.udl.focus.focus(window, cx);
+        } else {
+            self.present_floating(floating_windows::DialogKind::Udl, window, cx);
+        }
         cx.notify();
     }
 
@@ -417,6 +526,8 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.preview_udl_styler_control(control, text, cx) { return; }
+        if self.udl.styler_visible { return; }
         if !self.udl.ready {
             return;
         }
@@ -427,18 +538,18 @@ impl MatrixWindow {
             Ok(()) if self.udl.registry.revision() != revision => self.udl_changed(window, cx),
             Ok(()) => {}
             Err(error) => {
-                self.udl.error = Some(error.to_string());
+                self.udl.error = Some(Text::resource("matrix-udl-error", "User-defined language error: $ERROR$").replace("$ERROR$", error.to_string()));
                 cx.notify();
             }
         }
     }
 
     fn udl_select(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
-        if self.udl.registry.definition(id).is_none() {
+        if self.udl.styler_visible || self.udl.registry.definition(id).is_none() {
             return;
         }
         self.udl.selected = id;
-        self.udl.fields.clear();
+        self.udl.source_fields.clear();
         self.udl.confirm_remove = false;
         self.udl.error = None;
         let name = self
@@ -459,7 +570,7 @@ impl MatrixWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.udl.ready {
+        if self.udl.styler_visible || !self.udl.ready {
             return;
         }
         let name = self.udl.name.read(cx).text();
@@ -495,21 +606,23 @@ impl MatrixWindow {
                 self.udl_changed(window, cx);
             }
             Err(error) => {
-                self.udl.error = Some(error.to_string());
+                self.udl.error = Some(Text::resource("matrix-udl-error", "User-defined language error: $ERROR$").replace("$ERROR$", error.to_string()));
                 cx.notify();
             }
         }
     }
 
     fn udl_file_action(&mut self, export: bool, cx: &mut Context<Self>) {
-        if !self.udl.ready || self.udl.prompting {
+        if self.udl.styler_visible || !self.udl.ready || self.udl.prompting {
             return;
         }
         let snapshot = if export {
             match self.udl.registry.export_json(self.udl.selected) {
                 Ok(value) => Some(value),
                 Err(error) => {
-                    self.udl.error = Some(error.to_string());
+                    self.udl.error = Some(Text::resource("matrix-udl-error", "User-defined language error: $ERROR$").replace("$ERROR$", error.to_string()));
+                    self.notify_udl_error(cx);
+                    self.prompt_udl_file_result(true, false, Some(error.to_string()), cx);
                     cx.notify();
                     return;
                 }
@@ -536,10 +649,8 @@ impl MatrixWindow {
             self.udl.prompt_task = Some(cx.spawn(async move |owner, cx| {
                 let selected = match prompt.await {
                     Ok(Ok(path)) => Ok(path),
-                    Ok(Err(error)) => Err(io::Error::other(error.to_string())),
-                    Err(error) => Err(io::Error::other(format!(
-                        "UDL Save panel disconnected: {error}"
-                    ))),
+                    Ok(Err(error)) => Err(Text::resource("matrix-udl-file-failed", "UDL file operation failed: $ERROR$").replace("$ERROR$", error.to_string())),
+                    Err(error) => Err(Text::resource("matrix-udl-save-panel-disconnected", "UDL Save panel disconnected: $ERROR$").replace("$ERROR$", error.to_string())),
                 };
                 if let Err(error) = owner.update(cx, |view, cx| {
                     view.udl_path_chosen(root, generation, selected, Some(snapshot), cx)
@@ -552,15 +663,13 @@ impl MatrixWindow {
                 files: true,
                 directories: false,
                 multiple: false,
-                prompt: Some("Import User Defined Language JSON".into()),
+                prompt: Some(format!("{} (JSON)", crate::localization::dialog_control(&self.native_locale(), "UserDefine", 20015).unwrap_or("Import...")).into()),
             });
             self.udl.prompt_task = Some(cx.spawn(async move |owner, cx| {
                 let selected = match prompt.await {
                     Ok(Ok(paths)) => Ok(paths.and_then(|paths| paths.into_iter().next())),
-                    Ok(Err(error)) => Err(io::Error::other(error.to_string())),
-                    Err(error) => Err(io::Error::other(format!(
-                        "UDL Open panel disconnected: {error}"
-                    ))),
+                    Ok(Err(error)) => Err(Text::resource("matrix-udl-file-failed", "UDL file operation failed: $ERROR$").replace("$ERROR$", error.to_string())),
+                    Err(error) => Err(Text::resource("matrix-udl-open-panel-disconnected", "UDL Open panel disconnected: $ERROR$").replace("$ERROR$", error.to_string())),
                 };
                 if let Err(error) = owner.update(cx, |view, cx| {
                     view.udl_path_chosen(root, generation, selected, None, cx)
@@ -576,7 +685,7 @@ impl MatrixWindow {
         &mut self,
         root: Option<PathBuf>,
         generation: u64,
-        selected: io::Result<Option<PathBuf>>,
+        selected: Result<Option<PathBuf>, Text>,
         snapshot: Option<serde_json::Value>,
         cx: &mut Context<Self>,
     ) {
@@ -589,10 +698,13 @@ impl MatrixWindow {
             cx.notify();
             return;
         }
+        let export = snapshot.is_some();
         match selected {
             Ok(Some(path)) => {
                 if let Err(error) = crate::file_access::selected(&path) {
-                    self.udl.error = Some(error.to_string());
+                    self.udl.error = Some(Text::resource("matrix-udl-file-failed", "UDL file operation failed: $ERROR$").replace("$ERROR$", error.to_string()));
+                    self.notify_udl_error(cx);
+                    self.prompt_udl_file_result(export, false, Some(error.to_string()), cx);
                     cx.notify();
                     return;
                 }
@@ -602,7 +714,10 @@ impl MatrixWindow {
                         .and_then(|ext| ext.to_str())
                         .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
                 {
-                    self.udl.error = Some("Choose a JSON UDL definition file".into());
+                    self.udl.error = Some(Text::resource("matrix-udl-choose-json", "Choose a JSON UDL definition file"));
+                    self.notify_udl_error(cx);
+                    let detail = self.udl.error.as_ref().map(|error| error.render(&self.native_locale()));
+                    self.prompt_udl_file_result(false, false, detail, cx);
                 } else {
                     self.udl.jobs.push_back(match snapshot {
                         Some(value) => IoJob::Export(path, value),
@@ -612,454 +727,15 @@ impl MatrixWindow {
                 }
             }
             Ok(None) => {}
-            Err(error) => self.udl.error = Some(error.to_string()),
+            Err(error) => {
+                let detail = error.render(&self.native_locale());
+                self.udl.error = Some(error);
+                self.notify_udl_error(cx);
+                self.prompt_udl_file_result(export, false, Some(detail), cx);
+            }
         }
         self.resume_udl_close_if_ready(cx);
         cx.notify();
     }
 
-    fn render_udl_control(
-        &mut self,
-        control: Control,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let text = self
-            .udl
-            .registry
-            .definition(self.udl.selected)
-            .map(|d| control.text(d))
-            .unwrap_or_default();
-        let key = format!("{}:{}:{}", self.udl.selected, control.path, control.label);
-        let mut row = div()
-            .flex()
-            .flex_col()
-            .gap(px(3.))
-            .w_full()
-            .child(control.label);
-        match control.kind.clone() {
-            Kind::Boolean | Kind::Bit(_) => {
-                let enabled = text == "true";
-                row = div().flex().flex_col().child(
-                    div()
-                        .id(gpui::SharedString::from(key))
-                        .role(Role::CheckBox)
-                        .aria_label(control.label)
-                        .aria_toggled(enabled.into())
-                        .tab_index(0)
-                        .cursor_pointer()
-                        .child(format!(
-                            "{} {}",
-                            if enabled { "☑" } else { "☐" },
-                            control.label
-                        ))
-                        .on_click(cx.listener(move |view, _, window, cx| {
-                            view.apply_udl_control(
-                                &control,
-                                if enabled { "false" } else { "true" },
-                                window,
-                                cx,
-                            );
-                        })),
-                );
-            }
-            Kind::Choice(options) => {
-                let mut choices = div().flex().gap(px(8.));
-                for (index, label) in options.iter().enumerate() {
-                    let chosen = text == index.to_string();
-                    let control = control.clone();
-                    choices = choices.child(
-                        div()
-                            .id(gpui::SharedString::from(format!("{key}-{index}")))
-                            .role(Role::RadioButton)
-                            .aria_label(*label)
-                            .aria_toggled(chosen.into())
-                            .tab_index(0)
-                            .cursor_pointer()
-                            .child(format!("{} {label}", if chosen { "◉" } else { "○" }))
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                view.apply_udl_control(&control, &index.to_string(), window, cx)
-                            })),
-                    );
-                }
-                row = row.child(choices);
-            }
-            _ => {
-                if !self.udl.fields.contains_key(&key) {
-                    let field = cx.new(|cx| {
-                        text_field::TextField::new(control.label, "udl-property-input", cx)
-                    });
-                    field.update(cx, |field, cx| field.set_text(&text, window, cx));
-                    let selected = self.udl.selected;
-                    let changed = cx.observe_in(&field, window, move |view, field, window, cx| {
-                        if view.udl.selected != selected || field.read(cx).has_composition() {
-                            return;
-                        }
-                        let text = field.read(cx).text();
-                        let same = view
-                            .udl
-                            .registry
-                            .definition(selected)
-                            .is_some_and(|d| control.text(d) == text);
-                        if !same {
-                            view.apply_udl_control(&control, &text, window, cx);
-                        }
-                    });
-                    self.udl.fields.insert(
-                        key.clone(),
-                        BoundField {
-                            field,
-                            _changed: changed,
-                        },
-                    );
-                }
-                if let Some(field) = self.udl.fields.get(&key) {
-                    row = row.child(field.field.clone());
-                }
-            }
-        }
-        row.into_any_element()
-    }
-
-    fn render_udl_groups(
-        &mut self,
-        fields: Vec<Control>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let mut body = div().flex().flex_col().gap(px(8.));
-        let mut previous = String::new();
-        for field in fields {
-            if field.group != previous {
-                previous = field.group.clone();
-                let mut heading = div()
-                    .flex()
-                    .gap(px(12.))
-                    .mt(px(8.))
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .child(previous.clone());
-                let style = match previous.as_str() {
-                    "Default" => Some(0),
-                    "Block comments" => Some(1),
-                    "Line comments" => Some(2),
-                    "Numbers" => Some(3),
-                    "Operators" => Some(12),
-                    "Folding in code 1 (forward)" => Some(13),
-                    "Folding in code 2 (words)" => Some(14),
-                    "Folding in comments" => Some(15),
-                    name => name
-                        .strip_prefix("Keyword group ")
-                        .and_then(|n| n.parse::<usize>().ok())
-                        .filter(|n| (1..=8).contains(n))
-                        .map(|n| n + 3)
-                        .or_else(|| {
-                            name.strip_prefix("Delimiter ")
-                                .and_then(|n| n.parse::<usize>().ok())
-                                .filter(|n| (1..=8).contains(n))
-                                .map(|n| n + 15)
-                        }),
-                };
-                if let Some(style) = style {
-                    heading = heading.child(
-                        div()
-                            .id(gpui::SharedString::from(format!(
-                                "udl-group-styler-{style}"
-                            )))
-                            .role(Role::Button)
-                            .aria_label(format!("Styler for {}", previous))
-                            .tab_index(0)
-                            .border_1()
-                            .px(px(6.))
-                            .cursor_pointer()
-                            .child("Styler…")
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                view.udl.style = style;
-                                view.udl.styler_visible = true;
-                                view.present_floating(
-                                    floating_windows::DialogKind::UdlStyler,
-                                    window,
-                                    cx,
-                                );
-                                cx.notify();
-                            })),
-                    );
-                }
-                body = body.child(heading);
-            }
-            body = body.child(self.render_udl_control(field, window, cx));
-        }
-        body.into_any_element()
-    }
-
-    pub(super) fn render_udl(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        if !self.udl.visible {
-            return None;
-        }
-        let mut panel = div()
-            .id("udl-definition-dialog")
-            .role(Role::Dialog)
-            .aria_label("User Defined Language")
-            .track_focus(&self.udl.focus)
-            .w_full()
-            .p(px(12.))
-            .flex()
-            .flex_col()
-            .gap(px(8.));
-        panel = panel.child(
-            "User Defined Language — edits apply live only to documents using this language",
-        );
-        let mut languages = div().flex().flex_wrap().gap(px(6.));
-        let entries = std::iter::once((0, "User Defined (working copy)".to_owned()))
-            .chain(
-                self.udl
-                    .registry
-                    .named()
-                    .map(|(id, d)| (id, d.name.clone())),
-            )
-            .collect::<Vec<_>>();
-        for (id, name) in entries {
-            let selected = self.udl.selected == id;
-            languages = languages.child(
-                div()
-                    .id(gpui::SharedString::from(format!("udl-select-{id}")))
-                    .role(Role::Button)
-                    .aria_label(name.clone())
-                    .tab_index(0)
-                    .border_1()
-                    .px(px(6.))
-                    .py(px(3.))
-                    .bg(rgb(if selected { 0xcddff5 } else { 0xffffff }))
-                    .cursor_pointer()
-                    .child(name)
-                    .on_click(
-                        cx.listener(move |view, _, window, cx| view.udl_select(id, window, cx)),
-                    ),
-            );
-        }
-        panel = panel
-            .child(languages)
-            .child("Language name (for Create / Save As / Rename)")
-            .child(self.udl.name.clone());
-        let mut actions = div().flex().gap(px(8.));
-        for label in ["Create", "Save As", "Rename", "Remove"] {
-            if self.udl.selected == 0 && matches!(label, "Rename" | "Remove") {
-                continue;
-            }
-            actions = actions.child(
-                div()
-                    .id(label)
-                    .role(Role::Button)
-                    .aria_label(label)
-                    .tab_index(0)
-                    .border_1()
-                    .px(px(8.))
-                    .py(px(3.))
-                    .cursor_pointer()
-                    .child(label)
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.udl_named_action(label, window, cx)
-                    })),
-            );
-        }
-        panel = panel.child(actions);
-        if self.udl.confirm_remove {
-            panel = panel.child("Remove this named definition? Existing documents keep their text and switch to the unnamed User-Defined language.")
-                .child(div().id("udl-remove-confirm").role(Role::Button).aria_label("Confirm remove").child("Confirm remove")
-                    .on_click(cx.listener(|view, _, window, cx| view.udl_named_action("Remove", window, cx))))
-                .child(div().id("udl-remove-cancel").role(Role::Button).aria_label("Cancel remove").child("Cancel")
-                    .on_click(cx.listener(|view, _, _, cx| { view.udl.confirm_remove = false; cx.notify(); })));
-        }
-        if self.udl.ready {
-            if self.udl.selected != 0 {
-                panel = panel.child(self.render_udl_control(
-                    udl_controls::extensions_control(),
-                    window,
-                    cx,
-                ));
-            }
-            let mut tabs = div().flex().flex_wrap().gap(px(8.));
-            for page in Page::ALL {
-                tabs = tabs.child(
-                    div()
-                        .id(page.label())
-                        .role(Role::Button)
-                        .aria_label(page.label())
-                        .tab_index(0)
-                        .border_1()
-                        .px(px(8.))
-                        .py(px(4.))
-                        .bg(rgb(if page == self.udl.page {
-                            0xcddff5
-                        } else {
-                            0xffffff
-                        }))
-                        .cursor_pointer()
-                        .child(page.label())
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            view.udl.page = page;
-                            cx.notify();
-                        })),
-                );
-            }
-            panel = panel.child(tabs).child(self.render_udl_groups(
-                udl_controls::controls(self.udl.page),
-                window,
-                cx,
-            ));
-            panel = panel.child(
-                div()
-                    .id("udl-open-styler")
-                    .role(Role::Button)
-                    .aria_label("Styler")
-                    .tab_index(0)
-                    .border_1()
-                    .px(px(8.))
-                    .py(px(4.))
-                    .cursor_pointer()
-                    .child("Styler…")
-                    .on_click(cx.listener(|view, _, window, cx| {
-                        view.udl.styler_visible = true;
-                        view.present_floating(floating_windows::DialogKind::UdlStyler, window, cx);
-                        cx.notify();
-                    })),
-            );
-        } else {
-            panel = panel.child(if self.udl.busy {
-                "Loading definitions…"
-            } else {
-                "Definitions unavailable; correct udl.json and retry."
-            });
-        }
-        for (label, export) in [("Import JSON", false), ("Export JSON", true)] {
-            panel = panel.child(
-                div()
-                    .id(label)
-                    .role(Role::Button)
-                    .aria_label(label)
-                    .tab_index(0)
-                    .cursor_pointer()
-                    .child(label)
-                    .on_click(cx.listener(move |view, _, _, cx| view.udl_file_action(export, cx))),
-            );
-        }
-        if let Some(error) = &self.udl.error {
-            panel = panel.child(div().text_color(rgb(0xa02020)).child(error.clone()));
-            panel = panel.child(
-                div()
-                    .id("udl-retry")
-                    .role(Role::Button)
-                    .aria_label("Retry UDL file operation")
-                    .child("Retry")
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.udl.error = None;
-                        if view.udl.ready {
-                            view.udl.pending_save = true;
-                            view.start_udl_io(cx);
-                        } else {
-                            view.udl.load_attempted = false;
-                            view.refresh_udl_registry(cx);
-                        }
-                        cx.notify();
-                    })),
-            );
-        }
-        if let Some(message) = &self.udl.message {
-            panel = panel.child(message.clone());
-        }
-        if self.udl.busy || self.udl.pending_save {
-            panel = panel.child("File operation in progress…");
-        }
-        panel = panel.child(
-            div()
-                .id("udl-close")
-                .debug_selector(|| "udl-close".into())
-                .role(Role::Button)
-                .aria_label("Close User Defined Language")
-                .tab_index(0)
-                .child("Close")
-                .on_click(cx.listener(|view, _, window, cx| {
-                    view.dismiss_floating(floating_windows::DialogKind::Udl, window, cx)
-                })),
-        );
-        Some(panel.into_any_element())
-    }
-
-    pub(super) fn render_udl_styler(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        if !self.udl.styler_visible {
-            return None;
-        }
-        let mut panel = div()
-            .id("udl-styler-dialog")
-            .role(Role::Dialog)
-            .aria_label("UDL Styler")
-            .track_focus(&self.udl.styler_focus)
-            .w_full()
-            .p(px(12.))
-            .flex()
-            .flex_col()
-            .gap(px(8.));
-        let name = self
-            .udl
-            .registry
-            .definition(self.udl.selected)
-            .map(|d| d.name.as_str())
-            .filter(|s| !s.is_empty())
-            .unwrap_or("User Defined (working copy)");
-        panel = panel.child(format!("Styler — {name}"));
-        let mut styles = div().flex().flex_wrap().gap(px(5.));
-        for (index, name) in STYLE_NAMES.into_iter().enumerate() {
-            styles = styles.child(
-                div()
-                    .id(gpui::SharedString::from(format!("udl-style-{index}")))
-                    .role(Role::Button)
-                    .aria_label(name)
-                    .tab_index(0)
-                    .border_1()
-                    .px(px(5.))
-                    .py(px(3.))
-                    .bg(rgb(if self.udl.style == index {
-                        0xcddff5
-                    } else {
-                        0xffffff
-                    }))
-                    .cursor_pointer()
-                    .child(name)
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.udl.style = index;
-                        cx.notify();
-                    })),
-            );
-        }
-        panel = panel.child(styles);
-        if self.udl.ready {
-            panel = panel.child(self.render_udl_groups(
-                udl_controls::style_controls(self.udl.style),
-                window,
-                cx,
-            ));
-        }
-        if let Some(error) = &self.udl.error {
-            panel = panel.child(div().text_color(rgb(0xa02020)).child(error.clone()));
-        }
-        panel = panel.child(
-            div()
-                .id("udl-styler-close")
-                .role(Role::Button)
-                .aria_label("Close Styler")
-                .tab_index(0)
-                .child("Close")
-                .on_click(cx.listener(|view, _, window, cx| {
-                    view.dismiss_floating(floating_windows::DialogKind::UdlStyler, window, cx)
-                })),
-        );
-        Some(panel.into_any_element())
-    }
 }

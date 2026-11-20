@@ -29,6 +29,7 @@ pub(super) struct EditorShapedLine {
     projection: DisplayRow,
     width: Pixels,
     baseline: Pixels,
+    ink_vertical_bounds: std::sync::OnceLock<Option<Range<Pixels>>>,
 }
 
 fn flush_group(
@@ -36,10 +37,10 @@ fn flush_group(
     projection: &DisplayRow,
     parts: &mut Vec<Part>,
     x: &mut Pixels,
-    window: &Window,
+    text_system: &gpui::WindowTextSystem,
 ) {
     if let Some(group) = group.take() {
-        let shape = window.text_system().shape_line(
+        let shape = text_system.shape_line(
             projection.text[group.range.clone()].to_string().into(),
             group.size,
             &group.runs,
@@ -62,6 +63,44 @@ impl EditorShapedLine {
         self.baseline
     }
 
+    pub(super) fn ink_vertical_bounds(&self, window: &Window) -> Option<Range<Pixels>> {
+        self.ink_vertical_bounds.get_or_init(|| {
+            let mut result: Option<Range<Pixels>> = None;
+            for part in &self.parts {
+                let PartContent::Glyphs(shape) = &part.content else { continue; };
+                let mut measured = std::collections::HashMap::new();
+                for run in &shape.runs {
+                    for glyph in &run.glyphs {
+                        let Some(character) = shape.text.get(glyph.index..).and_then(|text| text.chars().next()) else { continue; };
+                        if character.is_whitespace() || character.is_control() { continue; }
+                        let bounds = measured.entry((run.font_id, character)).or_insert_with(|| {
+                            match window.text_system().typographic_bounds(run.font_id, shape.font_size, character) {
+                                Ok(bounds) if bounds.size.height > px(0.) => Some((-bounds.bottom(), -bounds.top())),
+                                Ok(_) => None,
+                                Err(_) => Some((
+                                    -window.text_system().ascent(run.font_id, shape.font_size),
+                                    window.text_system().descent(run.font_id, shape.font_size),
+                                )),
+                            }
+                        });
+                        if let Some((top, bottom)) = *bounds {
+                            let baseline = self.baseline + glyph.position.y;
+                            let top = baseline + top;
+                            let bottom = baseline + bottom;
+                            if let Some(result) = &mut result {
+                                result.start = result.start.min(top);
+                                result.end = result.end.max(bottom);
+                            } else {
+                                result = Some(top..bottom);
+                            }
+                        }
+                    }
+                }
+            }
+            result
+        }).clone()
+    }
+
     pub(super) fn new(
         projection: DisplayRow,
         raw: &str,
@@ -75,7 +114,7 @@ impl EditorShapedLine {
         eol_color: u32,
         npc_color: Option<u32>,
         include_controls: bool,
-        window: &Window,
+        text_system: &gpui::WindowTextSystem,
     ) -> Self {
         let mut tabs = raw
             .char_indices()
@@ -91,7 +130,7 @@ impl EditorShapedLine {
             let end = byte + run.len;
             while byte < end {
                 if let Some(tab) = tabs.next_if(|tab| tab.start == byte) {
-                    flush_group(&mut group, &projection, &mut parts, &mut x, window);
+                    flush_group(&mut group, &projection, &mut parts, &mut x, text_system);
                     let next = px(layout::next_tab_stop(
                         f32::from(x),
                         f32::from(space_width),
@@ -109,7 +148,7 @@ impl EditorShapedLine {
                 } else if let Some(representation) =
                     representations.next_if(|range| range.start == byte)
                 {
-                    flush_group(&mut group, &projection, &mut parts, &mut x, window);
+                    flush_group(&mut group, &projection, &mut parts, &mut x, text_system);
                     let text = &projection.text[representation.clone()];
                     let eol =
                         representation.start >= projection.display_index(projection.content_len());
@@ -123,7 +162,7 @@ impl EditorShapedLine {
                     } else {
                         None
                     };
-                    let shape = window.text_system().shape_line(
+                    let shape = text_system.shape_line(
                         text.to_string().into(),
                         if rounded {
                             representation_font_size
@@ -164,7 +203,7 @@ impl EditorShapedLine {
                         .peek()
                         .map_or(next, |range| next.min(range.start));
                     if group.as_ref().is_some_and(|group| group.size != font_size) {
-                        flush_group(&mut group, &projection, &mut parts, &mut x, window);
+                        flush_group(&mut group, &projection, &mut parts, &mut x, text_system);
                     }
                     let group = group.get_or_insert_with(|| Group {
                         range: byte..byte,
@@ -179,12 +218,13 @@ impl EditorShapedLine {
                 }
             }
         }
-        flush_group(&mut group, &projection, &mut parts, &mut x, window);
+        flush_group(&mut group, &projection, &mut parts, &mut x, text_system);
         Self {
             parts,
             projection,
             width: x,
             baseline,
+            ink_vertical_bounds: Default::default(),
         }
     }
 

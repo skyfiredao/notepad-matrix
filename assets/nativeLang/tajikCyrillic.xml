@@ -919,5 +919,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<matrix-find-resize-results value="Тағйири андозаи натиҷаҳои ҷустуҷӯ"/>
+			<common-ok value="Тайид"/>
+			<common-cancel value="Лағв"/>
+			<common-name value="Ном"/>
+			<discover-file-candidates-title value="Ҷустуҷӯи файлҳои номзад…"/>
+			<matrix-close value="Пӯшидан"/>
+			<matrix-retry value="Кӯшиши дубора"/>
+			<matrix-cancelled value="Бекор шуд"/>
+			<matrix-read-only value="Танҳо барои хондан"/>
+			<matrix-find-status-details value="Тафсилоти вазъият"/>
+			<matrix-find-backward-unavailable value="Ҷустуҷӯи ифодаҳои мунтазам ба ақиб ғайрифаъол аст"/>
+			<matrix-hash-select-files value="Интихоби файлҳо"/>
+			<matrix-hash-calculating value="Ҳисобкунии ҳеш…"/>
+			<matrix-hash-selection-failed value="Интихоби файлҳо ноком шуд: $ERROR$"/>
+			<matrix-hash-read-failed value="Хондани файлҳои зерин имкон надорад:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Пӯшидани хато"/>
+			<matrix-hash-file-paths value="Масирҳои файлҳо (танҳо барои хондан)"/>
+			<matrix-hash-digest-result value="Натиҷаи ҳеш (танҳо барои хондан)"/>
+			<matrix-hash-source-text value="Матни аслии ҳеш"/>
+			<matrix-hash-selection-composition value="Ҳисобкунии ҳеши қисми интихобшуда ҳангоми таркибдиҳии фаъоли матн ҳанӯз амалӣ нашудааст"/>
+			<matrix-hash-selection-read-failed value="Хондани қисми интихобшуда имкон надорад: $ERROR$"/>
+			<matrix-window-activation-failed value="Гузариш ба файли интихобшуда имкон надорад"/>
+			<matrix-window-selection-unavailable value="Файли интихобшуда пӯшида аст ё фаъол карда намешавад"/>
+			<matrix-incremental-position value="Ҷойивазкунии навори ҷустуҷӯи тадриҷӣ"/>
+			<matrix-find-progress-bar value="Навори пешрафт"/>
+			<matrix-find-previous-search value="Намоиши ҷустуҷӯи пешина"/>
+			<matrix-find-results-summary value="Натиҷаҳои ҷустуҷӯ - ($INT_REPLACE$ мувофиқат)"/>
+			<matrix-udl-allow-code2-close value="Иҷозаи бастани рамзи 2"/>
+			<matrix-udl-allow-code2-middle value="Иҷозаи қисми миёнаи рамзи 2"/>
+			<matrix-udl-allow-code2-open value="Иҷозаи кушодани рамзи 2"/>
+			<matrix-udl-allow-comment-fold-close value="Иҷозаи анҷоми печонидани шарҳ"/>
+			<matrix-udl-allow-comment-fold-middle value="Иҷозаи қисми миёнаи печонидани шарҳ"/>
+			<matrix-udl-allow-comment-fold-open value="Иҷозаи оғози печонидани шарҳ"/>
+			<matrix-udl-choose-json value="Файли JSON-и таърифи UDL-ро интихоб кунед"/>
+			<matrix-udl-close value="Пӯшидани забони муайянкардаи корбар"/>
+			<matrix-udl-close-styler value="Пӯшидани танзимгари услуб"/>
+			<matrix-udl-colors value="Рангҳо"/>
+			<matrix-udl-dark-mode-language value="Забони реҷаи торик"/>
+			<matrix-udl-definition-exported value="Таъриф содир шуд"/>
+			<matrix-udl-definitions-saved value="Таърифҳо захира шуданд"/>
+			<matrix-udl-enable-font value="Фаъол кардани ҳуруф"/>
+			<matrix-udl-error value="Хатои забони муайянкардаи корбар: $ERROR$"/>
+			<matrix-udl-file-failed value="Амалиёти файли UDL ноком шуд: $ERROR$"/>
+			<matrix-udl-file-progress value="Амалиёти файл идома дорад…"/>
+			<matrix-udl-import-rejected value="Воридкунӣ рад шуд: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ забон ворид шуд"/>
+			<matrix-udl-live-edits value="Забони муайянкардаи корбар — тағйирот фавран танҳо ба ҳуҷҷатҳои истифодабарандаи ин забон татбиқ мешаванд"/>
+			<matrix-udl-loading value="Боркунии таърифҳо…"/>
+			<matrix-udl-memory-only value="Таърифҳо танҳо дар хотира ҳастанд (феҳристи танзимот нест)"/>
+			<matrix-udl-missing-ids value="Шиносаҳои забонҳои муайянкардаи корбар намерасанд: $IDS$. Матни ҳуҷҷатҳо ва шинохти забонҳои захирашуда нигоҳ дошта шуданд. Таърифҳоро барқарор кунед ё забони дигареро ошкоро интихоб кунед."/>
+			<matrix-udl-open-panel-disconnected value="Пайвасти лавҳаи кушодани UDL қатъ шуд: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Ин таърифи номдор ҳазф шавад? Матни ҳуҷҷатҳои мавҷуда нигоҳ дошта мешавад ва онҳо ба забони беноми муайянкардаи корбар мегузаранд."/>
+			<matrix-udl-retry-file value="Такрори амалиёти файли UDL"/>
+			<matrix-udl-save-panel-disconnected value="Пайвасти лавҳаи захиракунии UDL қатъ шуд: $ERROR$"/>
+			<matrix-udl-unavailable value="Таърифҳо дастнорасанд; udl.json-ро ислоҳ карда, дубора кӯшиш кунед."/>
+			<matrix-udl-use-background value="Истифодаи пасзамина"/>
+			<matrix-udl-use-foreground value="Истифодаи пешзамина"/>
+			<matrix-udl-working-copy value="Муайянкардаи корбар (нусхаи корӣ)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

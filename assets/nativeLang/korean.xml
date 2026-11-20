@@ -1739,6 +1739,61 @@ Notepad++가 읽기 전용 저장 금지 모드이기 때문에 파일을 저장
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<discover-file-candidates-title value="대상 파일 찾는 중..."/>
+			<matrix-close value="닫기"/>
+			<matrix-retry value="다시 시도"/>
+			<matrix-cancelled value="취소됨"/>
+			<matrix-read-only value="읽기 전용"/>
+			<matrix-find-status-details value="상태 세부 정보"/>
+			<matrix-find-resize-results value="검색 결과 영역 크기 조정"/>
+			<matrix-find-backward-unavailable value="역방향 정규식 검색이 비활성화되어 있습니다"/>
+			<matrix-hash-select-files value="파일 선택"/>
+			<matrix-hash-calculating value="다이제스트 계산 중…"/>
+			<matrix-hash-selection-failed value="파일 선택 실패: $ERROR$"/>
+			<matrix-hash-read-failed value="다음 파일을 읽을 수 없습니다:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="오류 메시지 닫기"/>
+			<matrix-hash-file-paths value="파일 경로 (읽기 전용)"/>
+			<matrix-hash-digest-result value="다이제스트 결과 (읽기 전용)"/>
+			<matrix-hash-source-text value="다이제스트 원본 텍스트"/>
+			<matrix-hash-selection-composition value="입력기 조합 중 선택 영역의 해시 계산은 아직 구현되지 않았습니다"/>
+			<matrix-hash-selection-read-failed value="선택 영역을 읽을 수 없습니다: $ERROR$"/>
+			<matrix-window-activation-failed value="선택한 파일로 전환할 수 없습니다"/>
+			<matrix-window-selection-unavailable value="선택한 파일이 닫혔거나 활성화할 수 없습니다"/>
+			<matrix-incremental-position value="증분 검색 표시줄 이동"/>
+			<matrix-find-progress-bar value="진행률 표시줄"/>
+			<matrix-find-previous-search value="이전 검색 표시"/>
+			<matrix-find-results-summary value="검색 결과 - ($INT_REPLACE$개 일치)"/>
+			<matrix-udl-allow-code2-close value="코드 2 접기 끝 표식 허용"/>
+			<matrix-udl-allow-code2-middle value="코드 2 접기 중간 표식 허용"/>
+			<matrix-udl-allow-code2-open value="코드 2 접기 시작 표식 허용"/>
+			<matrix-udl-allow-comment-fold-close value="주석 접기 끝 표식 허용"/>
+			<matrix-udl-allow-comment-fold-middle value="주석 접기 중간 표식 허용"/>
+			<matrix-udl-allow-comment-fold-open value="주석 접기 시작 표식 허용"/>
+			<matrix-udl-choose-json value="JSON 형식의 UDL 정의 파일 선택"/>
+			<matrix-udl-close value="사용자 정의 언어 닫기"/>
+			<matrix-udl-close-styler value="형식 옵션 닫기"/>
+			<matrix-udl-colors value="색상"/>
+			<matrix-udl-dark-mode-language value="어두운 모드 언어"/>
+			<matrix-udl-definition-exported value="정의를 내보냈습니다"/>
+			<matrix-udl-definitions-saved value="정의를 저장했습니다"/>
+			<matrix-udl-enable-font value="글꼴 사용"/>
+			<matrix-udl-error value="사용자 정의 언어 오류: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL 파일 작업 실패: $ERROR$"/>
+			<matrix-udl-file-progress value="파일 작업 진행 중…"/>
+			<matrix-udl-import-rejected value="가져오기 거부됨: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$개 언어를 가져왔습니다"/>
+			<matrix-udl-live-edits value="사용자 정의 언어 — 변경 사항은 이 언어를 사용하는 문서에만 즉시 적용됩니다"/>
+			<matrix-udl-loading value="정의 불러오는 중…"/>
+			<matrix-udl-memory-only value="정의가 메모리에만 있습니다 (설정 디렉토리 없음)"/>
+			<matrix-udl-missing-ids value="사용자 정의 언어 ID 누락: $IDS$. 문서 텍스트와 저장된 언어 식별 정보는 보존되었습니다. 정의를 복원하거나 다른 언어를 명시적으로 선택하세요."/>
+			<matrix-udl-open-panel-disconnected value="UDL 열기 패널 연결이 끊어졌습니다: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="이 이름 있는 정의를 삭제할까요? 기존 문서의 텍스트는 유지되며 이름 없는 사용자 정의 언어로 전환됩니다."/>
+			<matrix-udl-retry-file value="UDL 파일 작업 다시 시도"/>
+			<matrix-udl-save-panel-disconnected value="UDL 저장 패널 연결이 끊어졌습니다: $ERROR$"/>
+			<matrix-udl-unavailable value="정의를 사용할 수 없습니다. udl.json을 수정한 후 다시 시도하세요."/>
+			<matrix-udl-use-background value="배경색 사용"/>
+			<matrix-udl-use-foreground value="전경색 사용"/>
+			<matrix-udl-working-copy value="사용자 정의 (작업 사본)"/>
 			<!-- $INT_REPLACE$ and $STR_REPLACE$ are place holders, don't translate these place holders -->
 			<word-chars-list-tip value="더블 클릭으로 선택하거나 &quot;전체 단어 일치&quot; 옵션을 체크해서 검색하는 동안, 현재 단어에 추가 글자를 포함하는 것을 허용합니다. "/><!-- HowToReproduce: In "Delimiter" section of Preferences dialog, hover your mouse on the "?" button. -->
 

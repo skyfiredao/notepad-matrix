@@ -1,4 +1,8 @@
 use super::*;
+#[path = "markdown_selection.rs"]
+mod markdown_selection;
+
+gpui::actions!(markdown_surface, [CopyMarkdownPreview, SelectAllMarkdownPreview]);
 use crate::markdown::{
     Alignment, Destination, Media, PreparedInline, RenderDocument, RenderRow, RowContent,
 };
@@ -28,10 +32,16 @@ enum Diagram {
 
 const DIAGRAM_PIXEL_BUDGET: u64 = 32_000_000;
 
+struct PreviewMenu {
+    position: gpui::Point<gpui::Pixels>,
+    menu: crate::menu::MenuBar,
+}
+
 struct TableLayout {
     rows: std::ops::Range<usize>,
     columns: std::cell::OnceCell<Vec<(f32, f32)>>,
     scroll: gpui::ScrollHandle,
+    scrollbar_bounds: std::rc::Rc<std::cell::Cell<Bounds<gpui::Pixels>>>,
 }
 
 fn table_layouts(document: &RenderDocument) -> std::collections::BTreeMap<usize, TableLayout> {
@@ -57,6 +67,7 @@ fn table_layouts(document: &RenderDocument) -> std::collections::BTreeMap<usize,
                 rows: start..index,
                 columns: Default::default(),
                 scroll: gpui::ScrollHandle::new(),
+                scrollbar_bounds: Default::default(),
             },
         );
     }
@@ -111,6 +122,21 @@ fn table_text_width(
 }
 
 impl TableLayout {
+    fn scroll_thumb(scroll: &gpui::ScrollHandle, width: f32) -> std::ops::Range<f32> {
+        let width = width.max(0.);
+        let viewport = f32::from(scroll.bounds().size.width).max(0.);
+        let maximum = f32::from(scroll.max_offset().x).max(0.);
+        let thumb = (width * viewport / (viewport + maximum).max(1.))
+            .clamp(18_f32.min(width), width);
+        let position = if maximum > 0. {
+            (-f32::from(scroll.offset().x) / maximum).clamp(0., 1.)
+        } else {
+            0.
+        };
+        let left = position * (width - thumb);
+        left..left + thumb
+    }
+
     fn widths(&self, document: &RenderDocument, available: f32, window: &Window) -> Vec<f32> {
         let columns = self.columns.get_or_init(|| {
             let mut columns = Vec::<(f32, f32)>::new();
@@ -252,8 +278,11 @@ pub(super) struct State {
     diagram_task: Option<gpui::Task<()>>,
     renderer: Option<super::mermaid::Renderer>,
     scroll_grab: Option<f32>,
+    table_scroll_grab: Option<(usize, f32)>,
     scroll_hint_width: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
     tables: std::collections::BTreeMap<usize, TableLayout>,
+    selection: markdown_selection::Selection,
+    context_menu: Option<PreviewMenu>,
 }
 
 impl Default for State {
@@ -270,13 +299,339 @@ impl Default for State {
             diagram_task: None,
             renderer: None,
             scroll_grab: None,
+            table_scroll_grab: None,
             scroll_hint_width: Default::default(),
             tables: Default::default(),
+            selection: Default::default(),
+            context_menu: None,
         }
     }
 }
 
 impl MatrixWindow {
+    fn markdown_menu_enabled(&self, command: MenuCommand) -> bool {
+        self.markdown_selection_ready()
+            && match command {
+                MenuCommand::Edit(EditCommand::Copy) => {
+                    let selection = &self.markdown_preview.selection;
+                    selection.active && selection.anchor != selection.head
+                }
+                MenuCommand::Edit(EditCommand::SelectAll) => self
+                    .markdown_preview
+                    .document
+                    .as_ref()
+                    .is_some_and(|document| !document.rows.is_empty()),
+                _ => false,
+            }
+    }
+
+    fn markdown_menu_input(&mut self, event: MenuEvent, cx: &mut Context<Self>) {
+        let copy = self.markdown_menu_enabled(MenuCommand::Edit(EditCommand::Copy));
+        let select_all = self.markdown_menu_enabled(MenuCommand::Edit(EditCommand::SelectAll));
+        let Some(menu) = &mut self.markdown_preview.context_menu else { return; };
+        let outcome = menu.menu.handle(event, &|command| match command {
+            MenuCommand::Edit(EditCommand::Copy) => copy,
+            MenuCommand::Edit(EditCommand::SelectAll) => select_all,
+            _ => false,
+        });
+        if menu.menu.mode() != MenuMode::Open {
+            self.markdown_preview.context_menu = None;
+        }
+        match outcome {
+            crate::menu::MenuOutcome::Activate(MenuCommand::Edit(EditCommand::Copy)) => self.copy_markdown_preview(cx),
+            crate::menu::MenuOutcome::Activate(MenuCommand::Edit(EditCommand::SelectAll)) => self.select_all_markdown_preview(cx),
+            _ => {}
+        }
+        cx.notify();
+    }
+
+    fn markdown_menu_down(&mut self, event: &gpui::MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.markdown_selection_ready() { return; }
+        let entries = [EditCommand::Copy, EditCommand::SelectAll]
+            .into_iter()
+            .map(|command| crate::menu::MenuEntry::Action(MenuCommand::Edit(command)))
+            .collect();
+        self.markdown_preview.context_menu = Some(PreviewMenu {
+            position: event.position,
+            menu: crate::menu::MenuBar::new(vec![crate::menu::MenuDefinition {
+                selector: "markdown-preview-context-menu",
+                label: "Markdown Preview",
+                mnemonic: '\0',
+                entries: Vec::new(),
+            }]),
+        });
+        let selection = &mut self.markdown_preview.selection;
+        selection.dragging = false;
+        selection.down = None;
+        selection.scroll_pending = false;
+        selection.generation = selection.generation.wrapping_add(1);
+        self.markdown_menu_input(MenuEvent::OpenContext(0, entries), cx);
+        self.close_focus.focus(window, cx);
+        cx.stop_propagation();
+    }
+
+    fn render_markdown_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let menu = self.markdown_preview.context_menu.as_ref()?;
+        let family = menu_surface::font_family(self, || cx.text_system().all_font_names());
+        let font = gpui::font(family.clone());
+        let font_size = px(menu_surface::font_size(self) as f32);
+        let font_id = cx.text_system().resolve_font(&font);
+        let line_height = px((f32::from(cx.text_system().ascent(font_id, font_size))
+            + f32::from(cx.text_system().descent(font_id, font_size)).abs()).ceil());
+        let row_height = (line_height + px(6.)).max(px(22.));
+        let filename = self.native_locale();
+        let foreground = if self.dark { 0xeeeeee } else { 0x202020 };
+        let selected_background = self.appearance_colour("DarkMode.customColorMenuHotTrack", if self.dark { 0x444444 } else { 0x91c9f7 });
+        let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
+        let measure = |text: &str| text_system.shape_line(
+            text.to_owned().into(), font_size, &[gpui::TextRun {
+                len: text.len(), font: font.clone(), color: rgb(foreground).into(),
+                background_color: None, underline: None, strikethrough: None,
+            }], None,
+        ).width().ceil();
+        let items = [EditCommand::Copy, EditCommand::SelectAll].map(|edit| {
+            let command = MenuCommand::Edit(edit);
+            let label = command.source_id()
+                .and_then(|id| crate::localization::menu_command(&filename, id))
+                .unwrap_or_else(|| command.label()).to_owned();
+            let shortcut = if edit == EditCommand::Copy { "⌘C" } else { "⌘A" };
+            (command, label, shortcut)
+        });
+        let label_width = items.iter().map(|(_, label, _)| measure(label)).max().unwrap_or(px(0.));
+        let shortcut_width = items.iter().map(|(_, _, shortcut)| measure(shortcut)).max().unwrap_or(px(0.));
+        let width = (label_width + shortcut_width + px(100.)).max(px(192.));
+        let selected = menu.menu.selected_path().first().copied();
+        let revision = menu.menu.revision();
+        let rows = items.into_iter().enumerate().map(|(index, (command, label, shortcut))| {
+            let enabled = self.markdown_menu_enabled(command);
+            let selected = selected == Some(index);
+            div()
+                .id(("markdown-menu-row", index))
+                .debug_selector(move || if index == 0 { "markdown-menu-copy".into() } else { "markdown-menu-select-all".into() })
+                .role(Role::MenuItem)
+                .aria_label(label.clone())
+                .aria_keyshortcuts(shortcut)
+                .aria_selected(selected)
+                .a11y_synthetic_children(move |builder| {
+                    if !enabled { builder.parent_node().set_disabled(); }
+                })
+                .when(selected && enabled, |row| row.bg(rgb(selected_background)).aria_active_descendant())
+                .h(row_height)
+                .w_full()
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .pl(px(2.))
+                .pr(px(10.))
+                .text_color(rgb(if enabled { foreground } else { 0x808080 }))
+                .on_mouse_move(cx.listener(move |view, _, _, cx| {
+                    if enabled && view.markdown_preview.context_menu.as_ref()
+                        .is_some_and(|menu| menu.menu.selected_path().first() != Some(&index)) {
+                        view.markdown_menu_input(MenuEvent::Hover { root: 0, path: vec![index] }, cx);
+                    }
+                }))
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.markdown_menu_input(MenuEvent::ClickAtRevision { root: 0, path: vec![index], revision }, cx);
+                    cx.stop_propagation();
+                }))
+                .child(div().w(px(24.)).h_full().flex_shrink_0())
+                .child(div().flex_1().min_w(px(0.)).truncate().child(label))
+                .child(div().flex_shrink_0().child(shortcut))
+                .child(div().w(px(6.)).flex_shrink_0())
+                .into_any_element()
+        }).collect::<Vec<_>>();
+        Some(gpui::deferred(
+            gpui::anchored().position(menu.position).snap_to_window().child(
+                div()
+                    .id("markdown-preview-context-menu")
+                    .debug_selector(|| "markdown-preview-context-menu".into())
+                    .role(Role::Menu)
+                    .aria_label("Markdown Preview")
+                    .w(width)
+                    .font_family(family)
+                    .text_size(font_size)
+                    .line_height(line_height)
+                    .flex()
+                    .flex_col()
+                    .border_1()
+                    .border_color(rgb(if self.dark { 0x555555 } else { 0xcccccc }))
+                    .bg(rgb(if self.dark { 0x2b2b2b } else { 0xf0f0f0 }))
+                    .occlude()
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+                    .on_mouse_down_out(cx.listener(|view, _, _, cx| {
+                        view.markdown_menu_input(MenuEvent::Dismiss, cx);
+                    }))
+                    .children(rows),
+            ),
+        ).into_any_element())
+    }
+
+    fn markdown_selection_ready(&self) -> bool {
+        self.markdown_preview.visible
+            && self.markdown_preview.completed == self.markdown_preview.requested
+            && self.markdown_preview.completed.as_ref() == Some(&self.markdown_owner())
+            && self.markdown_preview.document.is_some()
+    }
+
+    pub(super) fn copy_markdown_preview(&mut self, cx: &mut Context<Self>) {
+        cx.stop_propagation();
+        if self.markdown_preview.context_menu.take().is_some() { cx.notify(); }
+        if !self.markdown_selection_ready() { return; }
+        let Some(document) = &self.markdown_preview.document else { return; };
+        let base = self.markdown_preview.completed.as_ref().and_then(|owner| owner.base.as_deref());
+        let Some((plain, html)) = markdown_selection::payload(document, &self.markdown_preview.selection, base) else { return; };
+        if let Err(error) = markdown_selection::write(&plain, &html) {
+            self.notify_editor_error(error.to_string(), cx);
+        }
+    }
+
+    pub(super) fn select_all_markdown_preview(&mut self, cx: &mut Context<Self>) {
+        cx.stop_propagation();
+        if self.markdown_preview.context_menu.take().is_some() { cx.notify(); }
+        if !self.markdown_selection_ready() { return; }
+        let Some(document) = &self.markdown_preview.document else { return; };
+        if document.rows.is_empty() { return; }
+        let selection = &mut self.markdown_preview.selection;
+        selection.anchor = Default::default();
+        selection.head = markdown_selection::Position { row: document.rows.len(), cell: 0, byte: 0 };
+        selection.active = true;
+        selection.dragging = false;
+        selection.down = None;
+        selection.scroll_pending = false;
+        selection.generation = selection.generation.wrapping_add(1);
+        cx.notify();
+    }
+
+    fn markdown_selection_down(&mut self, event: &gpui::MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.markdown_selection_ready() { return; }
+        let viewport = self.markdown_preview.list.viewport_bounds();
+        if !viewport.contains(&event.position) { return; }
+        self.markdown_preview.selection.moved = false;
+        let Some(position) = self.markdown_preview.selection.hit(event.position, viewport) else { return; };
+        let selection = &mut self.markdown_preview.selection;
+        selection.anchor = position;
+        selection.head = position;
+        selection.active = true;
+        selection.dragging = true;
+        selection.moved = false;
+        selection.down = Some(event.position);
+        selection.pointer = Some(event.position);
+        selection.scroll_pending = false;
+        selection.generation = selection.generation.wrapping_add(1);
+        self.close_focus.focus(window, cx);
+        cx.notify();
+    }
+
+    fn markdown_selection_move(&mut self, event: &gpui::MouseMoveEvent, cx: &mut Context<Self>) {
+        if !self.markdown_preview.selection.dragging { return; }
+        if event.pressed_button != Some(MouseButton::Left) {
+            self.markdown_preview.selection.dragging = false;
+            self.markdown_preview.selection.down = None;
+            return;
+        }
+        let viewport = self.markdown_preview.list.viewport_bounds();
+        let position = self.markdown_preview.selection.hit(event.position, viewport);
+        let selection = &mut self.markdown_preview.selection;
+        selection.pointer = Some(event.position);
+        if let Some(down) = selection.down {
+            selection.moved |= f32::from(event.position.x - down.x).abs() >= 3.
+                || f32::from(event.position.y - down.y).abs() >= 3.;
+        }
+        if selection.moved {
+            if let Some(position) = position { selection.head = position; }
+            cx.notify();
+        }
+    }
+
+    fn markdown_selection_scroll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.markdown_preview.selection.dragging || self.markdown_preview.selection.scroll_pending { return; }
+        let Some(pointer) = self.markdown_preview.selection.pointer else { return; };
+        let viewport = self.markdown_preview.list.viewport_bounds();
+        let amount = if pointer.y < viewport.top() { -12. } else if pointer.y > viewport.bottom() { 12. } else { return; };
+        self.markdown_preview.selection.scroll_pending = true;
+        let generation = self.markdown_preview.selection.generation;
+        let entity = cx.weak_entity();
+        window.on_next_frame(move |window, cx| {
+            if let Err(error) = entity.update(cx, |view, cx| {
+                if view.markdown_preview.selection.generation != generation { return; }
+                view.markdown_preview.selection.scroll_pending = false;
+                if !view.markdown_preview.selection.dragging { return; }
+                let viewport = view.markdown_preview.list.viewport_bounds();
+                if let Some(pointer) = view.markdown_preview.selection.pointer
+                    && let Some(position) = view.markdown_preview.selection.hit(pointer, viewport)
+                {
+                    view.markdown_preview.selection.head = position;
+                }
+                if view.markdown_preview.selection.pointer.is_some_and(|pointer| pointer.y < viewport.top() || pointer.y > viewport.bottom()) {
+                    view.markdown_preview.list.scroll_by(px(amount));
+                }
+                cx.notify();
+                view.markdown_selection_scroll(window, cx);
+            }) {
+                eprintln!("Markdown selection lost its preview: {error}");
+            }
+        });
+    }
+
+    fn markdown_selection_link(&self, position: markdown_selection::Position) -> Option<String> {
+        let row = self.markdown_preview.document.as_ref()?.rows.get(position.row)?;
+        let inline = match &row.content {
+            RowContent::Text { inline, .. } => inline,
+            RowContent::Table { cells, .. } => cells.get(position.cell)?,
+            _ => return None,
+        };
+        inline.spans.iter().find(|span| span.range.contains(&position.byte))?.style.link.clone()
+    }
+
+    fn markdown_selection_up(&mut self, event: &gpui::MouseUpEvent, allow_link: bool, cx: &mut Context<Self>) {
+        if !self.markdown_preview.selection.dragging { return; }
+        let viewport = self.markdown_preview.list.viewport_bounds();
+        let selection = &mut self.markdown_preview.selection;
+        if let Some(down) = selection.down {
+            selection.moved |= f32::from(event.position.x - down.x).abs() >= 3.
+                || f32::from(event.position.y - down.y).abs() >= 3.;
+        }
+        if selection.moved {
+            if let Some(position) = selection.hit(event.position, viewport) { selection.head = position; }
+        }
+        let clicked = if allow_link && !selection.moved {
+            selection.down.and_then(|down| selection.exact_hit(down)).zip(selection.exact_hit(event.position))
+        } else { None };
+        selection.dragging = false;
+        selection.down = None;
+        if let Some((down, up)) = clicked
+            && let Some(target) = self.markdown_selection_link(down)
+            && self.markdown_selection_link(up).as_ref() == Some(&target)
+            && let Some(owner) = self.markdown_preview.completed.clone()
+        {
+            self.open_markdown_link(&target, &owner, cx);
+        }
+        cx.notify();
+    }
+
+    fn markdown_code_text(&self, row: usize, value: &str) -> AnyElement {
+        let value = gpui::SharedString::from(value.to_owned());
+        let run = gpui::TextRun {
+            len: value.len(),
+            font: gpui::font("Menlo"),
+            color: rgb(if self.dark { 0xe6e6e6 } else { 0x202020 }).into(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let selected = self.markdown_preview.selection.range(row, 0, value.len());
+        markdown_selection::Text {
+            text: gpui::StyledText::new(value.clone()).with_runs(markdown_selection::selected_runs(vec![run], selected)),
+            value,
+            row,
+            cell: 0,
+            links: Vec::new(),
+            geometry: self.markdown_preview.selection.geometry.clone(),
+        }.into_any_element()
+    }
+
     fn markdown_owner(&self) -> Owner {
         Owner {
             buffer: self.workspace.active().id(),
@@ -320,7 +675,10 @@ impl MatrixWindow {
         self.markdown_preview.renderer = None;
         self.markdown_preview.diagrams.clear();
         self.markdown_preview.tables.clear();
+        self.markdown_preview.selection.clear();
+        self.markdown_preview.context_menu = None;
         self.markdown_preview.scroll_grab = None;
+        self.markdown_preview.table_scroll_grab = None;
         self.markdown_preview.list.scrollbar_drag_ended();
         cx.notify();
     }
@@ -337,6 +695,8 @@ impl MatrixWindow {
         self.markdown_preview.task = None;
         self.markdown_preview.diagram_task = None;
         self.markdown_preview.renderer = None;
+        self.markdown_preview.selection.clear();
+        self.markdown_preview.context_menu = None;
         let cancel = Arc::new(AtomicBool::new(false));
         self.markdown_preview.cancel = cancel.clone();
         if self
@@ -409,6 +769,8 @@ impl MatrixWindow {
                     view.markdown_preview.diagrams.clear();
                 }
                 view.markdown_preview.tables = table_layouts(&document);
+                view.markdown_preview.selection.clear();
+                view.markdown_preview.context_menu = None;
                 view.markdown_preview.document = Some(Arc::new(document));
                 view.markdown_preview.completed = Some(owner);
                 view.markdown_preview.task = None;
@@ -550,6 +912,27 @@ impl MatrixWindow {
     }
 
     fn markdown_scrollbar_move(&mut self, event: &gpui::MouseMoveEvent, cx: &mut Context<Self>) {
+        if let Some((index, grab)) = self.markdown_preview.table_scroll_grab {
+            if event.pressed_button != Some(MouseButton::Left) {
+                self.markdown_scrollbar_up(cx);
+                return;
+            }
+            if let Some(table) = self.markdown_preview.tables.get(&index) {
+                let bounds = table.scrollbar_bounds.get();
+                let thumb = TableLayout::scroll_thumb(&table.scroll, f32::from(bounds.size.width));
+                let travel = f32::from(bounds.size.width) - (thumb.end - thumb.start);
+                if travel > 0. {
+                    let position = ((f32::from(event.position.x - bounds.left()) - grab) / travel)
+                        .clamp(0., 1.);
+                    table.scroll.set_offset(gpui::point(
+                        -table.scroll.max_offset().x * position,
+                        table.scroll.offset().y,
+                    ));
+                    cx.notify();
+                }
+            }
+            return;
+        }
         let Some(grab) = self.markdown_preview.scroll_grab else {
             return;
         };
@@ -579,10 +962,104 @@ impl MatrixWindow {
     }
 
     fn markdown_scrollbar_up(&mut self, cx: &mut Context<Self>) {
+        if self.markdown_preview.table_scroll_grab.take().is_some() {
+            cx.notify();
+        }
         if self.markdown_preview.scroll_grab.take().is_some() {
             self.markdown_preview.list.scrollbar_drag_ended();
             cx.notify();
         }
+    }
+
+    fn markdown_table_scrollbar(&self, table: &TableLayout, cx: &mut Context<Self>) -> AnyElement {
+        let index = table.rows.start;
+        let scroll = table.scroll.clone();
+        let accessible = scroll.clone();
+        let bounds = table.scrollbar_bounds.clone();
+        let dark = self.dark;
+        div()
+            .id(("markdown-table-scrollbar", index))
+            .accessibility_id(format!("markdown-table-scrollbar-{index}"))
+            .role(Role::ScrollBar)
+            .aria_label("Markdown table horizontal scrollbar")
+            .aria_orientation(gpui::accesskit::Orientation::Horizontal)
+            .a11y_synthetic_children(move |builder| {
+                let maximum = f64::from(f32::from(accessible.max_offset().x).max(0.));
+                let node = builder.parent_node();
+                node.set_min_numeric_value(0.);
+                node.set_max_numeric_value(maximum);
+                node.set_numeric_value(
+                    f64::from(-f32::from(accessible.offset().x)).clamp(0., maximum),
+                );
+                if maximum <= 0. {
+                    node.set_disabled();
+                }
+            })
+            .w_full()
+            .h(px(14.))
+            .flex_shrink_0()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |view, event: &gpui::MouseDownEvent, _, cx| {
+                    let Some(table) = view.markdown_preview.tables.get(&index) else {
+                        return;
+                    };
+                    let maximum = table.scroll.max_offset().x.max(px(0.));
+                    if maximum > px(0.) {
+                        let x = f32::from(event.position.x - table.scrollbar_bounds.get().left());
+                        let thumb = TableLayout::scroll_thumb(
+                            &table.scroll,
+                            f32::from(table.scrollbar_bounds.get().size.width),
+                        );
+                        let offset = table.scroll.offset();
+                        let page = table.scroll.bounds().size.width;
+                        if x < thumb.start {
+                            table.scroll.set_offset(gpui::point(
+                                (offset.x + page).min(px(0.)),
+                                offset.y,
+                            ));
+                        } else if x > thumb.end {
+                            table.scroll.set_offset(gpui::point(
+                                (offset.x - page).max(-maximum),
+                                offset.y,
+                            ));
+                        } else {
+                            view.markdown_preview.table_scroll_grab = Some((index, x - thumb.start));
+                        }
+                        cx.notify();
+                    }
+                    cx.stop_propagation();
+                }),
+            )
+            .child(
+                gpui::canvas(
+                    |_, _, _| (),
+                    move |track, _, window, _| {
+                        bounds.set(track);
+                        let maximum = f32::from(scroll.max_offset().x).max(0.);
+                        if maximum <= 0. {
+                            return;
+                        }
+                        let thumb = TableLayout::scroll_thumb(&scroll, f32::from(track.size.width));
+                        window.paint_quad(gpui::fill(
+                            track,
+                            rgb(if dark { 0x282828 } else { 0xf1f1f1 }),
+                        ));
+                        window.paint_quad(gpui::fill(
+                            Bounds::new(
+                                track.origin + gpui::point(px(thumb.start), px(3.)),
+                                size(
+                                    px(thumb.end - thumb.start),
+                                    (track.size.height - px(6.)).max(px(0.)),
+                                ),
+                            ),
+                            rgb(if dark { 0x888888 } else { 0xaaaaaa }),
+                        ));
+                    },
+                )
+                .size_full(),
+            )
+            .into_any_element()
     }
 
     fn markdown_scrollbar(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -677,22 +1154,15 @@ impl MatrixWindow {
         &self,
         inline: &PreparedInline,
         id: usize,
+        row_index: usize,
         bold: bool,
-        owner: &Owner,
-        cx: &mut Context<Self>,
     ) -> AnyElement {
         let foreground = rgb(if self.dark { 0xe6e6e6 } else { 0x202020 });
-        let mut links = Vec::new();
-        let mut targets = Vec::new();
         let runs = inline
             .spans
             .iter()
             .map(|span| {
                 let font = inline_font(&span.style, bold);
-                if let Some(target) = &span.style.link {
-                    links.push(span.range.clone());
-                    targets.push(target.clone());
-                }
                 gpui::TextRun {
                     len: span.range.len(),
                     font,
@@ -716,21 +1186,16 @@ impl MatrixWindow {
                 }
             })
             .collect();
-        let entity = cx.weak_entity();
-        let owner = owner.clone();
-        gpui::InteractiveText::new(
-            ("markdown-inline", id),
-            gpui::StyledText::new(gpui::SharedString::from(inline.text.clone())).with_runs(runs),
-        )
-        .on_click(links, move |index, _, cx| {
-            if let Some(target) = targets.get(index)
-                && let Err(error) =
-                    entity.update(cx, |view, cx| view.open_markdown_link(target, &owner, cx))
-            {
-                eprintln!("Markdown link lost its document: {error}");
-            }
-        })
-        .into_any_element()
+        let value = gpui::SharedString::from(inline.text.clone());
+        let selected = self.markdown_preview.selection.range(row_index, id, inline.text.len());
+        markdown_selection::Text {
+            text: gpui::StyledText::new(value.clone()).with_runs(markdown_selection::selected_runs(runs, selected)),
+            value,
+            row: row_index,
+            cell: id,
+            links: inline.spans.iter().filter(|span| span.style.link.is_some()).map(|span| span.range.clone()).collect(),
+            geometry: self.markdown_preview.selection.geometry.clone(),
+        }.into_any_element()
     }
 
     fn markdown_image(
@@ -782,7 +1247,17 @@ impl MatrixWindow {
         if let Some(target) = media.navigation.clone() {
             let owner = owner.clone();
             image = image.cursor_pointer().on_click(
-                cx.listener(move |view, _, _, cx| view.open_markdown_link(&target, &owner, cx)),
+                cx.listener(move |view, event: &gpui::ClickEvent, _, cx| {
+                    let dragged = match event {
+                        gpui::ClickEvent::Mouse(event) => view.markdown_preview.selection.moved
+                            || f32::from(event.up.position.x - event.down.position.x).abs() >= 3.
+                            || f32::from(event.up.position.y - event.down.position.y).abs() >= 3.,
+                        _ => false,
+                    };
+                    if !dragged {
+                        view.open_markdown_link(&target, &owner, cx);
+                    }
+                }),
             );
         }
         image.into_any_element()
@@ -792,6 +1267,7 @@ impl MatrixWindow {
         &self,
         inline: &PreparedInline,
         id: usize,
+        row_index: usize,
         bold: bool,
         owner: &Owner,
         cx: &mut Context<Self>,
@@ -803,7 +1279,7 @@ impl MatrixWindow {
             .flex()
             .flex_col()
             .when(!inline.text.is_empty(), |block| {
-                block.child(self.markdown_inline(inline, 0, bold, owner, cx))
+                block.child(self.markdown_inline(inline, id, row_index, bold))
             })
             .children(
                 inline
@@ -839,7 +1315,7 @@ impl MatrixWindow {
                     .text_size(px(size))
                     .line_height(px(size * 1.45))
                     .mb(px(8.))
-                    .child(self.markdown_inline_block(inline, 0, heading.is_some(), owner, cx))
+                    .child(self.markdown_inline_block(inline, 0, row_index, heading.is_some(), owner, cx))
                     .into_any_element()
             }
             RowContent::Code {
@@ -863,11 +1339,7 @@ impl MatrixWindow {
                     *first && language.as_deref() == Some("HTML (not executed)"),
                     |code| code.child("HTML (not executed)"),
                 )
-                .child(
-                    body[range.clone()]
-                        .trim_end_matches(['\r', '\n'])
-                        .to_owned(),
-                )
+                .child(self.markdown_code_text(row_index, body[range.clone()].trim_end_matches(['\r', '\n'])))
                 .into_any_element(),
             RowContent::Mermaid { body } => match self.markdown_preview.diagrams.get(body) {
                 Some(Diagram::Image {
@@ -952,6 +1424,7 @@ impl MatrixWindow {
                     - if row.quote_depth != 0 { 4. } else { 0. })
                 .max(1.);
                 let widths = table.widths(document, available, window);
+                let content_width = widths.iter().sum::<f32>() + 2.;
                 let border = rgb(if self.dark { 0x484848 } else { 0xd0d0d0 });
                 let cells = cells
                     .iter()
@@ -970,7 +1443,7 @@ impl MatrixWindow {
                             .when(index + 1 < widths.len(), |cell| {
                                 cell.border_r_1().border_color(border)
                             })
-                            .child(self.markdown_inline_block(inline, index, *heading, owner, cx));
+                            .child(self.markdown_inline_block(inline, index, row_index, *heading, owner, cx));
                         if let Some(alignment) = alignments.get(index) {
                             cell = match alignment {
                                 Alignment::Left => cell.text_left(),
@@ -987,7 +1460,7 @@ impl MatrixWindow {
                     .id("markdown-table-row")
                     .debug_selector(|| "markdown-table".into())
                     .flex()
-                    .w(px(widths.iter().sum::<f32>() + 2.))
+                    .w(px(content_width))
                     .flex_shrink_0()
                     .text_size(px(15.))
                     .line_height(px(24.75))
@@ -1012,6 +1485,10 @@ impl MatrixWindow {
                     .min_w(px(0.))
                     .pl(px(continuation_indent))
                     .child(viewport)
+                    .when(
+                        row_index + 1 == table.rows.end && content_width > available + 0.01,
+                        |block| block.child(self.markdown_table_scrollbar(table, cx)),
+                    )
                     .into_any_element()
             }
             RowContent::Rule => div()
@@ -1056,6 +1533,10 @@ impl MatrixWindow {
         if !self.markdown_preview.visible {
             return None;
         }
+        self.markdown_preview.selection.geometry.borrow_mut().clear();
+        let filename = self.native_locale();
+        let close_label = crate::localization::preference_control(&filename, "", 6001).unwrap_or("Close");
+        let palette = self.preferences_render_palette();
         let mut content = div()
             .id("markdown-preview")
             .debug_selector(|| "markdown-preview".into())
@@ -1063,21 +1544,57 @@ impl MatrixWindow {
             .aria_label("Markdown Preview (read-only)")
             .track_focus(&self.close_focus)
             .key_context("MatrixMarkdown")
+            .on_action(cx.listener(|view, _: &CopyMarkdownPreview, _, cx| view.copy_markdown_preview(cx)))
+            .on_action(cx.listener(|view, _: &SelectAllMarkdownPreview, _, cx| view.select_all_markdown_preview(cx)))
+            .on_action(cx.listener(|view, _: &CloseMarkdownPreview, window, cx| {
+                if view.markdown_preview.context_menu.is_some() {
+                    view.markdown_menu_input(MenuEvent::Dismiss, cx);
+                } else {
+                    view.dismiss_floating(floating_windows::DialogKind::MarkdownPreview, window, cx);
+                }
+                cx.stop_propagation();
+            }))
+            .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, _, cx| {
+                if view.markdown_preview.context_menu.is_none() { return; }
+                let event = match event.keystroke.key.as_str() {
+                    "up" => MenuEvent::Up,
+                    "down" => MenuEvent::Down,
+                    "left" => MenuEvent::Left,
+                    "right" => MenuEvent::Right,
+                    "home" => MenuEvent::First,
+                    "end" => MenuEvent::Last,
+                    "enter" | "space" => MenuEvent::Activate,
+                    "escape" => MenuEvent::Dismiss,
+                    _ => return,
+                };
+                view.markdown_menu_input(event, cx);
+                cx.stop_propagation();
+            }))
             .size_full()
             .overflow_hidden()
             .p(px(12.))
             .flex()
             .flex_col()
             .on_mouse_move(
-                cx.listener(|view, event, _, cx| view.markdown_scrollbar_move(event, cx)),
+                cx.listener(|view, event, window, cx| {
+                    view.markdown_scrollbar_move(event, cx);
+                    view.markdown_selection_move(event, cx);
+                    view.markdown_selection_scroll(window, cx);
+                }),
             )
             .on_mouse_up(
                 MouseButton::Left,
-                cx.listener(|view, _, _, cx| view.markdown_scrollbar_up(cx)),
+                cx.listener(|view, event, _, cx| {
+                    view.markdown_selection_up(event, true, cx);
+                    view.markdown_scrollbar_up(cx);
+                }),
             )
             .on_mouse_up_out(
                 MouseButton::Left,
-                cx.listener(|view, _, _, cx| view.markdown_scrollbar_up(cx)),
+                cx.listener(|view, event, _, cx| {
+                    view.markdown_selection_up(event, false, cx);
+                    view.markdown_scrollbar_up(cx);
+                }),
             )
             .bg(rgb(if self.dark { 0x202020 } else { 0xffffff }))
             .text_color(rgb(if self.dark { 0xe6e6e6 } else { 0x202020 }))
@@ -1099,17 +1616,30 @@ impl MatrixWindow {
                             .accessibility_id("markdown-preview-close")
                             .debug_selector(|| "markdown-preview-close".into())
                             .role(Role::Button)
-                            .aria_label("Close")
+                            .aria_label(close_label)
                             .border_1()
-                            .border_color(rgb(0xaaaaaa))
-                            .bg(rgb(0xf0f0f0))
-                            .text_color(rgb(0x202020))
+                            .border_color(rgb(palette.control_edge(true)))
+                            .bg(rgb(palette.button_background(true)))
+                            .text_color(rgb(palette.darker_text))
+                            .h(dialog_font::control_height())
                             .px(dialog_font::px(14.))
-                            .py(dialog_font::px(5.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .line_height(dialog_font::line_height())
+                            .text_size(px(dialog_font::base_size()))
+                            .focusable()
+                            .tab_index(0)
                             .cursor_pointer()
-                            .hover(|style| style.bg(rgb(0xe5f1fb)).border_color(rgb(0x0078d7)))
-                            .active(|style| style.bg(rgb(0xcce4f7)))
-                            .child("Close")
+                            .hover(move |style| style.bg(rgb(palette.hot_background)).border_color(rgb(palette.hot_edge)).text_color(rgb(palette.text)))
+                            .focus(move |style| style.border_color(rgb(palette.hot_edge)))
+                            .child(close_label)
+                            .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, window, cx| {
+                                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                                    view.dismiss_floating(floating_windows::DialogKind::MarkdownPreview, window, cx);
+                                    cx.stop_propagation();
+                                }
+                            }))
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.dismiss_floating(
                                     floating_windows::DialogKind::MarkdownPreview,
@@ -1126,6 +1656,8 @@ impl MatrixWindow {
             content = content.child(
                 div()
                     .id("markdown-content")
+                    .on_mouse_down(MouseButton::Left, cx.listener(|view, event, window, cx| view.markdown_selection_down(event, window, cx)))
+                    .on_mouse_down(MouseButton::Right, cx.listener(|view, event, window, cx| view.markdown_menu_down(event, window, cx)))
                     .debug_selector(|| "markdown-content".into())
                     .font_family("Helvetica")
                     .text_size(px(13.))
@@ -1188,6 +1720,9 @@ impl MatrixWindow {
             );
         } else {
             content = content.child("Rendering Markdown…");
+        }
+        if let Some(menu) = self.render_markdown_menu(cx) {
+            content = content.child(menu);
         }
         Some(content.into_any_element())
     }

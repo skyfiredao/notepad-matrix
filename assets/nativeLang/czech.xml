@@ -1960,6 +1960,60 @@ Pokud zvolíte Pokročilý režim, ale nebudete upravovat soubory výše zmíně
 			<networkpathwarning-serverwhitelist-tip value="Přidá server aktuálního souboru na seznam povolených v Notepadu++ (serverWhiteList.xml).
 
 Pro více informací klikněte na toto tlačítko a otevře se Vám webová stránka s příslušnou částí Uživatelské příručky."/>
+			<matrix-close value="Zavřít"/>
+			<matrix-retry value="Zkusit znovu"/>
+			<matrix-cancelled value="Zrušeno"/>
+			<matrix-read-only value="Jen pro čtení"/>
+			<matrix-find-status-details value="Podrobnosti o stavu"/>
+			<matrix-find-backward-unavailable value="Zpětné vyhledávání regulárních výrazů je zakázáno"/>
+			<matrix-hash-select-files value="Vybrat soubory"/>
+			<matrix-hash-calculating value="Výpočet otisku…"/>
+			<matrix-hash-selection-failed value="Výběr souborů se nezdařil: $ERROR$"/>
+			<matrix-hash-read-failed value="Nelze přečíst následující soubory:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Zavřít chybové hlášení"/>
+			<matrix-hash-file-paths value="Cesty k souborům (jen pro čtení)"/>
+			<matrix-hash-digest-result value="Výsledný otisk (jen pro čtení)"/>
+			<matrix-hash-source-text value="Zdrojový text otisku"/>
+			<matrix-hash-selection-composition value="Výpočet otisku výběru během aktivního skládání textu zatím není implementován"/>
+			<matrix-hash-selection-read-failed value="Nelze přečíst výběr: $ERROR$"/>
+			<matrix-window-activation-failed value="Nelze přepnout na vybraný soubor"/>
+			<matrix-window-selection-unavailable value="Vybraný soubor je zavřený nebo jej nelze aktivovat"/>
+			<matrix-incremental-position value="Přesunout panel přírůstkového hledání"/>
+			<matrix-find-progress-bar value="Ukazatel průběhu"/>
+			<matrix-find-previous-search value="Zobrazit předchozí hledání"/>
+			<matrix-find-resize-results value="Změnit velikost výsledků vyhledávání"/>
+			<matrix-find-results-summary value="Výsledky vyhledávání - (výskytů: $INT_REPLACE$)"/>
+			<matrix-udl-allow-code2-close value="Povolit konec bloku kódu 2"/>
+			<matrix-udl-allow-code2-middle value="Povolit střed bloku kódu 2"/>
+			<matrix-udl-allow-code2-open value="Povolit začátek bloku kódu 2"/>
+			<matrix-udl-allow-comment-fold-close value="Povolit konec sbalení komentáře"/>
+			<matrix-udl-allow-comment-fold-middle value="Povolit střed sbalení komentáře"/>
+			<matrix-udl-allow-comment-fold-open value="Povolit začátek sbalení komentáře"/>
+			<matrix-udl-choose-json value="Vybrat soubor definice UDL ve formátu JSON"/>
+			<matrix-udl-close value="Zavřít uživatelsky definovanou syntaxi"/>
+			<matrix-udl-close-styler value="Zavřít dialog pro návrh"/>
+			<matrix-udl-colors value="Barvy"/>
+			<matrix-udl-dark-mode-language value="Jazyk tmavého režimu"/>
+			<matrix-udl-definition-exported value="Definice byla exportována"/>
+			<matrix-udl-definitions-saved value="Definice byly uloženy"/>
+			<matrix-udl-enable-font value="Povolit písmo"/>
+			<matrix-udl-error value="Chyba uživatelsky definované syntaxe: $ERROR$"/>
+			<matrix-udl-file-failed value="Operace se souborem UDL se nezdařila: $ERROR$"/>
+			<matrix-udl-file-progress value="Probíhá operace se souborem…"/>
+			<matrix-udl-import-rejected value="Import byl odmítnut: $ERROR$"/>
+			<matrix-udl-imported value="Počet importovaných jazyků: $COUNT$"/>
+			<matrix-udl-live-edits value="Uživatelsky definovaná syntaxe — úpravy se okamžitě projeví pouze v dokumentech používajících tuto syntaxi"/>
+			<matrix-udl-loading value="Načítání definic…"/>
+			<matrix-udl-memory-only value="Definice jsou pouze v paměti (chybí konfigurační adresář)"/>
+			<matrix-udl-missing-ids value="Chybějící identifikátory uživatelsky definovaných syntaxí: $IDS$. Text dokumentů i uložené identifikátory jazyků byly zachovány. Obnovte definice nebo výslovně vyberte jiný jazyk v nabídce Jazyk."/>
+			<matrix-udl-open-panel-disconnected value="Dialog pro otevření UDL byl odpojen: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Odstranit tuto pojmenovanou definici? Stávající dokumenty si zachovají text a přepnou se na nepojmenovanou uživatelsky definovanou syntaxi."/>
+			<matrix-udl-retry-file value="Zopakovat operaci se souborem UDL"/>
+			<matrix-udl-save-panel-disconnected value="Dialog pro uložení UDL byl odpojen: $ERROR$"/>
+			<matrix-udl-unavailable value="Definice nejsou dostupné; opravte udl.json a zkuste to znovu."/>
+			<matrix-udl-use-background value="Použít barvu pozadí"/>
+			<matrix-udl-use-foreground value="Použít barvu popředí"/>
+			<matrix-udl-working-copy value="Uživatelsky definovaná syntaxe (pracovní kopie)"/>
 		</MiscStrings>
 
 	</Native-Langue>

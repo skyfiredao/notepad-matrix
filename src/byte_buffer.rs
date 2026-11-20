@@ -571,6 +571,19 @@ impl ByteBuffer {
         whole_word: bool,
         word_start: bool,
     ) -> Result<Option<Range<usize>>, InvalidByteRange> {
+        self.find_literal_bytes_cancellable(query, from, to, match_case, whole_word, word_start, || false)
+    }
+
+    pub(crate) fn find_literal_bytes_cancellable(
+        &self,
+        query: &[u8],
+        from: usize,
+        to: usize,
+        match_case: bool,
+        whole_word: bool,
+        word_start: bool,
+        mut should_stop: impl FnMut() -> bool,
+    ) -> Result<Option<Range<usize>>, InvalidByteRange> {
         if query.is_empty() { return Ok(Some(from..from)); }
         let forward = from <= to;
         let start = self.move_position_outside_char(from, forward, false)?;
@@ -591,25 +604,53 @@ impl ByteBuffer {
             output
         };
         let key = if match_case { query.to_vec() } else { fold(query) };
+        let mut cursor = ByteCursor::new(self);
+        let mut stop_at = position;
         loop {
+            if forward && position >= stop_at || !forward && position <= stop_at {
+                if should_stop() { return Ok(None); }
+                stop_at = if forward { position.saturating_add(LEAF_BYTES) }
+                    else { position.saturating_sub(LEAF_BYTES) };
+            }
             if (forward && position >= end) || (!forward && position < end) { break; }
             let mut after = position;
             let mut matched = 0;
             let mut first_width = 1;
             if match_case {
-                if query.len() <= limit - position
-                    && query.iter().enumerate().all(|(index, byte)| self.byte(position + index) == Some(*byte)) {
-                    matched = query.len();
-                    after += query.len();
+                if query.len() <= limit - position {
+                    match cursor.matches(position, query, &mut should_stop) {
+                        Ok(true) => { matched = query.len(); after += query.len(); }
+                        Ok(false) => {}
+                        Err(()) => return Ok(None),
+                    }
                 }
             } else {
+                let mut compare_stop_at = position.saturating_add(LEAF_BYTES);
                 while matched < key.len() && after < limit {
-                    let width = self.character_at(after).1;
+                    if after >= compare_stop_at {
+                        if should_stop() { return Ok(None); }
+                        compare_stop_at = after.saturating_add(LEAF_BYTES);
+                    }
+                    let (value, width) = cursor.unit_at(after);
                     if after == position { first_width = width; }
                     if width == 0 || after + width > limit { break; }
-                    let input: Vec<_> = (after..after + width).filter_map(|at| self.byte(at)).collect();
-                    let folded = fold(&input);
-                    if key.get(matched..matched + folded.len()) != Some(folded.as_slice()) { break; }
+                    let mut encoded = [0; 4];
+                    let folded = match value {
+                        crate::byte_text::ByteValue::Invalid(byte) => {
+                            encoded[0] = byte;
+                            &encoded[..1]
+                        }
+                        crate::byte_text::ByteValue::Scalar(character) if character.is_ascii() => {
+                            encoded[0] = (character as u8).to_ascii_lowercase();
+                            &encoded[..1]
+                        }
+                        crate::byte_text::ByteValue::Scalar(character) => {
+                            crate::unicode_case::mapping(character)
+                                .map(str::as_bytes)
+                                .unwrap_or_else(|| character.encode_utf8(&mut encoded).as_bytes())
+                        }
+                    };
+                    if key.get(matched..matched + folded.len()) != Some(folded) { break; }
                     matched += folded.len();
                     after += width;
                 }
@@ -620,6 +661,7 @@ impl ByteBuffer {
                 return Ok(Some(position..after));
             }
             let next = if forward && (!match_case || query[0] & 0xc0 != 0x80) { position + first_width }
+                else if !forward && position > 0 && cursor.byte(position - 1).is_some_and(|byte| byte.is_ascii()) { position - 1 }
                 else { self.next_position(position, forward)? };
             if next == position { break; }
             position = next;
@@ -639,6 +681,18 @@ impl ByteBuffer {
 
     pub fn units(&self) -> impl Iterator<Item = crate::byte_text::ByteUnit> + '_ {
         crate::byte_text::units(self.chunks().flat_map(|chunk| chunk.iter().copied()))
+    }
+
+    pub(crate) fn units_in(&self, range: Range<usize>) -> Result<impl Iterator<Item = crate::byte_text::ByteUnit> + '_, InvalidByteRange> {
+        self.validate(&range)?;
+        let mut cursor = ByteCursor::new(self);
+        let mut position = range.start;
+        Ok(crate::byte_text::units(std::iter::from_fn(move || {
+            if position >= range.end { return None; }
+            let byte = cursor.byte(position);
+            position += 1;
+            byte
+        })))
     }
 
     pub fn to_vec(&self) -> Vec<u8> {
@@ -686,6 +740,73 @@ impl ByteBuffer {
         } else {
             Err(InvalidByteRange)
         }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct ByteCursor<'a> {
+    buffer: &'a ByteBuffer,
+    start: usize,
+    chunk: &'a [u8],
+}
+
+impl ByteCursor<'_> {
+    pub(crate) fn byte(&mut self, position: usize) -> Option<u8> {
+        if position < self.start || position - self.start >= self.chunk.len() {
+            let mut node = self.buffer.root.as_deref()?;
+            let mut start = 0;
+            loop {
+                match node {
+                    Node::Leaf { bytes, range, .. } => {
+                        self.start = start;
+                        self.chunk = &bytes[range.clone()];
+                        break;
+                    }
+                    Node::Branch { left, right, .. } => {
+                        let boundary = start + left.len();
+                        if position < boundary { node = left; }
+                        else { start = boundary; node = right; }
+                    }
+                }
+            }
+        }
+        self.chunk.get(position.checked_sub(self.start)?).copied()
+    }
+
+    fn matches(&mut self, mut position: usize, mut query: &[u8], should_stop: &mut impl FnMut() -> bool) -> Result<bool, ()> {
+        while !query.is_empty() {
+            if self.byte(position).is_none() { return Ok(false); }
+            let available = &self.chunk[position - self.start..];
+            let length = available.len().min(query.len());
+            if available[..length] != query[..length] { return Ok(false); }
+            position += length;
+            query = &query[length..];
+            if !query.is_empty() && should_stop() { return Err(()); }
+        }
+        Ok(true)
+    }
+
+    fn unit_at(&mut self, position: usize) -> (crate::byte_text::ByteValue, usize) {
+        if let Some(byte) = self.byte(position).filter(u8::is_ascii) {
+            return (crate::byte_text::ByteValue::Scalar(char::from(byte)), 1);
+        }
+        let mut input = [0; 4];
+        let mut length = 0;
+        for (index, slot) in input.iter_mut().enumerate() {
+            let Some(byte) = self.byte(position + index) else { break; };
+            *slot = byte;
+            length += 1;
+        }
+        match crate::byte_text::units(input[..length].iter().copied()).next() {
+            Some(unit) => (unit.value, unit.range.len()),
+            None => (crate::byte_text::ByteValue::Invalid(0), 0),
+        }
+    }
+}
+
+impl<'a> ByteCursor<'a> {
+    pub(crate) fn new(buffer: &'a ByteBuffer) -> Self {
+        Self { buffer, start: 0, chunk: &[] }
     }
 }
 

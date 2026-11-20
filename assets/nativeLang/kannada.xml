@@ -898,5 +898,65 @@
 				</FileMenu>
 			</Menus>
 		</ProjectManager>
+		<MiscStrings>
+			<common-ok value="ಓಕೇ"/>
+			<common-cancel value="ಕ್ಯಾನ್ಸಲ್"/>
+			<common-name value="ಹೆಸರು"/>
+			<discover-file-candidates-title value="ಸಂಭಾವ್ಯ ಕಡತಗಳನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ..."/>
+			<matrix-close value="ಕ್ಲೋಸ್"/>
+			<matrix-retry value="ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ"/>
+			<matrix-cancelled value="ರದ್ದಾಗಿದೆ"/>
+			<matrix-read-only value="ಓದಲು ಮಾತ್ರ"/>
+			<matrix-find-status-details value="ಸ್ಥಿತಿಯ ವಿವರಗಳು"/>
+			<matrix-find-resize-results value="ಹುಡುಕಾಟ ಫಲಿತಾಂಶಗಳ ಗಾತ್ರ ಬದಲಿಸಿ"/>
+			<matrix-find-backward-unavailable value="ನಿಯಮಿತ ಅಭಿವ್ಯಕ್ತಿಯಿಂದ ಹಿಮ್ಮುಖ ಹುಡುಕಾಟ ನಿಷ್ಕ್ರಿಯವಾಗಿದೆ"/>
+			<matrix-hash-select-files value="ಕಡತಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ"/>
+			<matrix-hash-calculating value="ಹ್ಯಾಶ್ ಲೆಕ್ಕಹಾಕಲಾಗುತ್ತಿದೆ…"/>
+			<matrix-hash-selection-failed value="ಕಡತದ ಆಯ್ಕೆ ವಿಫಲವಾಗಿದೆ: $ERROR$"/>
+			<matrix-hash-read-failed value="ಈ ಕಡತಗಳನ್ನು ಓದಲಾಗಲಿಲ್ಲ:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="ದೋಷವನ್ನು ಮುಚ್ಚಿ"/>
+			<matrix-hash-file-paths value="ಕಡತಗಳ ಮಾರ್ಗಗಳು (ಓದಲು ಮಾತ್ರ)"/>
+			<matrix-hash-digest-result value="ಹ್ಯಾಶ್ ಫಲಿತಾಂಶ (ಓದಲು ಮಾತ್ರ)"/>
+			<matrix-hash-source-text value="ಹ್ಯಾಶ್‌ನ ಮೂಲ ಪಠ್ಯ"/>
+			<matrix-hash-selection-composition value="ಪಠ್ಯ ಸಂಯೋಜನೆ ಸಕ್ರಿಯವಾಗಿರುವಾಗ ಆಯ್ಕೆಯ ಹ್ಯಾಶ್ ಲೆಕ್ಕಹಾಕುವುದನ್ನು ಇನ್ನೂ ಅಳವಡಿಸಿಲ್ಲ"/>
+			<matrix-hash-selection-read-failed value="ಆಯ್ಕೆಯನ್ನು ಓದಲಾಗಲಿಲ್ಲ: $ERROR$"/>
+			<matrix-window-activation-failed value="ಆಯ್ಕೆಮಾಡಿದ ಕಡತಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಲಿಲ್ಲ"/>
+			<matrix-window-selection-unavailable value="ಆಯ್ಕೆಮಾಡಿದ ಕಡತ ಮುಚ್ಚಿದೆ ಅಥವಾ ಸಕ್ರಿಯಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ"/>
+			<matrix-incremental-position value="ಹಂತಹಂತದ ಹುಡುಕಾಟ ಪಟ್ಟಿಯನ್ನು ಸರಿಸಿ"/>
+			<matrix-find-progress-bar value="ಪ್ರಗತಿ ಪಟ್ಟಿ"/>
+			<matrix-find-previous-search value="ಹಿಂದಿನ ಹುಡುಕಾಟ ತೋರಿಸಿ"/>
+			<matrix-find-results-summary value="ಹುಡುಕಾಟ ಫಲಿತಾಂಶಗಳು - ($INT_REPLACE$ ಹೊಂದಾಣಿಕೆಗಳು)"/>
+			<matrix-udl-allow-code2-close value="ಕೋಡ್ 2 ಮುಕ್ತಾಯವನ್ನು ಅನುಮತಿಸಿ"/>
+			<matrix-udl-allow-code2-middle value="ಕೋಡ್ 2 ಮಧ್ಯಭಾಗವನ್ನು ಅನುಮತಿಸಿ"/>
+			<matrix-udl-allow-code2-open value="ಕೋಡ್ 2 ಆರಂಭವನ್ನು ಅನುಮತಿಸಿ"/>
+			<matrix-udl-allow-comment-fold-close value="ಟಿಪ್ಪಣಿ ಮಡಿಕೆಯ ಮುಕ್ತಾಯವನ್ನು ಅನುಮತಿಸಿ"/>
+			<matrix-udl-allow-comment-fold-middle value="ಟಿಪ್ಪಣಿ ಮಡಿಕೆಯ ಮಧ್ಯಭಾಗವನ್ನು ಅನುಮತಿಸಿ"/>
+			<matrix-udl-allow-comment-fold-open value="ಟಿಪ್ಪಣಿ ಮಡಿಕೆಯ ಆರಂಭವನ್ನು ಅನುಮತಿಸಿ"/>
+			<matrix-udl-choose-json value="JSON ಸ್ವರೂಪದ UDL ವ್ಯಾಖ್ಯಾನ ಕಡತ ಆಯ್ಕೆಮಾಡಿ"/>
+			<matrix-udl-close value="ಬಳಕೆದಾರ ನಿರ್ಧರಿಸಿದ ಭಾಷೆಯನ್ನು ಮುಚ್ಚಿ"/>
+			<matrix-udl-close-styler value="ಶೈಲಿ ಸಂಪಾದಕವನ್ನು ಮುಚ್ಚಿ"/>
+			<matrix-udl-colors value="ಬಣ್ಣಗಳು"/>
+			<matrix-udl-dark-mode-language value="ಗಾಢ ಸ್ಥಿತಿಯ ಭಾಷೆ"/>
+			<matrix-udl-definition-exported value="ವ್ಯಾಖ್ಯಾನ ರಫ್ತಾಗಿದೆ"/>
+			<matrix-udl-definitions-saved value="ವ್ಯಾಖ್ಯಾನಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ"/>
+			<matrix-udl-enable-font value="ಅಕ್ಷರಶೈಲಿ ಸಕ್ರಿಯಗೊಳಿಸಿ"/>
+			<matrix-udl-error value="ಬಳಕೆದಾರ ನಿರ್ಧರಿಸಿದ ಭಾಷೆಯ ದೋಷ: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL ಕಡತ ಕಾರ್ಯ ವಿಫಲವಾಗಿದೆ: $ERROR$"/>
+			<matrix-udl-file-progress value="ಕಡತ ಕಾರ್ಯ ನಡೆಯುತ್ತಿದೆ…"/>
+			<matrix-udl-import-rejected value="ಆಮದು ತಿರಸ್ಕರಿಸಲಾಗಿದೆ: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ ಭಾಷೆಗಳನ್ನು ಆಮದು ಮಾಡಲಾಗಿದೆ"/>
+			<matrix-udl-live-edits value="ಬಳಕೆದಾರ ನಿರ್ಧರಿಸಿದ ಭಾಷೆ — ಈ ಭಾಷೆ ಬಳಸುವ ದಸ್ತಾವೇಜುಗಳಿಗೆ ಮಾತ್ರ ಸಂಪಾದನೆಗಳು ತಕ್ಷಣ ಅನ್ವಯಿಸುತ್ತವೆ"/>
+			<matrix-udl-loading value="ವ್ಯಾಖ್ಯಾನಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ…"/>
+			<matrix-udl-memory-only value="ವ್ಯಾಖ್ಯಾನಗಳು ಸ್ಮರಣೆಯಲ್ಲಿ ಮಾತ್ರ ಇವೆ (ಸಂರಚನೆ ಕೋಶವಿಲ್ಲ)"/>
+			<matrix-udl-missing-ids value="ಬಳಕೆದಾರ ನಿರ್ಧರಿಸಿದ ಭಾಷೆಯ ಗುರುತುಗಳು ಕಾಣೆಯಾಗಿವೆ: $IDS$. ದಸ್ತಾವೇಜಿನ ಪಠ್ಯ ಮತ್ತು ಉಳಿಸಿದ ಭಾಷೆಯ ಗುರುತುಗಳನ್ನು ಸಂರಕ್ಷಿಸಲಾಗಿದೆ. ವ್ಯಾಖ್ಯಾನಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಿ ಅಥವಾ ಸ್ಪಷ್ಟವಾಗಿ ಬೇರೊಂದು ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ."/>
+			<matrix-udl-open-panel-disconnected value="UDL ತೆರೆಯುವ ಫಲಕದ ಸಂಪರ್ಕ ಕಡಿತಗೊಂಡಿದೆ: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="ಹೆಸರಿರುವ ಈ ವ್ಯಾಖ್ಯಾನವನ್ನು ತೆಗೆದುಹಾಕಬೇಕೇ? ಈಗಿರುವ ದಸ್ತಾವೇಜುಗಳು ತಮ್ಮ ಪಠ್ಯವನ್ನು ಉಳಿಸಿಕೊಂಡು ಬಳಕೆದಾರ ನಿರ್ಧರಿಸಿದ ಹೆಸರಿಲ್ಲದ ಭಾಷೆಗೆ ಬದಲಾಗುತ್ತವೆ."/>
+			<matrix-udl-retry-file value="UDL ಕಡತ ಕಾರ್ಯವನ್ನು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ"/>
+			<matrix-udl-save-panel-disconnected value="UDL ಉಳಿಸುವ ಫಲಕದ ಸಂಪರ್ಕ ಕಡಿತಗೊಂಡಿದೆ: $ERROR$"/>
+			<matrix-udl-unavailable value="ವ್ಯಾಖ್ಯಾನಗಳು ಲಭ್ಯವಿಲ್ಲ; udl.json ಸರಿಪಡಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."/>
+			<matrix-udl-use-background value="ಹಿನ್ನೆಲೆ ಬಳಸಿ"/>
+			<matrix-udl-use-foreground value="ಮುನ್ನೆಲೆ ಬಳಸಿ"/>
+			<matrix-udl-working-copy value="ಬಳಕೆದಾರ ನಿರ್ಧರಿಸಿದ (ಕೆಲಸದ ಪ್ರತಿ)"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

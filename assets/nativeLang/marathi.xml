@@ -594,5 +594,65 @@
 				<Item id="2" name="रद्द"/>
 			</ColumnEditor>
 		</Dialog>
+		<MiscStrings>
+			<common-ok value="ठीक"/>
+			<common-cancel value="रद्द करा"/>
+			<common-name value="नाव"/>
+			<discover-file-candidates-title value="संभाव्य फायली शोधत आहे..."/>
+			<matrix-close value="बंद"/>
+			<matrix-retry value="पुन्हा प्रयत्न करा"/>
+			<matrix-cancelled value="रद्द केले"/>
+			<matrix-read-only value="फक्त वाचण्यासाठी"/>
+			<matrix-find-status-details value="स्थितीचे तपशील"/>
+			<matrix-find-backward-unavailable value="नियमित व्यंजक वापरून मागे शोधणे अक्षम आहे"/>
+			<matrix-hash-select-files value="फायली निवडा"/>
+			<matrix-hash-calculating value="हॅश मूल्य मोजत आहे…"/>
+			<matrix-hash-selection-failed value="फाइल निवडणे अयशस्वी झाले: $ERROR$"/>
+			<matrix-hash-read-failed value="पुढील फायली वाचता आल्या नाहीत:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="त्रुटी संदेश बंद करा"/>
+			<matrix-hash-file-paths value="फाइल मार्ग (फक्त वाचण्यासाठी)"/>
+			<matrix-hash-digest-result value="हॅश निकाल (फक्त वाचण्यासाठी)"/>
+			<matrix-hash-source-text value="हॅशचा स्रोत मजकूर"/>
+			<matrix-hash-selection-composition value="इनपुट रचना सुरू असताना निवडलेल्या मजकुराचा हॅश मोजणे अद्याप लागू केलेले नाही"/>
+			<matrix-hash-selection-read-failed value="निवडलेला मजकूर वाचता आला नाही: $ERROR$"/>
+			<matrix-window-activation-failed value="निवडलेल्या फाइलवर जाता आले नाही"/>
+			<matrix-window-selection-unavailable value="निवडलेली फाइल बंद आहे किंवा सक्रिय करता येत नाही"/>
+			<matrix-incremental-position value="क्रमिक शोध पट्टी हलवा"/>
+			<matrix-find-progress-bar value="प्रगती पट्टी"/>
+			<matrix-find-previous-search value="मागील शोध दाखवा"/>
+			<matrix-find-results-summary value="शोध निकाल - ($INT_REPLACE$ जुळण्या)"/>
+			<matrix-udl-allow-code2-close value="कोड 2 च्या समाप्तीला परवानगी द्या"/>
+			<matrix-udl-allow-code2-middle value="कोड 2 च्या मधल्या भागाला परवानगी द्या"/>
+			<matrix-udl-allow-code2-open value="कोड 2 च्या सुरुवातीला परवानगी द्या"/>
+			<matrix-udl-allow-comment-fold-close value="टिप्पणी दुमडण्याच्या समाप्तीला परवानगी द्या"/>
+			<matrix-udl-allow-comment-fold-middle value="टिप्पणी दुमडण्याच्या मधल्या भागाला परवानगी द्या"/>
+			<matrix-udl-allow-comment-fold-open value="टिप्पणी दुमडण्याच्या सुरुवातीला परवानगी द्या"/>
+			<matrix-udl-choose-json value="JSON स्वरूपातील UDL व्याख्या फाइल निवडा"/>
+			<matrix-udl-close value="वापरकर्त्याने परिभाषित केलेली भाषा बंद करा"/>
+			<matrix-udl-close-styler value="शैली संरचक बंद करा"/>
+			<matrix-udl-colors value="रंग"/>
+			<matrix-udl-dark-mode-language value="गडद मोडची भाषा"/>
+			<matrix-udl-definition-exported value="व्याख्या निर्यात केली"/>
+			<matrix-udl-definitions-saved value="व्याख्या जतन केल्या"/>
+			<matrix-udl-enable-font value="अक्षरशैली सक्षम करा"/>
+			<matrix-udl-error value="वापरकर्त्याने परिभाषित केलेल्या भाषेची त्रुटी: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL फाइल क्रिया अयशस्वी झाली: $ERROR$"/>
+			<matrix-udl-file-progress value="फाइल क्रिया सुरू आहे…"/>
+			<matrix-udl-import-rejected value="आयात नाकारली: $ERROR$"/>
+			<matrix-udl-imported value="$COUNT$ भाषा आयात केल्या"/>
+			<matrix-udl-live-edits value="वापरकर्त्याने परिभाषित केलेली भाषा — बदल फक्त ही भाषा वापरणाऱ्या दस्तऐवजांना त्वरित लागू होतात"/>
+			<matrix-udl-loading value="व्याख्या लोड होत आहेत…"/>
+			<matrix-udl-memory-only value="व्याख्या फक्त स्मृतीत आहेत (संरचना निर्देशिका नाही)"/>
+			<matrix-udl-missing-ids value="वापरकर्त्याने परिभाषित केलेल्या भाषांचे आयडी उपलब्ध नाहीत: $IDS$. दस्तऐवजाचा मजकूर आणि जतन केलेल्या भाषांच्या ओळखी कायम ठेवल्या आहेत. व्याख्या पुनर्संचयित करा किंवा स्पष्टपणे दुसरी भाषा निवडा."/>
+			<matrix-udl-open-panel-disconnected value="UDL उघडण्याच्या पटलाचा संपर्क तुटला: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="ही नाव दिलेली व्याख्या काढून टाकायची? सध्याचे दस्तऐवज त्यांचा मजकूर कायम ठेवतील आणि नाव नसलेल्या वापरकर्ता-परिभाषित भाषेवर जातील."/>
+			<matrix-udl-retry-file value="UDL फाइल क्रिया पुन्हा करा"/>
+			<matrix-udl-save-panel-disconnected value="UDL जतन करण्याच्या पटलाचा संपर्क तुटला: $ERROR$"/>
+			<matrix-udl-unavailable value="व्याख्या उपलब्ध नाहीत; udl.json दुरुस्त करा आणि पुन्हा प्रयत्न करा."/>
+			<matrix-udl-use-background value="पार्श्वभूमी वापरा"/>
+			<matrix-udl-use-foreground value="अग्रभाग वापरा"/>
+			<matrix-udl-working-copy value="वापरकर्त्याने परिभाषित केलेली (कार्य प्रत)"/>
+			<matrix-find-resize-results value="शोध निकालांचा आकार बदला"/>
+		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

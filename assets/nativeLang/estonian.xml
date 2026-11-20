@@ -980,6 +980,11 @@ Pärast faili salvestamist tuleb muudatuste rakendamiseks Notepad++ uuesti käiv
 			</Menus>
 		</ProjectManager>
 		<MiscStrings>
+			<matrix-find-resize-results value="Muuda otsingutulemuste suurust"/>
+			<common-ok value="Olgu"/>
+			<common-cancel value="Loobu"/>
+			<common-name value="Nimi"/>
+			<discover-file-candidates-title value="Sobivate failide otsimine…"/>
 			<word-chars-list-tip value="Siin saab lisada tähemärke sõna tähemärkide loendisse, kui kasutada topeltklõpsuga valimist või otsimist terve sõna kaupa."/>
 			<word-chars-list-warning-begin value="Teadmiseks: "/>
 			<!-- $INT_REPLACE$ is a place holder, don't translate it -->
@@ -989,6 +994,59 @@ Pärast faili salvestamist tuleb muudatuste rakendamiseks Notepad++ uuesti käiv
 			<word-chars-list-warning-end value=" tähemärkide loendis."/>
 			<cloud-invalid-warning value="Vigane rada."/>
 			<cloud-restart-warning value="Palun taaskäivita muudatuste rakendamiseks Notepad++."/>
+			<matrix-close value="Sulge"/>
+			<matrix-retry value="Proovi uuesti"/>
+			<matrix-cancelled value="Tühistatud"/>
+			<matrix-read-only value="Kirjutuskaitstud"/>
+			<matrix-find-status-details value="Oleku üksikasjad"/>
+			<matrix-find-backward-unavailable value="Tagasisuunas regulaaravaldise otsing on keelatud"/>
+			<matrix-hash-select-files value="Vali failid"/>
+			<matrix-hash-calculating value="Räsi arvutamine…"/>
+			<matrix-hash-selection-failed value="Failide valimine nurjus: $ERROR$"/>
+			<matrix-hash-read-failed value="Järgmisi faile ei saa lugeda:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Sulge veateade"/>
+			<matrix-hash-file-paths value="Failide teed (kirjutuskaitstud)"/>
+			<matrix-hash-digest-result value="Räsi tulemus (kirjutuskaitstud)"/>
+			<matrix-hash-source-text value="Räsi lähtetekst"/>
+			<matrix-hash-selection-composition value="Valiku räsimine aktiivse tekstikoostamise ajal pole veel teostatud"/>
+			<matrix-hash-selection-read-failed value="Valikut ei saa lugeda: $ERROR$"/>
+			<matrix-window-activation-failed value="Valitud failile ei saa lülituda"/>
+			<matrix-window-selection-unavailable value="Valitud fail on suletud või seda ei saa aktiveerida"/>
+			<matrix-incremental-position value="Teisalda sammhaaval otsingu riba"/>
+			<matrix-find-progress-bar value="Edenemisriba"/>
+			<matrix-find-previous-search value="Kuva eelmine otsing"/>
+			<matrix-find-results-summary value="Otsingutulemused - ($INT_REPLACE$ vastet)"/>
+			<matrix-udl-allow-code2-close value="Luba koodi 2 sulgemine"/>
+			<matrix-udl-allow-code2-middle value="Luba koodi 2 keskosa"/>
+			<matrix-udl-allow-code2-open value="Luba koodi 2 avamine"/>
+			<matrix-udl-allow-comment-fold-close value="Luba kommentaari voltimise lõpp"/>
+			<matrix-udl-allow-comment-fold-middle value="Luba kommentaari voltimise keskosa"/>
+			<matrix-udl-allow-comment-fold-open value="Luba kommentaari voltimise algus"/>
+			<matrix-udl-choose-json value="Vali JSON-vormingus UDL-i definitsioonifail"/>
+			<matrix-udl-close value="Sulge kasutaja määratud keel"/>
+			<matrix-udl-close-styler value="Sulge stiiliseadistaja"/>
+			<matrix-udl-colors value="Värvid"/>
+			<matrix-udl-dark-mode-language value="Tumeda režiimi keel"/>
+			<matrix-udl-definition-exported value="Definitsioon eksporditud"/>
+			<matrix-udl-definitions-saved value="Definitsioonid salvestatud"/>
+			<matrix-udl-enable-font value="Luba font"/>
+			<matrix-udl-error value="Kasutaja määratud keele viga: $ERROR$"/>
+			<matrix-udl-file-failed value="UDL-i failitoiming nurjus: $ERROR$"/>
+			<matrix-udl-file-progress value="Failitoiming on pooleli…"/>
+			<matrix-udl-import-rejected value="Import lükati tagasi: $ERROR$"/>
+			<matrix-udl-imported value="Imporditud keeli: $COUNT$"/>
+			<matrix-udl-live-edits value="Kasutaja määratud keel — muudatused rakenduvad kohe ainult seda keelt kasutavatele dokumentidele"/>
+			<matrix-udl-loading value="Definitsioonide laadimine…"/>
+			<matrix-udl-memory-only value="Definitsioonid on ainult mälus (seadistuskataloog puudub)"/>
+			<matrix-udl-missing-ids value="Puuduvad kasutaja määratud keelte ID-d: $IDS$. Dokumentide tekst ja salvestatud keelte identiteedid säilitati. Taasta definitsioonid või vali selgesõnaliselt teine keel."/>
+			<matrix-udl-open-panel-disconnected value="UDL-i avamispaneeli ühendus katkes: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Kas eemaldada see nimega definitsioon? Olemasolevate dokumentide tekst säilib ja need lülituvad nimeta kasutaja määratud keelele."/>
+			<matrix-udl-retry-file value="Proovi UDL-i failitoimingut uuesti"/>
+			<matrix-udl-save-panel-disconnected value="UDL-i salvestuspaneeli ühendus katkes: $ERROR$"/>
+			<matrix-udl-unavailable value="Definitsioonid pole saadaval; paranda udl.json ja proovi uuesti."/>
+			<matrix-udl-use-background value="Kasuta tausta"/>
+			<matrix-udl-use-foreground value="Kasuta esiplaani"/>
+			<matrix-udl-working-copy value="Kasutaja määratud (töökoopia)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

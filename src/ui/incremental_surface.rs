@@ -33,6 +33,7 @@ pub(super) struct State {
     top: bool,
     previous: String,
     message: String,
+    status: Option<&'static str>,
     matches: Vec<std::ops::Range<ByteOffset>>,
     counted_revision: Option<Arc<()>>,
 }
@@ -58,6 +59,7 @@ impl State {
             top: false,
             previous: String::new(),
             message: String::new(),
+            status: None,
             matches: Vec::new(),
             counted_revision: None,
         }
@@ -70,6 +72,7 @@ impl MatrixWindow {
             self.incremental.matches.clear();
             self.incremental.counted_revision = None;
             self.incremental.message.clear();
+            self.incremental.status = None;
         }
     }
 
@@ -146,6 +149,7 @@ impl MatrixWindow {
         cx: &mut Context<Self>,
     ) {
         let query = self.incremental.input.read(cx).text();
+        self.incremental.status = None;
         let bytes = self.editor().document().byte_snapshot();
         let options = crate::search::LiteralOptions {
             match_case: self.incremental.match_case,
@@ -189,17 +193,19 @@ impl MatrixWindow {
                 self.editor_changed(result, window, cx);
                 let ranges = &self.incremental.matches;
                 let nth = ranges.iter().position(|range| *range == found.range).map_or(0, |index| index + 1);
-                let mut message = if ranges.is_empty() { String::new() }
+                let message = if ranges.is_empty() { String::new() }
                     else { format!("{}/{}", crate::finder::commafy(nth), crate::finder::commafy(ranges.len())) };
                 if found.wrapped {
-                    if !message.is_empty() { message.push_str(" - "); }
-                    message.push_str(if direction == Some(true) {
-                        "已到达页面顶部，从底部继续"
-                    } else { "已到达页面底部，从顶部继续" });
+                    self.incremental.status = Some(if direction == Some(true) {
+                        "IncrementalFind-FSTopReached"
+                    } else { "IncrementalFind-FSEndReached" });
                 }
                 self.incremental.message = message;
             }
-            Ok(None) => self.incremental.message = "未找到匹配项".into(),
+            Ok(None) => {
+                self.incremental.message.clear();
+                self.incremental.status = Some("IncrementalFind-FSNotFound");
+            }
             Err(error) => self.incremental.message = error.to_string(),
         }
         if failed && case_changed {
@@ -278,7 +284,19 @@ impl MatrixWindow {
         if !self.incremental.visible {
             return None;
         }
-        Some(
+        let locale = self.native_locale();
+        let label = |id, fallback| crate::localization::dialog_control(&locale, "IncrementalFind", id).unwrap_or(fallback);
+        let close = crate::localization::localized_string(&locale, "close-panel-tip").unwrap_or("Close");
+        let position = crate::localization::localized_string(&locale, "matrix-incremental-position").unwrap_or("Move incremental search bar");
+        let previous = crate::localization::menu_command(&locale, 43010).unwrap_or("Find Previous");
+        let next = crate::localization::dialog_control(&locale, "Find", 1).unwrap_or("Find Next");
+        self.incremental.input.update(cx, |field, cx| field.set_label(label(1681, "Find:"), cx));
+        let mut message = self.incremental.message.clone();
+        if let Some(status) = self.incremental.status {
+            if !message.is_empty() { message.push_str(" - "); }
+            message.push_str(crate::localization::localized_string(&locale, status).unwrap_or(""));
+        }
+        Some(crate::localization::with_dialog(&locale, "IncrementalFind", || {
             div()
                 .id("incremental-search")
                 .key_context("MatrixIncremental")
@@ -326,13 +344,13 @@ impl MatrixWindow {
                 .font_family(dialog_font::font_family())
                 .text_size(px(13.))
                 .child(
-                    incremental_button("incremental-close", "关闭增量查找", 0, cx).child("✕"),
+                    incremental_button("incremental-close", close, 0, cx).child("✕"),
                 )
                 .child(
-                    incremental_button("incremental-position", "切换增量查找栏位置", 1, cx)
+                    incremental_button("incremental-position", position, 1, cx)
                         .child(if self.incremental.top { "˅" } else { "˄" }),
                 )
-                .child("查找:")
+                .child(label(1681, "Find:"))
                 .child(
                     div()
                         .w(px(230.))
@@ -349,7 +367,7 @@ impl MatrixWindow {
                     ]
                     .into_iter()
                     .map(|(backwards, id, label)| {
-                        incremental_button(id, if backwards { "上一个" } else { "下一个" }, if backwards { 3 } else { 4 }, cx)
+                        incremental_button(id, if backwards { previous } else { next }, if backwards { 3 } else { 4 }, cx)
                             .w(px(24.))
                             .text_center()
                             .child(label)
@@ -360,16 +378,16 @@ impl MatrixWindow {
                         (
                             0,
                             "incremental-case",
-                            "匹配大小写(C)",
+                            label(1685, "Match case"),
                             self.incremental.match_case,
                         ),
                         (
                             1,
                             "incremental-highlight",
-                            "全部高亮(H)",
+                            label(1690, "Highlight all"),
                             self.incremental.highlight,
                         ),
-                        (2, "incremental-count", "Count", self.incremental.count),
+                        (2, "incremental-count", label(1691, "Count"), self.incremental.count),
                     ]
                     .into_iter()
                     .map(|(index, id, label, checked)| {
@@ -383,9 +401,9 @@ impl MatrixWindow {
                             }))
                     }),
                 )
-                .child(self.incremental.message.clone())
-                .into_any_element(),
-        )
+                .child(message)
+                .into_any_element()
+        }))
     }
 }
 

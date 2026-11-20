@@ -1954,6 +1954,60 @@ Ha a „Haladó szintű” módot választja, de nem a fenti nyelvek fájljait s
 			<networkpathwarning-serverwhitelist-tip value="Az aktuális fájl szerverének hozzáadása a Notepad++ serverWhiteList.xml fájljához.
 
 További információkért kattintson a gombra az online Felhasználói kézikönyv kapcsolódó szakaszának megnyitásához"/>
+			<matrix-close value="Bezárás"/>
+			<matrix-retry value="Újra"/>
+			<matrix-cancelled value="Megszakítva"/>
+			<matrix-read-only value="Csak olvasható"/>
+			<matrix-find-status-details value="Állapot részletei"/>
+			<matrix-find-backward-unavailable value="A reguláris kifejezések visszafelé keresése le van tiltva"/>
+			<matrix-hash-select-files value="Fájlok kiválasztása"/>
+			<matrix-hash-calculating value="Kivonat számítása…"/>
+			<matrix-hash-selection-failed value="A fájlok kiválasztása sikertelen: $ERROR$"/>
+			<matrix-hash-read-failed value="A következő fájlok nem olvashatók:&#10;$FILES$"/>
+			<matrix-hash-dismiss-error value="Hibaüzenet bezárása"/>
+			<matrix-hash-file-paths value="Fájlútvonalak (csak olvasható)"/>
+			<matrix-hash-digest-result value="Kivonat eredménye (csak olvasható)"/>
+			<matrix-hash-source-text value="A kivonat forrásszövege"/>
+			<matrix-hash-selection-composition value="A kijelölés kivonatának számítása aktív szövegkompozíció közben még nincs megvalósítva"/>
+			<matrix-hash-selection-read-failed value="A kijelölés nem olvasható: $ERROR$"/>
+			<matrix-window-activation-failed value="Nem lehet a kiválasztott fájlra váltani"/>
+			<matrix-window-selection-unavailable value="A kiválasztott fájl be van zárva, vagy nem aktiválható"/>
+			<matrix-incremental-position value="Inkrementális keresősáv áthelyezése"/>
+			<matrix-find-progress-bar value="Folyamatjelző"/>
+			<matrix-find-previous-search value="Előző keresés megjelenítése"/>
+			<matrix-find-resize-results value="Keresési eredmények átméretezése"/>
+			<matrix-find-results-summary value="Keresési eredmények - ($INT_REPLACE$ találat)"/>
+			<matrix-udl-allow-code2-close value="2. kódblokk lezárásának engedélyezése"/>
+			<matrix-udl-allow-code2-middle value="2. kódblokk középső elemének engedélyezése"/>
+			<matrix-udl-allow-code2-open value="2. kódblokk megnyitásának engedélyezése"/>
+			<matrix-udl-allow-comment-fold-close value="Megjegyzésblokk-összecsukás lezárásának engedélyezése"/>
+			<matrix-udl-allow-comment-fold-middle value="Megjegyzésblokk-összecsukás középső elemének engedélyezése"/>
+			<matrix-udl-allow-comment-fold-open value="Megjegyzésblokk-összecsukás kezdetének engedélyezése"/>
+			<matrix-udl-choose-json value="JSON formátumú UDL-definíciós fájl kiválasztása"/>
+			<matrix-udl-close value="Felhasználói nyelv bezárása"/>
+			<matrix-udl-close-styler value="Stílusbeállítás bezárása"/>
+			<matrix-udl-colors value="Színek"/>
+			<matrix-udl-dark-mode-language value="Sötét mód nyelve"/>
+			<matrix-udl-definition-exported value="Definíció exportálva"/>
+			<matrix-udl-definitions-saved value="Definíciók mentve"/>
+			<matrix-udl-enable-font value="Betűtípus engedélyezése"/>
+			<matrix-udl-error value="Felhasználói nyelv hibája: $ERROR$"/>
+			<matrix-udl-file-failed value="Az UDL-fájlművelet sikertelen: $ERROR$"/>
+			<matrix-udl-file-progress value="Fájlművelet folyamatban…"/>
+			<matrix-udl-import-rejected value="Importálás elutasítva: $ERROR$"/>
+			<matrix-udl-imported value="Importált nyelvek száma: $COUNT$"/>
+			<matrix-udl-live-edits value="Felhasználói nyelv — a módosítások azonnal csak az ezt a nyelvet használó dokumentumokban érvényesülnek"/>
+			<matrix-udl-loading value="Definíciók betöltése…"/>
+			<matrix-udl-memory-only value="A definíciók csak a memóriában vannak (nincs konfigurációs könyvtár)"/>
+			<matrix-udl-missing-ids value="Hiányzó felhasználóinyelv-azonosítók: $IDS$. A dokumentumok szövege és a mentett nyelvazonosítók megmaradtak. Állítsa vissza a definíciókat, vagy válasszon kifejezetten másik nyelvet a Nyelv menüben."/>
+			<matrix-udl-open-panel-disconnected value="Az UDL megnyitási párbeszédpanel kapcsolata megszakadt: $ERROR$"/>
+			<matrix-udl-remove-confirmation value="Eltávolítja ezt az elnevezett definíciót? A meglévő dokumentumok szövege megmarad, és a névtelen felhasználói nyelvre váltanak."/>
+			<matrix-udl-retry-file value="UDL-fájlművelet újrapróbálása"/>
+			<matrix-udl-save-panel-disconnected value="Az UDL mentési párbeszédpanel kapcsolata megszakadt: $ERROR$"/>
+			<matrix-udl-unavailable value="A definíciók nem érhetők el; javítsa az udl.json fájlt, és próbálja újra."/>
+			<matrix-udl-use-background value="Háttérszín használata"/>
+			<matrix-udl-use-foreground value="Betűszín használata"/>
+			<matrix-udl-working-copy value="Felhasználói nyelv (munkapéldány)"/>
 		</MiscStrings>
 	</Native-Langue>
 </NotepadPlus>

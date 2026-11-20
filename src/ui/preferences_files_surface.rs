@@ -1,6 +1,6 @@
 use super::*;
 use super::dialog_font::px;
-use super::preferences_surface::{Commit, FieldSpec, Page, pref_group, pref_label, pref_label_right};
+use super::preferences_surface::{Commit, FieldSpec, Page, pref_group, pref_label, pref_label_right, horizontal, horizontal_px};
 use gpui::Entity;
 use super::text_field::RenderPalette;
 use serde_json::{Value, json};
@@ -127,11 +127,11 @@ impl MatrixWindow {
         }
         let add = ready && if custom { MacAssociations::extension(&state.custom_extension.read(cx).text()).is_ok() } else { state.selected_extension.is_some() };
         let remove = ready && state.selected_registered.as_ref().is_some_and(|extension| state.associations.iter().any(|entry| entry.extension == *extension && entry.is_current_application && entry.has_backup));
-        if available_count as f32 * 14. > 153. * 1.75 - 2. { available = available.pr(px(12.)); }
-        if registered_count as f32 * 14. > 153. * 1.75 - 2. { registered = registered.pr(px(12.)); }
+        if available_count as f32 * 14. > 153. * 1.75 - 2. { available = available.pr(horizontal_px(12.)); }
+        if registered_count as f32 * 14. > 153. * 1.75 - 2. { registered = registered.pr(horizontal_px(12.)); }
         let status = state.association_status.clone();
         let custom_field = state.custom_extension.clone();
-        let mut body = div().relative().w(px(805.)).h(px(358.75)).text_size(px(12.)).line_height(px(14.)).bg(rgb(palette.pure_background)).text_color(rgb(palette.text))
+        let mut body = div().relative().w(horizontal_px(805.)).h(px(358.75)).text_size(px(12.)).line_height(px(14.)).bg(rgb(palette.pure_background)).text_color(rgb(palette.text))
             .on_mouse_move(cx.listener(|view,event,_,cx| view.preferences_association_scroll_move(event,cx)))
             .on_mouse_up(MouseButton::Left,cx.listener(|view,_,_,_| {
                 for grab in &view.preferences.files.association_scroll_grab { grab.set(None); }
@@ -165,7 +165,7 @@ impl MatrixWindow {
         let paint_scroll = scroll.clone();
         let grab = self.preferences.files.association_scroll_grab[index].clone();
         let height = 153. * 1.75 - 2.;
-        at(x,30.,width,153.).child(div().absolute().right(px(1.)).top(px(1.)).w(px(12.)).h(px(height))
+        at(x,30.,width,153.).child(div().absolute().right(horizontal_px(1.)).top(px(1.)).w(horizontal_px(12.)).h(px(height))
             .id(format!("pref-association-scrollbar-{index}")).role(Role::ScrollBar).aria_orientation(gpui::accesskit::Orientation::Vertical)
             .map(|element| preferences_editing_surface::scrollbar_accessibility(element, scroll.clone()))
             .on_mouse_down(MouseButton::Left,cx.listener(move |_,event: &gpui::MouseDownEvent,_,cx| {
@@ -191,7 +191,7 @@ impl MatrixWindow {
                 let travel = height - thumb_height;
                 let offset = (-dialog_font::logical(paint_scroll.offset().y)).clamp(0.,maximum);
                 let top = if maximum > 0. { offset / maximum * travel } else { 0. };
-                let thumb = gpui::Bounds::new(gpui::point(bounds.left() + px(2.),bounds.top() + px(top)),gpui::size(px(8.),px(thumb_height)));
+                let thumb = gpui::Bounds::new(gpui::point(bounds.left() + horizontal_px(2.),bounds.top() + px(top)),gpui::size(horizontal_px(8.),px(thumb_height)));
                 window.paint_quad(gpui::fill(thumb,rgb(palette.disabled_text)));
             }).size_full())).into_any_element()
     }
@@ -835,7 +835,21 @@ impl MatrixWindow {
     }
 
     fn preferences_backup_path(&mut self,enabled: bool,window: &mut Window,cx: &mut Context<Self>) -> AnyElement {
-        let value = self.settings_store.as_ref().map(|store| store.root().join("backup").display().to_string()).unwrap_or_default();
+        let current = self.settings_store.as_ref().map(|store| store.root().join("backup").display().to_string()).unwrap_or_default();
+        let value = match crate::config_directory::snapshot() {
+            Ok(snapshot) => snapshot.pending_root().join("backup").display().to_string(),
+            Err(error) => {
+                let message = crate::localization::Text::resource("ConfigDirectoryBackupReadFailed", "Could not read the backup directory: $ERROR$")
+                    .replace("$ERROR$", crate::config_directory::error_text(&error, &self.native_locale()));
+                self.notify_localized_editor_error(message,cx);
+                current.clone()
+            }
+        };
+        let details = if value == current { value.clone() } else {
+            crate::localization::Text::resource("ConfigDirectoryBackupRestartDetails", "Current backup: $CURRENT$\nBackup after restart: $NEXT$\nRestart required. Existing backups will not be moved.")
+                .replace("$CURRENT$", current).replace("$NEXT$", value.clone()).render(&self.native_locale())
+        };
+        let dark = self.dark;
         let entity = self.preferences.files.backup_path.clone();
         super::preferences_surface::sync_text_field_palette(&entity,self.preferences_render_palette(),cx);
         if self.preferences.files.backup_path_value != value {
@@ -843,7 +857,8 @@ impl MatrixWindow {
             entity.update(cx,|field,cx| field.set_text(&value,window,cx));
         }
         entity.update(cx,|field,cx| { if field.enabled() != enabled { field.set_enabled(enabled,cx); } });
-        at(92.,65.,342.,12.).child(entity).into_any_element()
+        at(92.,65.,342.,12.).id("pref-backup-root")
+            .tooltip(move |_,cx| icon_tooltip::view(details.clone(),dark,cx)).child(entity).into_any_element()
     }
 
     pub(super) fn apply_file_preferences(&mut self,settings: &Value,window: &mut Window,cx: &mut Context<Self>) {
@@ -966,7 +981,7 @@ impl MatrixWindow {
             self.preferences.files.uri_task = None;
         }
         let palette = self.preferences_render_palette();
-        let mut body = div().relative().w(px(805.)).h(px(358.75)).text_size(px(12.)).line_height(px(14.)).bg(rgb(palette.pure_background)).text_color(rgb(palette.text));
+        let mut body = div().relative().w(horizontal_px(805.)).h(px(358.75)).text_size(px(12.)).line_height(px(14.)).bg(rgb(palette.pure_background)).text_color(rgb(palette.text));
         macro_rules! label {
             ($s:expr,$x:expr,$y:expr,$w:expr) => { body = body.child(pref_label($s, $x * 1.75, $y * 1.75, $w * 1.75)); };
         }
@@ -1057,16 +1072,19 @@ impl MatrixWindow {
                 radio!("pref-instance-mono","默认（单实例）","multiInst.setting",0,0,17.,16.,256.);
                 radio!("pref-instance-multi","始终使用多实例模式","multiInst.setting",0,2,17.,31.,256.);
                 radio!("pref-instance-session","在新实例中打开会话（退出时自动保存会话）","multiInst.setting",0,1,17.,46.,256.);
-                group!("自定义插入日期时间",11.,80.,268.,98.);
+                group!("自定义插入日期时间",11.,80.,268.,112.);
                 check!("pref-date-reverse","颠倒日期和时间的先后顺序（短格式与长格式）","insertDateTime.reverseDefaultOrder",false,false,true,17.,93.,256.);
                 for (index,(format,example)) in [("yyyy-MM-dd HH:mm:ss","1985-10-26 16:24:42"),("H:m d/M/yyyy","16:24 26/10/1985"),("MMM d, yyyy  tt h:m","Oct 26, 1985  PM 4:24")].into_iter().enumerate() {
-                    let y = 118. + index as f32 * 8.;
-                    body = body.child(pref_label_right(format,36. * 1.75,y * 1.75,77. * 1.75))
-                        .child(preferences_surface::pref_value_label(example,136. * 1.75,y * 1.75,94. * 1.75));
+                    let y = 112. + index as f32 * 15.;
+                    body = body.child(pref_label_right(format,17. * 1.75,y * 1.75,118. * 1.75))
+                        .child(preferences_surface::pref_value_label(example,143. * 1.75,y * 1.75,130. * 1.75));
                 }
-                label_right!(6172,"Custom format:",14.,148.,77.);
-                input!("insertDateTime.customizedFormat",true,92.,146.,175.);
-                body = body.child(preferences_surface::pref_value_label(&self.preferences_date_preview(),94. * 1.75,163. * 1.75,180. * 1.75));
+                label_right!(6172,"Custom format:",14.,161.,77.);
+                input!("insertDateTime.customizedFormat",true,92.,159.,175.);
+                let preview = self.preferences_date_preview();
+                let preview_details = preview.clone();
+                body = body.child(at(17.,176.,256.,8.).id("pref-date-preview").text_ellipsis()
+                    .tooltip(move |_,cx| icon_tooltip::view(preview_details.clone(),palette.dark,cx)).child(preview));
                 group!("面板状态与 [-nosession] *",288.,3.,160.,181.);
                 label!("在其他实例或使用 [-nosession] 参数时，记住已打开的面板状态。",294.,14.,150.);
                 check!("pref-panel-doclist","文件列表","multiInst.documentList",false,false,true,294.,70.,134.);
@@ -1080,7 +1098,7 @@ impl MatrixWindow {
                     let module_note = crate::localization::current_string("ModulePanelsUnavailable").unwrap_or(if self.native_locale() == "chineseSimplified.xml" { "固化模块无可恢复面板" } else { "No module panels to restore" });
                     label!(module_note,294.,171.,150.);
                 }
-                label!("* 修改此设置需要重启 Notepad Matrix 才能生效",15.,187.,239.);
+                label!("* 修改此设置需要重启 Notepad Matrix 才能生效",15.,197.,433.);
             }
             Page::Performance => {
                 let enabled = self.pref_bool("largeFileRestriction.isEnabled",true);
@@ -1123,8 +1141,6 @@ impl MatrixWindow {
                 group!("文档速览",234.,47.,214.,39.);
                 check!("pref-peek-tab","在标签中启用速览","docPeekOnTab",false,false,true,242.,58.,198.);
                 check!("pref-peek-map","在文档结构图中启用速览","docPeekOnMap",false,false,true,242.,71.,198.);
-                label!("渲染模式",20.,83.,198.);
-                body = body.child(at(20.,96.,198.,12.).id("pref-rendering-mode").role(Role::ComboBox).aria_label("macOS 原生渲染").bg(rgb(palette.control_background(false))).border_1().border_color(rgb(palette.disabled_edge)).text_color(rgb(palette.disabled_text)).child("macOS 原生（GPUI）"));
                 check!("pref-mute","全部静音","muteSounds",false,false,true,20.,132.,420.);
                 check!("pref-detect-encoding","自动检测字符编码","DetectEncoding",true,false,true,20.,147.,420.);
                 check!("pref-short-title","标题栏仅显示文件名","titleBar.short",false,false,true,20.,162.,420.);
@@ -1166,7 +1182,7 @@ impl MatrixWindow {
         let label = crate::localization::current_preference_control(control).unwrap_or(label);
         let focus = self.preference_control_focus(id,cx).tab_stop(enabled);
         let palette = self.preferences_render_palette();
-        at(x,y,w,10.).id(id).role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
+        at(x,y,w,10.).id(id).role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(horizontal_px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
             if !enabled { return; }
             focus.focus(window,cx);
             view.preferences_toggle_link(key,window,cx);
@@ -1179,7 +1195,7 @@ impl MatrixWindow {
         let label = crate::localization::current_preference_control(6818).unwrap_or("Enable session snapshot and periodic backup");
         let focus = self.preference_control_focus("pref-backup-snapshot",cx).tab_stop(enabled);
         let palette = self.preferences_render_palette();
-        at(26.,32.,408.,10.).id("pref-backup-snapshot").role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
+        at(26.,32.,408.,10.).id("pref-backup-snapshot").role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(horizontal_px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
             if !enabled { return; }
             focus.focus(window,cx);
             view.preferences_toggle_snapshot(window,cx);
@@ -1211,7 +1227,7 @@ impl MatrixWindow {
         let label = crate::localization::current_preference_control(if flag == 4 { 6313 } else { 6325 }).unwrap_or(label);
         let palette = self.preferences_render_palette();
         let focus = self.preference_control_focus(id,cx).tab_stop(enabled);
-        at(20.,y,198.,10.).id(id).role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
+        at(20.,y,198.,10.).id(id).role(Role::CheckBox).track_focus(&focus).aria_label(label).aria_toggled(checked.into()).a11y_synthetic_children(move |builder| { if !enabled { builder.parent_node().set_disabled(); } }).flex().items_center().gap(horizontal_px(3.)).text_color(rgb(palette.control_text(enabled))).child(preferences_surface::pref_indicator(checked,false,enabled)).child(label).on_click(cx.listener(move |view,_,window,cx| {
             if !enabled { return; }
             focus.focus(window,cx);
             view.preferences_toggle_detection(flag,checked,window,cx);
@@ -1297,7 +1313,7 @@ impl NativeUriField {
         use objc2::runtime::AnyObject;
         use objc2_foundation::{NSPoint,NSRect,NSSize,NSString};
         unsafe {
-            let frame = NSRect::new(NSPoint::new(0.,0.),NSSize::new(dialog_font::native_length(714.),dialog_font::native_length(122.5)));
+            let frame = NSRect::new(NSPoint::new(0.,0.),NSSize::new(dialog_font::native_length(f64::from(horizontal(714.))),dialog_font::native_length(122.5)));
             let scroll: Allocated<AnyObject> = msg_send![class!(NSScrollView), alloc];
             if Allocated::as_ptr(&scroll).is_null() { return Err(io::Error::other("macOS could not allocate the URI scroll view")); }
             let scroll: Option<Retained<AnyObject>> = msg_send![scroll, initWithFrame: frame];
@@ -1314,11 +1330,11 @@ impl NativeUriField {
             let _: () = msg_send![&*text, setHorizontallyResizable: false];
             let _: () = msg_send![&*text, setVerticallyResizable: true];
             let _: () = msg_send![&*text, setMinSize: NSSize::new(0.,dialog_font::native_length(122.5))];
-            let _: () = msg_send![&*text, setMaxSize: NSSize::new(dialog_font::native_length(714.),f64::MAX)];
-            let _: () = msg_send![&*text, setTextContainerInset: NSSize::new(dialog_font::native_length(3.),dialog_font::native_length(2.))];
+            let _: () = msg_send![&*text, setMaxSize: NSSize::new(dialog_font::native_length(f64::from(horizontal(714.))),f64::MAX)];
+            let _: () = msg_send![&*text, setTextContainerInset: NSSize::new(dialog_font::native_length(f64::from(horizontal(3.))),dialog_font::native_length(2.))];
             let container: *mut AnyObject = msg_send![&*text, textContainer];
             let _: () = msg_send![container, setWidthTracksTextView: true];
-            let _: () = msg_send![container, setContainerSize: NSSize::new(dialog_font::native_length(714.),f64::MAX)];
+            let _: () = msg_send![container, setContainerSize: NSSize::new(dialog_font::native_length(f64::from(horizontal(714.))),f64::MAX)];
             let font = dialog_font::native_font();
             let _: () = msg_send![&*text, setFont: &*font];
             let _: () = msg_send![&*text, setAccessibilityLabel: &*NSString::from_str("自定义 URI 格式")];
