@@ -11,6 +11,7 @@ impl RecoveryManager {
         if !self.snapshot_mode || old_name == new_name { return Ok(()); }
         for session in &mut self.sessions {
             let Some(key) = session.buffers.get(&id) else { continue; };
+            let _maintenance = crate::backup_retention::recovery_lock(&session.store)?;
             let metadata_path = snapshot_metadata_path(key)?;
             let metadata = match session.store.load_json(&metadata_path) {
                 Ok(metadata) => metadata,

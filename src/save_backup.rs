@@ -45,6 +45,34 @@ impl SaveBackupOptions {
     }
 
     pub fn create_backup(&self, original: &Path, timestamp: &str) -> io::Result<Option<PathBuf>> {
+        Ok(self
+            .create_backup_file(original, timestamp)?
+            .map(|(path, _)| path))
+    }
+
+    pub fn create_tracked_backup(
+        &self,
+        store: &crate::config::ConfigStore,
+        original: &Path,
+        timestamp: &str,
+    ) -> io::Result<Option<PathBuf>> {
+        if self.mode == SaveBackupMode::None {
+            return Ok(None);
+        }
+        let _maintenance = crate::backup_retention::save_backup_lock(store)?;
+        crate::backup_retention::validate_registry(store)?;
+        let Some((path, file)) = self.create_backup_file(original, timestamp)? else {
+            return Ok(None);
+        };
+        crate::backup_retention::register_backup(store, &path, &file)?;
+        Ok(Some(path))
+    }
+
+    fn create_backup_file(
+        &self,
+        original: &Path,
+        timestamp: &str,
+    ) -> io::Result<Option<(PathBuf, std::fs::File)>> {
         if self.mode == SaveBackupMode::None {
             return Ok(None);
         }
@@ -87,8 +115,8 @@ impl SaveBackupOptions {
         let mut temporary = tempfile::NamedTempFile::new_in(&directory)?;
         temporary.write_all(&contents)?;
         temporary.as_file().sync_all()?;
-        temporary.persist(&target).map_err(|error| error.error)?;
-        Ok(Some(target))
+        let file = temporary.persist(&target).map_err(|error| error.error)?;
+        Ok(Some((target, file)))
     }
 }
 

@@ -5,6 +5,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::Value;
 
+#[derive(Clone)]
 pub struct ConfigStore {
     root: PathBuf,
 }
@@ -156,6 +157,7 @@ impl ConfigStore {
                 "npcShow": false,
                 "ccShow": true,
                 "muteSounds": false,
+                "backup_retention": {"enabled": true, "days": 90},
                 "features": {"html_export": true, "mime_tools": true, "converter": true}
             }),
             update,
@@ -176,6 +178,7 @@ impl ConfigStore {
     }
 
     fn validate_settings(settings: &Value) -> io::Result<()> {
+        crate::backup_retention::BackupRetentionOptions::from_settings(settings)?;
         for field in [
             "save_all_confirm",
             "statusbar_visible",

@@ -185,6 +185,7 @@ def package(binary, output, sign_identity='-', sandbox=False, entitlements=None)
             'CFBundleIdentifier': 'org.notepad-matrix.app',
             'CFBundleExecutable': 'notepad-matrix',
             'CFBundleIconFile': 'notepad-matrix.icns',
+            'LSApplicationCategoryType': 'public.app-category.developer-tools',
             'CFBundlePackageType': 'APPL',
             'CFBundleShortVersionString': version,
             'CFBundleVersion': version,

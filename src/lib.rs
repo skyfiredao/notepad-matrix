@@ -1,6 +1,7 @@
 pub const BUILD_VERSION: &str = env!("NOTEPAD_MATRIX_BUILD_VERSION");
 
 pub mod byte_buffer;
+pub mod backup_retention;
 mod byte_projection;
 pub mod byte_text;
 mod change_history;

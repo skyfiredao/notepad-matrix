@@ -1261,6 +1261,11 @@ Translation note:
 					<Item id="6822" name="备份路径:"/>
 					<Item id="6309" name="记住当前打开的文件，下次启动时继续"/>
 					<Item id="6825" name="记住上次文件状态中无法访问的文件"/>
+					<Item id="6830" name="备份保留期限"/>
+					<Item id="6831" name="自动清理过期备份"/>
+					<Item id="6832" name="保留备份:"/>
+					<Item id="6833" name="天"/>
+					<Item id="6834" name="仍用于恢复未保存内容的备份不会删除"/>
 					<Item id="6801" name="保存时备份"/>
 					<Item id="6315" name="禁用"/>
 					<Item id="6316" name="简单备份"/>
@@ -2026,6 +2031,9 @@ C, C++, Java, C#, Objective-C, PHP, JavaScript, JSP, CSS, Perl, Rust, PowerShell
 			<ConfigDirectoryReadFailed value="无法读取配置目录：$ERROR$"/>
 			<ConfigDirectoryBackupReadFailed value="无法读取备份目录：$ERROR$"/>
 			<ConfigDirectoryBackupRestartDetails value="当前备份路径：$CURRENT$&#10;重启后备份路径：$NEXT$&#10;需要重启应用。不会自动迁移现有备份。"/>
+			<BackupRetentionCleanupFailed value="部分备份未能安全清理（$COUNT$）。&#10;$PATHS$"/>
+			<BackupRetentionInspectionFailed value="无法检查备份清理：$ERROR$"/>
+			<BackupRecoveryCheckFailed value="无法检查恢复备份：$ERROR$"/>
 			<ConfigDirectoryPickerTitle value="选择自定义配置目录"/>
 			<ConfigDirectoryPickerMessage value="请选择自己的配置目录。需要重启应用，不自动迁移现有配置。"/>
 			<ConfigDirectoryRecordVersionInvalid value="配置目录记录版本无效。"/>

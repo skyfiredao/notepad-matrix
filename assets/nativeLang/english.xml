@@ -1262,6 +1262,11 @@ Translation note:
 					<Item id="6822" name="Backup path:"/>
 					<Item id="6309" name="Remember current session for next launch"/>
 					<Item id="6825" name="Remember inaccessible files from past session"/>
+					<Item id="6830" name="Backup retention"/>
+					<Item id="6831" name="Automatically delete expired backups"/>
+					<Item id="6832" name="Keep backups for:"/>
+					<Item id="6833" name="days"/>
+					<Item id="6834" name="Backups still needed to recover unsaved content are not removed"/>
 					<Item id="6801" name="Backup on save"/>
 					<Item id="6315" name="None"/>
 					<Item id="6316" name="Simple backup"/>
@@ -2025,6 +2030,9 @@ For more info, click on this button to open website with relevant User Manual se
 			<ConfigDirectoryReadFailed value="Could not read the configuration directory: $ERROR$"/>
 			<ConfigDirectoryBackupReadFailed value="Could not read the backup directory: $ERROR$"/>
 			<ConfigDirectoryBackupRestartDetails value="Current backup: $CURRENT$&#10;Backup after restart: $NEXT$&#10;Restart required. Existing backups will not be moved."/>
+			<BackupRetentionCleanupFailed value="Some backups could not be safely cleaned ($COUNT$).&#10;$PATHS$"/>
+			<BackupRetentionInspectionFailed value="Could not check backup cleanup: $ERROR$"/>
+			<BackupRecoveryCheckFailed value="Could not check recovery backups: $ERROR$"/>
 			<ConfigDirectoryPickerTitle value="Choose a custom configuration directory"/>
 			<ConfigDirectoryPickerMessage value="Choose your configuration directory. Restart required; existing configuration will not be moved."/>
 			<ConfigDirectoryRecordVersionInvalid value="Invalid configuration directory record version."/>

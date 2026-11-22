@@ -441,6 +441,19 @@ impl RecoveryManager {
     pub fn snapshot_mode(&self) -> bool {
         self.snapshot_mode
     }
+
+    pub fn has_buffer_backup(&self, id: BufferId) -> io::Result<bool> {
+        for session in &self.sessions {
+            let Some(key) = session.buffers.get(&id) else { continue; };
+            let document = match session.store.load_json(&snapshot_metadata_path(key)?) {
+                Ok(document) => document,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+                Err(error) => return Err(error),
+            };
+            return raw_backup::path(&session.store, &document)?.try_exists();
+        }
+        Ok(false)
+    }
     pub fn warnings(&self) -> &[String] {
         &self.warnings
     }
@@ -686,7 +699,7 @@ impl RecoverySession {
         Self::validate_manifest_owner(&self.key, manifest)
     }
 
-    fn validate_manifest_owner(owner: &str, manifest: &Value) -> io::Result<Vec<String>> {
+    pub(crate) fn validate_manifest_owner(owner: &str, manifest: &Value) -> io::Result<Vec<String>> {
         if manifest.get("recent_files").is_some() || manifest.get("recent_files_limit").is_some() {
             Workspace::new()
                 .configure_recent_files(manifest)
@@ -1152,6 +1165,7 @@ impl RecoverySession {
         ids: Option<&BTreeSet<BufferId>>,
         discarded: &BTreeSet<BufferId>,
     ) -> io::Result<()> {
+        let _maintenance = crate::backup_retention::recovery_lock(&self.store)?;
         validate_session_ui(workspace.session_ui())?;
         let defaults = serde_json::json!({"schema_version": 1, "snapshots": [], "next_snapshot": 1, "active": null});
         let previous_document = match self.store.load_json(&self.manifest_path()) {
@@ -1173,7 +1187,10 @@ impl RecoverySession {
                 && !(discarded.contains(&buffer.id()) && buffer.disk_file.is_none())
         }) {
             let key = self.assign(buffer.id())?;
-            if buffer.is_large_file() && previous.contains(&key) {
+            if buffer.is_modified()
+                && !discarded.contains(&buffer.id())
+                && (buffer.is_large_file() || !self.snapshot_mode)
+                && previous.contains(&key) {
                 keys.push(key.clone());
             } else if self.snapshot_mode
                 && buffer.is_modified()
@@ -1453,6 +1470,7 @@ impl RecoverySnapshot {
     }
 
     pub fn save(&self, store: &ConfigStore, key: &str) -> io::Result<()> {
+        let _maintenance = crate::backup_retention::recovery_lock(store)?;
         self.save_with_modification(store, key, false)
     }
 

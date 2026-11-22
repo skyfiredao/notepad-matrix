@@ -26,6 +26,7 @@ pub(super) fn fields() -> Vec<FieldSpec> {
         FieldSpec::text("openSaveDir.defaultDirPath", "", 259),
         FieldSpec::integer("recent_files_limit", 10, 0, 30, Commit::Blur),
         FieldSpec::integer("snapshot_backup_ms", 7, 1, i64::MAX / 1000, Commit::Immediate).with_scale(1000),
+        FieldSpec::integer("backup_retention.days", 90, 1, i64::MAX / 86400, Commit::Blur),
         FieldSpec::text("backup_directory", "", 259),
         FieldSpec::text("insertDateTime.customizedFormat", "yyyy-MM-dd HH:mm:ss", 255),
         FieldSpec::text("sessionExt", "", 259),
@@ -571,6 +572,11 @@ pub(super) fn files_changed(path: &str, settings: &mut Value) -> io::Result<()> 
 }
 
 pub(super) fn normalize_files_settings(settings: &mut Value) -> io::Result<()> {
+    for (path,default) in [("backup_retention.enabled",json!(true)),("backup_retention.days",json!(90))] {
+        if super::preferences_surface::value_at(settings,path).is_null() {
+            super::preferences_surface::write_value(settings,path,default)?;
+        }
+    }
     for (new,old) in [
         ("SaveAllConfirm","save_all_confirm"),
         ("KeepSessionAbsentFileEntries","keepSessionAbsentFileEntries"),
@@ -905,6 +911,7 @@ impl MatrixWindow {
             }
             self.preferences.files.recovery_options = Some(options);
             self.preferences_apply_large_file_open_policy(window,cx);
+            self.configure_backup_retention(settings,cx)?;
             Ok(())
         })();
         if let Err(error) = result { self.notify_editor_error(format!("文件首选项无法应用: {error}"),cx); }
@@ -1055,17 +1062,26 @@ impl MatrixWindow {
                 label_right_enabled!(6822,"Backup path:",snapshot,26.,67.,60.);
                 body = body.child(self.preferences_backup_path(snapshot,window,cx));
                 check!("pref-backup-absent","记住上次会话中无法访问的文件","KeepSessionAbsentFileEntries",false,false,true,26.,83.,408.);
-                group!("保存时备份",18.,106.,424.,95.);
-                radio!("pref-backup-none","无","save_backup","none","none",26.,123.,110.);
-                radio!("pref-backup-simple","简单备份","save_backup","none","simple",150.,123.,116.);
-                radio!("pref-backup-verbose","详细备份","save_backup","none","verbose",280.,123.,146.);
+                group!("保存时备份",18.,106.,208.,95.);
+                radio!("pref-backup-none","无","save_backup","none","none",26.,123.,70.);
+                radio!("pref-backup-simple","简单备份","save_backup","none","simple",102.,123.,116.);
+                radio!("pref-backup-verbose","详细备份","save_backup","none","verbose",26.,138.,192.);
                 let enabled = self.pref_string("save_backup","none") != "none";
                 let custom = enabled && self.pref_bool("backup_use_directory",false);
-                group!("",26.,157.,408.,33.);
-                check!("pref-backup-directory","自定义备份目录","backup_use_directory",false,false,enabled,34.,145.,390.);
-                label_right_enabled!(6803,"Directory:",custom,34.,170.,58.);
-                input!("backup_directory",custom,98.,168.,300.);
-                button!("pref-backup-browse","...",custom,406.,167.,20.,Self::preferences_browse_backup_directory);
+                group!("",26.,166.,192.,27.);
+                check!("pref-backup-directory","自定义备份目录","backup_use_directory",false,false,enabled,26.,154.,192.);
+                label_right_enabled!(6803,"Directory:",custom,34.,178.,52.);
+                input!("backup_directory",custom,92.,176.,101.);
+                button!("pref-backup-browse","...",custom,202.,175.,16.,Self::preferences_browse_backup_directory);
+                group!(crate::localization::current_preference_control(6830).unwrap_or("备份保留期限"),234.,106.,208.,95.);
+                let retention = self.pref_bool("backup_retention.enabled",true);
+                check!("pref-backup-retention-enabled","自动清理过期备份","backup_retention.enabled",true,false,true,242.,123.,192.);
+                label_right_enabled!(6832,"保留备份:",retention,242.,145.,85.);
+                input!("backup_retention.days",retention,334.,143.,56.);
+                label_enabled!(crate::localization::current_preference_control(6833).unwrap_or("天"),retention,398.,145.,36.);
+                body = body.child(at(242.,165.,192.,28.).id("pref-backup-retention-protection")
+                    .text_size(px(12.)).line_height(px(14.)).overflow_hidden()
+                    .child(crate::localization::current_preference_control(6834).unwrap_or("仍用于恢复未保存内容的备份不会删除")));
             }
             Page::Instances => {
                 group!("多实例设置 *",11.,3.,268.,71.);

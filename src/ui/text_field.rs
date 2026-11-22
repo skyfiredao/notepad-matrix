@@ -252,6 +252,7 @@ impl TextField {
 
     pub(super) fn insert_text(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         if !self.enabled || self.read_only { return; }
+        if self.selector == "backup_retention.days" && text.chars().any(|ch| !ch.is_ascii_digit()) { return; }
         let range = self.state.selection().range();
         let result = self.range_input_text(range, text).and_then(|text| self.state.insert_text(&text));
         self.changed(result, window, cx);
@@ -544,6 +545,10 @@ impl Render for TextField {
                     let text = if search_field {
                         payload.text.split('\0').next().unwrap_or_default()
                     } else { &payload.text };
+                    if field.selector == "backup_retention.days" && text.chars().any(|ch| !ch.is_ascii_digit()) {
+                        cx.stop_propagation();
+                        return;
+                    }
                     if search_field && text.is_empty() {
                         cx.stop_propagation();
                         return;
@@ -652,7 +657,7 @@ impl EntityInputHandler for TextField {
     ) {
         if !self.enabled || self.read_only { return; }
         if matches!(self.selector, "character-range-low" | "character-range-high"
-            | "recent_files_limit" | "pref-history-custom-length" | "snapshot_backup_ms" | "pref-large-file-size")
+            | "recent_files_limit" | "pref-history-custom-length" | "snapshot_backup_ms" | "pref-large-file-size" | "backup_retention.days")
             && text.chars().any(|ch| !ch.is_ascii_digit()) { return; }
         let result = if let Some(range) = range {
             editor_surface::byte_range(&self.state.display_snapshot(), range)
@@ -674,7 +679,7 @@ impl EntityInputHandler for TextField {
         if !self.enabled || self.read_only { return; }
         let character_range = matches!(self.selector, "character-range-low" | "character-range-high");
         if (character_range || matches!(self.selector,
-            "recent_files_limit" | "pref-history-custom-length" | "snapshot_backup_ms" | "pref-large-file-size"))
+            "recent_files_limit" | "pref-history-custom-length" | "snapshot_backup_ms" | "pref-large-file-size" | "backup_retention.days"))
             && text.chars().any(|ch| !ch.is_ascii_digit()) { return; }
         if character_range || self.max_utf16.is_some() {
             let result = range.map(|range| editor_surface::byte_range(&self.state.display_snapshot(), range))

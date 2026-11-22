@@ -1,6 +1,64 @@
 use super::*;
+use serde_json::Value;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+
+#[derive(Default)]
+pub(super) struct BackupRetentionState {
+    cancelled: Option<Arc<AtomicBool>>,
+    task: Option<gpui::Task<()>>,
+}
+
+impl Drop for BackupRetentionState {
+    fn drop(&mut self) {
+        if let Some(cancelled) = &self.cancelled { cancelled.store(true, Ordering::Release); }
+    }
+}
 
 impl MatrixWindow {
+    pub(super) fn configure_backup_retention(&mut self, settings: &Value, cx: &mut Context<Self>) -> io::Result<()> {
+        let options = crate::backup_retention::BackupRetentionOptions::from_settings(settings)?;
+        let store = self.settings_store.clone();
+        if let Some(cancelled) = self.backup_retention.cancelled.take() { cancelled.store(true, Ordering::Release); }
+        self.backup_retention.task = None;
+        if !options.enabled { return Ok(()); }
+        let Some(store) = store else { return Ok(()); };
+        let cancelled = Arc::new(AtomicBool::new(false));
+        self.backup_retention.cancelled = Some(cancelled.clone());
+        let executor = cx.background_executor().clone();
+        self.backup_retention.task = Some(cx.spawn(async move |view, cx| {
+            loop {
+                if cancelled.load(Ordering::Acquire) { break; }
+                let worker_store = store.clone();
+                let worker_cancelled = cancelled.clone();
+                let result = executor.spawn(async move {
+                    crate::backup_retention::cleanup(&worker_store, std::time::SystemTime::now(), &worker_cancelled)
+                }).await;
+                let retry = result.as_ref().is_ok_and(|report| report.busy_recovery > 0 || report.busy_save > 0);
+                let active = view.update(cx, |view, cx| {
+                    if cancelled.load(Ordering::Acquire)
+                        || !view.backup_retention.cancelled.as_ref().is_some_and(|current| Arc::ptr_eq(current, &cancelled))
+                        || !cx.windows().contains(&view.document_window) {
+                        return false;
+                    }
+                    match result {
+                        Ok(report) if !report.failures.is_empty() => {
+                            let paths = report.failures.iter().map(|failure| failure.path.display().to_string()).collect::<Vec<_>>().join("\n");
+                            view.notify_localized_editor_error(crate::localization::Text::resource("BackupRetentionCleanupFailed", "Some backups could not be safely cleaned ($COUNT$).\n$PATHS$")
+                                .replace("$COUNT$", report.failures.len().to_string()).replace("$PATHS$", paths), cx);
+                        }
+                        Ok(_) => {}
+                        Err(error) => view.notify_localized_editor_error(crate::localization::Text::resource("BackupRetentionInspectionFailed", "Could not check backup cleanup: $ERROR$")
+                            .replace("$ERROR$", error.to_string()), cx),
+                    }
+                    true
+                });
+                if !matches!(active, Ok(true)) { break; }
+                executor.timer(std::time::Duration::from_secs(if retry { 1 } else { 86_400 })).await;
+            }
+        }));
+        Ok(())
+    }
+
     pub(super) fn install_recovery(
         &mut self,
         recovery: crate::recovery::RecoveryManager,

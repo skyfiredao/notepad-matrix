@@ -573,7 +573,8 @@ impl MatrixWindow {
                 }
                 continue;
             }
-            let entity = cx.new(|cx| text_field::TextField::compact(path, path, cx).without_history_arrow().with_max_utf16(limit));
+            let label = if path == "backup_retention.days" { crate::localization::current_preference_source_label(path, path) } else { path };
+            let entity = cx.new(|cx| text_field::TextField::compact(label, path, cx).without_history_arrow().with_max_utf16(limit));
             entity.update(cx, |field, cx| field.set_text(&text, window, cx));
             let focus = entity.read(cx).focus_handle();
             let changed = cx.observe_in(&entity, window, move |view, field, window, cx| {
@@ -621,6 +622,10 @@ impl MatrixWindow {
                 Ok(parsed.unwrap_or(0))
             } else { parsed };
             match parsed {
+                Ok(number) if path == "backup_retention.days" && !(min..=max).contains(&number) => {
+                    if finishing { field.set_text(&old_text, window, cx); }
+                    return true;
+                }
                 Ok(number) if preferences_editing_surface::reject_integer_edit(path, number) => {
                     if finishing { field.set_text(&old_text, window, cx); }
                     return true;
@@ -831,6 +836,8 @@ impl MatrixWindow {
     pub(super) fn pref_input(&self, path: &'static str, x: f32, y: f32, width: f32, enabled: bool, cx: &mut Context<Self>) -> AnyElement {
         let Some(field) = self.preferences.fields.get(path) else { return div().into_any_element(); };
         let Some(entity) = field.text_entity() else { return div().into_any_element(); };
+        let label = crate::localization::current_preference_source_label(path, path);
+        if path == "backup_retention.days" { entity.update(cx, |field, cx| field.set_label(label, cx)); }
         if entity.read(cx).enabled() != enabled { entity.update(cx, |field, cx| field.set_enabled(enabled, cx)); }
         source_rect(x, y, width, 23.).id(format!("pref-input-{path}"))
             .on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, window, cx| {

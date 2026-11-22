@@ -846,6 +846,8 @@ pub(crate) fn current_preference_source_label<'a>(id: &str, label: &'a str) -> &
         "pref-print-preview" | "IDC_WHICHPART_STATIC" => Some(("Print", 6727)),
         "IDC_HEADERFPPTER_GR_STATIC" => Some(("Print", 6728)),
         "pref-backup-snapshot" | "IDC_BACKUPDIR_RESTORESESSION_CHECK" => Some(("Backup", 6818)),
+        "pref-backup-retention-enabled" => Some(("Backup", 6831)),
+        "backup_retention.days" => Some(("Backup", 6832)),
         "pref-completion-enable" | "IDD_AUTOC_ENABLECHECK" => Some(("AutoCompletion", 6808)),
         "pref-completion-functions" | "IDD_AUTOC_FUNCRADIO" => Some(("AutoCompletion", 6809)),
         "pref-completion-words" | "IDD_AUTOC_WORDRADIO" => Some(("AutoCompletion", 6810)),

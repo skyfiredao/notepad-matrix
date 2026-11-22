@@ -8,14 +8,11 @@
 
 | 项目 | 要求 |
 |---|---|
-| 示例系统 | macOS 26。下文构建和打包使用部署目标 `26.0`。 |
+| 示例系统 | macOS 26。下文构建使用部署目标 `26.0`。 |
 | 机器 | Apple Silicon Mac，`uname -m` 输出 `arm64`。 |
 | 开发工具 | Xcode Command Line Tools，或已配置命令行工具的完整 Xcode。需要 macOS SDK、Clang 和 Swift。 |
 | Rust | `rust-toolchain.toml` 固定的 **1.98.1**，推荐用 rustup 管理。 |
-| Python | Python 3，用于 `scripts/package-macos.py`。 |
 | 网络 | 首次下载 Rust 工具链和 Cargo 依赖时需要。 |
-
-打包脚本只接受 ARM64 Mach-O 可执行文件。
 
 安装 Apple 命令行工具：
 
@@ -31,12 +28,11 @@ xcode-select -p
 xcrun --sdk macosx --show-sdk-path
 xcrun --find clang
 xcrun --find swift
-python3 --version
 ```
 
 ### 将构建文件集中到 workspace
 
-指定 workspace 的绝对路径。每次打开用于安装、构建或打包的终端，都先执行以下环境设置，再运行 Rust 命令：
+指定 workspace 的绝对路径。每次打开用于安装工具链、下载依赖或构建的终端，都先执行以下环境设置，再运行 Rust 命令：
 
 ```sh
 export WORKSPACE="$HOME/workspace/notepad-matrix-build"
@@ -57,7 +53,6 @@ mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" "$CARGO_TARGET_DIR" "$TMPDIR" \
 | `$WORKSPACE/tmp` | 遵循 `TMPDIR` 的工具产生的临时文件。 |
 | `$WORKSPACE/downloads` | rustup 安装脚本。 |
 | `$WORKSPACE/src` | 源码仓库。 |
-| `$WORKSPACE/dist` | 下文命令生成的应用包和 DMG。 |
 
 这些变量仅作用于当前终端及其子进程，不会移动或删除已有的 `~/.cargo`、`~/.rustup`。Xcode、SDK 和 Apple 工具独立管理的缓存不属于该目录布局。参考 [rustup 安装路径](https://rust-lang.github.io/rustup/installation/index.html#choosing-where-to-install)和 [Cargo 环境变量](https://doc.rust-lang.org/cargo/reference/environment-variables.html)。
 
@@ -94,7 +89,7 @@ command -v cargo
 
 ## 2. 构建应用
 
-部署目标 `26.0` 也会写入 `LSMinimumSystemVersion`。使用支持 macOS 26 的 Xcode／Command Line Tools 和 SDK。
+设置部署目标 `26.0`，使用支持 macOS 26 的 Xcode／Command Line Tools 和 SDK。
 
 ```sh
 export MACOSX_DEPLOYMENT_TARGET=26.0
@@ -140,112 +135,6 @@ cargo build --locked --target aarch64-apple-darwin
 ```
 
 见[命令行用法](README_zh.md#命令行用法)。
-
-## 4. 应用打包
-
-使用同一工具链环境和部署目标，调用仓库脚本：
-
-```sh
-export MACOSX_DEPLOYMENT_TARGET=26.0
-python3 scripts/package-macos.py \
-  --binary "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" \
-  --output "$WORKSPACE/dist/macos-arm64"
-```
-
-使用新建或空的输出目录。
-
-生成：
-
-```text
-$WORKSPACE/dist/macos-arm64/notepad-matrix.app
-$WORKSPACE/dist/macos-arm64/notepad-matrix.dmg
-```
-
-脚本执行这些步骤：
-
-1. 检查输入为 ARM64 Mach-O。
-2. 通过 `cargo metadata --locked --offline` 读取依赖，要求依赖已经下载。
-3. 使用 Swift 和系统类型标识生成文档类型声明。
-4. 核对 `THIRD_PARTY_NOTICES.md` 中的依赖记录，读取二进制的 `--version`，复制资源与许可证，将数字版本写入 `Info.plist`。
-5. 剥离符号，使用 `--sign-identity` 签名（默认 ad-hoc `-`），检查签名，生成含 Applications 链接的压缩 DMG。
-
-检查签名并启动应用：
-
-```sh
-codesign --verify --deep --strict --verbose=2 "$WORKSPACE/dist/macos-arm64/notepad-matrix.app"
-open "$WORKSPACE/dist/macos-arm64/notepad-matrix.app"
-```
-
-### 可选的 App Sandbox 开发包
-
-同一可执行文件可用 `--sandbox` 打成沙盒包，输出到另一个空目录：
-
-```sh
-python3 scripts/package-macos.py \
-  --binary "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix" \
-  --sandbox --sign-identity - \
-  --output "$WORKSPACE/dist/macos-arm64-sandbox"
-codesign --display --entitlements :- "$WORKSPACE/dist/macos-arm64-sandbox/notepad-matrix.app"
-```
-
-不指定 `--output` 时，脚本默认写入项目目录中的 `dist/` 或 `dist-sandbox/`。上述示例显式指定 `--output`，将包留在 workspace 内。`--sign-identity 'Apple Development: …'` 选择已安装的签名身份。
-
-沙盒默认启用 `com.apple.security.app-sandbox`、`com.apple.security.files.user-selected.read-write` 和 `com.apple.security.print`。`--entitlements /absolute/path/custom.plist` 配合 `--sandbox` 合并自定义条目；三个基础项保持 `true`。
-
-## 5. 允许运行可信应用
-
-### 先核对下载来源
-
-从[项目官方仓库](https://github.com/skyfiredao/notepad-matrix)或可核验的可信发布者下载。
-
-如果发布方提供 SHA-256，先核对下载文件，再安装或补签。例如：
-
-```sh
-shasum -a 256 "$HOME/Downloads/notepad-matrix.dmg"
-```
-
-使用实际下载文件名，将输出与发布页面的校验值比较。
-
-### 本机构建的临时签名包
-
-打包脚本默认执行 `codesign --force --sign -`。检查签名后，用 Finder 或 `open` 启动。遇到开发者身份或缺少公证的警告时，按下述单应用授权步骤操作。
-
-### 下载的临时签名或无签名版本
-
-确认来源、校验值和发布说明后，将 `.app` 从磁盘映像复制到应用目录，再尝试打开一次。因开发者身份或缺少公证被阻止时：
-
-1. 打开“系统设置”→“隐私与安全性”。
-2. 在“安全性”区域找到刚被阻止的 Notepad Matrix，核对应用名称。
-3. 点按“仍要打开”（Open Anyway），按系统提示认证。
-4. 点按“打开”，为该应用添加例外。
-
-后续可双击启动。更新或替换应用后，系统可能重新检查。受管理的 Mac 若禁止添加例外，联系管理员。
-
-如果发布说明明确提供的是无签名构建，且需要补本地临时签名，可先把可信的 `.app` 复制到自己可写的目录，例如 `~/Applications/`，再执行：
-
-```sh
-codesign --force --sign - "$HOME/Applications/notepad-matrix.app"
-codesign --verify --deep --strict --verbose=2 "$HOME/Applications/notepad-matrix.app"
-open "$HOME/Applications/notepad-matrix.app"
-```
-
-遇到恶意软件或应用损坏警告，从可信渠道重新获取或联系发布者。
-
-系统操作依据：[Apple：在 Mac 上安全地打开 App](https://support.apple.com/zh-cn/102445)。不同 macOS 版本的文字和按钮位置可能不同。
-
-## 故障排查
-
-| 问题 | 检查与处理 |
-|---|---|
-| Rust 版本不符 | 确认位于项目目录，检查 `rustup show active-toolchain`，安装 `rust-toolchain.toml` 指定版本。 |
-| Rust 文件出现在 workspace 外 | 在安装、下载、编译或打包的同一终端重新执行 workspace 环境设置。检查 `rustup show home` 是否为 `$RUSTUP_HOME`，`command -v cargo` 是否为 `$CARGO_HOME/bin/cargo`。 |
-| 找不到 SDK、Clang 或 Swift | 检查 `xcode-select -p` 与上述 `xcrun` 命令，完成 Apple 开发工具安装和初始化。 |
-| Cargo 下载失败 | 检查网络和 Cargo registry 配置，先完成 `cargo fetch --locked` 再使用 `--offline`。 |
-| 非 macOS 环境运行失败 | 在 Mac 上构建和运行图形应用。 |
-| 打包提示架构错误 | 检查 `file` 输出，使用 `aarch64-apple-darwin` 构建。 |
-| 打包提示缺少环境变量 | 在调用脚本的同一终端设置 `MACOSX_DEPLOYMENT_TARGET`。 |
-| 打包目录非空 | 换一个空的 `--output` 目录。 |
-| 签名或启动受阻 | 按[运行授权](#5-允许运行可信应用)处理。 |
 
 ## 资源生成
 

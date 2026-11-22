@@ -985,28 +985,28 @@ impl MatrixWindow {
             return;
         }
         self.menu_input(MenuEvent::Dismiss, window, cx);
-        // Source snapshot-mode window exit preserves the session and backups.
-        // Explicit Close Document continues through the guarded tab-close path.
         if self
             .recovery
             .as_ref()
             .is_some_and(crate::recovery::RecoveryManager::snapshot_mode)
         {
-            if self.synchronize_recovery(cx) {
-                self.finish_window_close(window, cx);
-            } else {
+            if !self.synchronize_recovery(cx) {
                 self.cancel_native_quit();
+                return;
             }
-            return;
         }
         self.close_target = None;
-        self.close_multi = self.workspace.dirty_buffers().len() > 1;
-        let pending = self
-            .workspace
-            .dirty_buffers()
-            .into_iter()
-            .find(|id| !self.close_discarded.contains(id));
-        if let Some(id) = pending {
+        let pending = match self.window_close_pending() {
+            Ok(pending) => pending,
+            Err(error) => {
+                self.notify_localized_editor_error(crate::localization::Text::resource("BackupRecoveryCheckFailed", "Could not check recovery backups: $ERROR$")
+                    .replace("$ERROR$", error.to_string()), cx);
+                self.cancel_native_quit();
+                return;
+            }
+        };
+        self.close_multi = pending.len() > 1;
+        if let Some(id) = pending.first().copied() {
             if !self.activate_buffer(id, window, cx) {
                 self.close_after_save = false;
                 self.close_dialog = false;
@@ -1037,6 +1037,19 @@ impl MatrixWindow {
         }
     }
 
+    fn window_close_pending(&self) -> io::Result<Vec<crate::workspace::BufferId>> {
+        let snapshot = self.recovery.as_ref().filter(|recovery| recovery.snapshot_mode());
+        let mut pending = Vec::new();
+        for id in self.workspace.dirty_buffers() {
+            if self.close_discarded.contains(&id) { continue; }
+            if let Some(recovery) = snapshot {
+                if recovery.has_buffer_backup(id)? { continue; }
+            }
+            pending.push(id);
+        }
+        Ok(pending)
+    }
+
     fn finish_window_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if matrix_surface::locked() {
             self.cancel_native_quit();
@@ -1063,7 +1076,16 @@ impl MatrixWindow {
             CloseAllAnswer::Save => self.save_and_close(window, cx),
             CloseAllAnswer::Discard if self.conditional_close.is_some() => self.discard_close(window, cx),
             CloseAllAnswer::Discard => {
-                self.close_discarded.extend(self.workspace.dirty_buffers());
+                let pending = match self.window_close_pending() {
+                    Ok(pending) => pending,
+                    Err(error) => {
+                        self.notify_localized_editor_error(crate::localization::Text::resource("BackupRecoveryCheckFailed", "Could not check recovery backups: $ERROR$")
+                            .replace("$ERROR$", error.to_string()), cx);
+                        self.cancel_close(window, cx);
+                        return;
+                    }
+                };
+                self.close_discarded.extend(pending);
                 self.request_close(window, cx);
             }
         }
@@ -1084,8 +1106,16 @@ impl MatrixWindow {
     fn close_message(&self) -> String {
         let filename = self.disk_file().map(|file| file.path().to_string_lossy().into_owned())
             .unwrap_or_else(|| self.workspace.active().name());
-        crate::localization::dialog_control(&self.native_locale(), "DoSaveOrNot", 1761)
-            .unwrap_or("Save file \"$STR_REPLACE$\" ?")
+        let locale = self.native_locale();
+        let message = if self.close_target.is_none()
+            && self.recovery.as_ref().is_some_and(crate::recovery::RecoveryManager::snapshot_mode) {
+            crate::localization::dialog_message(&locale, "NoBackupDoSaveFile")
+                .unwrap_or("Your backup file cannot be found. Save it otherwise your data will be lost.\nDo you want to save file \"$STR_REPLACE$\" ?")
+        } else {
+            crate::localization::dialog_control(&locale, "DoSaveOrNot", 1761)
+                .unwrap_or("Save file \"$STR_REPLACE$\" ?")
+        };
+        message
             .replace("$STR_REPLACE$", &filename)
             .replace("\r\n", "\n").replace('\r', "\n")
     }
@@ -1422,6 +1452,7 @@ impl MatrixWindow {
                 return;
             }
         };
+        let backup_store = self.settings_store.clone();
         let backup_source = if operation == SaveOperation::Current
             && self.workspace.active().is_modified()
             && !self.workspace.active().is_large_file()
@@ -1504,7 +1535,12 @@ impl MatrixWindow {
             };
             let selected = if selected.as_ref().is_ok_and(Option::is_some) {
                 if let Some(source) = backup_source {
-                    match executor.spawn(async move { backup_options.create_backup(&source, &backup_timestamp) }).await {
+                    match executor.spawn(async move {
+                        match backup_store {
+                            Some(store) => backup_options.create_tracked_backup(&store, &source, &backup_timestamp),
+                            None => backup_options.create_backup(&source, &backup_timestamp),
+                        }
+                    }).await {
                         Ok(_) => selected,
                         Err(error) => {
                             let detail = format!("The previous version could not be saved in the backup directory: {error}");
