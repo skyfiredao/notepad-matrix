@@ -101,13 +101,15 @@ impl MatrixWindow {
         }
         self.menu_input(MenuEvent::Dismiss, window, cx);
         match command {
-            FileCommand::Reveal | FileCommand::Terminal | FileCommand::DefaultViewer => {
+            FileCommand::Terminal => {
+                self.open_system_terminal(window, cx);
+            }
+            FileCommand::Reveal | FileCommand::DefaultViewer => {
                 let Some(path) = self.disk_file().map(|file| file.path().to_path_buf()) else {
                     return;
                 };
                 let operation = match command {
                     FileCommand::Reveal => crate::folder_workspace::FolderShellCommand::Reveal,
-                    FileCommand::Terminal => crate::folder_workspace::FolderShellCommand::Terminal,
                     _ => crate::folder_workspace::FolderShellCommand::Open,
                 };
                 if let Err(error) = crate::folder_workspace::folder_shell(&path, operation) {

@@ -11,6 +11,9 @@ pub(super) enum DialogKind {
     GoTo,
     CharacterRange,
     Preferences,
+    TerminalConfig,
+    TerminalPassword,
+    TerminalHostKey,
     StyleConfigurator,
     ShortcutMapper,
     About,
@@ -29,9 +32,6 @@ pub(super) enum DialogKind {
     Completion,
     Calltip,
     BackupFailure,
-    Run,
-    RunVariables,
-    RunSave,
     Close,
     SaveAll,
     Reload,
@@ -46,6 +46,9 @@ impl DialogKind {
         Self::GoTo,
         Self::CharacterRange,
         Self::Preferences,
+        Self::TerminalConfig,
+        Self::TerminalPassword,
+        Self::TerminalHostKey,
         Self::StyleConfigurator,
         Self::ShortcutMapper,
         Self::About,
@@ -70,9 +73,6 @@ impl DialogKind {
         Self::Completion,
         Self::Calltip,
         Self::BackupFailure,
-        Self::Run,
-        Self::RunVariables,
-        Self::RunSave,
         Self::Close,
         Self::SaveAll,
         Self::Reload,
@@ -87,6 +87,9 @@ impl DialogKind {
             Self::GoTo => owner.goto_visible,
             Self::CharacterRange => owner.character_range.visible,
             Self::Preferences => owner.preferences_visible,
+            Self::TerminalConfig => owner.terminal_config.visible,
+            Self::TerminalPassword => owner.terminal_config.password_visible,
+            Self::TerminalHostKey => owner.ssh_terminal.fingerprint.is_some(),
             Self::StyleConfigurator => owner.style_config.visible,
             Self::ShortcutMapper => owner.shortcut_mapper.visible,
             Self::About => owner.about_visible,
@@ -105,9 +108,6 @@ impl DialogKind {
             Self::Completion => owner.completion_visible(),
             Self::Calltip => owner.calltip_visible(),
             Self::BackupFailure => owner.backup_failure_visible(),
-            Self::Run => owner.run_visible,
-            Self::RunVariables => owner.run_variables_visible(),
-            Self::RunSave => owner.run_save_visible(),
             Self::Close => owner.close_dialog,
             Self::SaveAll => owner.save_all_dialog,
             Self::Reload => owner.reload_dialog,
@@ -133,13 +133,12 @@ impl DialogKind {
             Self::HashFiles(HashAlgorithm::Sha256) => "SHA256FromFilesDlg",
             Self::HashFiles(HashAlgorithm::Sha512) => "SHA512FromFilesDlg",
             Self::WindowManager => "Window",
-            Self::MacroSave | Self::RunSave => "ShortcutMapperSubDialg",
+            Self::MacroSave => "ShortcutMapperSubDialg",
             Self::MacroRepeat => "MultiMacro",
             Self::Udl => "UserDefine",
             Self::UdlStyler => "UserDefine/StylerDialog",
             Self::UdlName => "UserDefine",
             Self::ColumnEditor => "ColumnEditor",
-            Self::Run => "Run",
             Self::Close => "DoSaveOrNot",
             Self::SaveAll => "DoSaveAll",
             Self::Reload => "DoReloadOrNot",
@@ -166,6 +165,9 @@ impl DialogKind {
             Self::GoTo => "转至...",
             Self::CharacterRange => "查找范围内的字符...",
             Self::Preferences => crate::localization::preference_title(&owner.native_locale(), "").unwrap_or("Preferences"),
+            Self::TerminalConfig => owner.terminal_label("终端配置", "Terminal Configuration"),
+            Self::TerminalPassword => owner.terminal_label("SSH 密码", "SSH Password"),
+            Self::TerminalHostKey => owner.terminal_label("信任本机 SSH", "Trust Local SSH Host"),
             Self::StyleConfigurator => crate::localization::dialog_title(&owner.native_locale(), "StyleConfig").unwrap_or("Style Configurator"),
             Self::ShortcutMapper => owner.shortcut_mapper_title(),
             Self::About => "About Notepad Matrix",
@@ -184,9 +186,6 @@ impl DialogKind {
             Self::Completion => "Completion",
             Self::Calltip => "Function parameters",
             Self::BackupFailure => "Backup error",
-            Self::Run => "运行...",
-            Self::RunVariables => "",
-            Self::RunSave => "快捷键",
             Self::Close => crate::localization::dialog_title(&owner.native_locale(), "DoSaveOrNot").unwrap_or("Save"),
             Self::SaveAll => "Save all?",
             Self::Reload => "Reload?",
@@ -209,6 +208,9 @@ impl DialogKind {
             Self::GoTo => goto_surface::dimensions(),
             Self::CharacterRange => size(px(468.), px(174.)),
             Self::Preferences => preferences_surface::dimensions(),
+            Self::TerminalConfig => terminal_config_surface::dimensions(&owner.terminal_config),
+            Self::TerminalPassword => size(px(400.), px(170.)),
+            Self::TerminalHostKey => size(px(540.), px(190.)),
             Self::StyleConfigurator => style_config_surface::dimensions(),
             Self::ShortcutMapper => shortcut_surface::dimensions(),
             Self::About => about_surface::dimensions(),
@@ -226,9 +228,6 @@ impl DialogKind {
             Self::Completion => size(gpui::px(360.), gpui::px(240.)),
             Self::Calltip => size(gpui::px(520.), gpui::px(160.)),
             Self::BackupFailure => size(px(520.), px(260.)),
-            Self::Run => run_surface::dimensions(),
-            Self::RunVariables => run_surface::variables_dimensions(),
-            Self::RunSave => run_surface::save_dimensions(),
             Self::Close => owner.close_dialog_dimensions(window),
             Self::SaveAll | Self::Reload => size(px(480.), px(220.)),
         };
@@ -240,7 +239,7 @@ impl DialogKind {
     }
 
     fn borderless_popup(self) -> bool {
-        matches!(self, Self::FindSwap | Self::Completion | Self::RunVariables)
+        matches!(self, Self::FindSwap | Self::Completion)
     }
 
     fn hide_modeless(self, owner: &mut MatrixWindow, cx: &mut Context<MatrixWindow>) {
@@ -256,6 +255,9 @@ impl DialogKind {
             Self::GoTo => owner.goto_visible = false,
             Self::CharacterRange => owner.character_range.visible = false,
             Self::Preferences => { owner.preferences_visible = false; owner.config_directory.close(); },
+            Self::TerminalConfig => owner.hide_terminal_config(cx),
+            Self::TerminalPassword => owner.terminal_config.dismiss_password(),
+            Self::TerminalHostKey => owner.cancel_terminal_host_key(cx),
             Self::StyleConfigurator => owner.style_config.visible = false,
             Self::ShortcutMapper => owner.shortcut_mapper.visible = false,
             Self::About => owner.matrix_about_closed(cx),
@@ -278,9 +280,6 @@ impl DialogKind {
             Self::Completion => owner.dismiss_completion(cx),
             Self::Calltip => owner.dismiss_calltip(cx),
             Self::BackupFailure => owner.dismiss_backup_failure(cx),
-            Self::Run => owner.dismiss_run(cx),
-            Self::RunVariables => owner.dismiss_run_variables(cx),
-            Self::RunSave => owner.dismiss_run_save(cx),
             Self::Close | Self::SaveAll | Self::Reload => {}
         }
     }
@@ -307,8 +306,8 @@ impl FloatingWindow {
     ) -> Self {
         window.set_window_title(&kind.window_title(owner.read(cx)));
         let window_size_indicator = if !kind.borderless_popup() {
-            if let Err(error) = window_caption::hide_native_buttons(window) {
-                eprintln!("could not hide auxiliary native caption buttons: {error}");
+            if let Err(error) = window_caption::update_native_buttons(window, true) {
+                eprintln!("auxiliary titlebar: {error}");
             }
             match window_size_indicator::WindowSizeIndicator::new(window) {
                 Ok(indicator) => Some(indicator),
@@ -331,7 +330,7 @@ impl FloatingWindow {
             let view = owner.read(cx);
             if kind.visible(view) {
                 window_caption::update_title(window, &kind.window_title(view));
-                if kind == DialogKind::Close {
+                if matches!(kind, DialogKind::Close | DialogKind::TerminalConfig) {
                     let dimensions = kind.dimensions(view, window);
                     if (f32::from(window.viewport_size().width - dimensions.width)).abs() > 1.
                         || (f32::from(window.viewport_size().height - dimensions.height)).abs() > 1.
@@ -353,7 +352,7 @@ impl FloatingWindow {
             if matrix_surface::locked() {
                 return;
             }
-            if matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::FindInResults | DialogKind::RunVariables) {
+            if matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::FindInResults) {
                 let active = window.is_window_active();
                 let active_window: gpui::AnyWindowHandle = Window::window_handle(window);
                 let owner = activated_owner.clone();
@@ -362,9 +361,7 @@ impl FloatingWindow {
                         return;
                     }
                     if let Err(error) = owner.update(cx, |owner, cx| {
-                        if kind == DialogKind::RunVariables {
-                            if !active { owner.dismiss_run_variables(cx); }
-                        } else if kind == DialogKind::FindSwap {
+                        if kind == DialogKind::FindSwap {
                             if !active { owner.close_find_swap_menu(cx); }
                         } else if kind == DialogKind::FindInResults {
                             if !active {
@@ -454,6 +451,9 @@ impl Render for FloatingWindow {
             DialogKind::GoTo => owner.render_goto(cx),
             DialogKind::CharacterRange => Some(owner.render_character_range(cx)),
             DialogKind::Preferences => owner.render_preferences(window, cx),
+            DialogKind::TerminalConfig => owner.render_terminal_config(window, cx),
+            DialogKind::TerminalPassword => owner.render_terminal_password(window, cx),
+            DialogKind::TerminalHostKey => owner.render_terminal_host_key(cx),
             DialogKind::StyleConfigurator => owner.render_style_configurator(window, cx),
             DialogKind::ShortcutMapper => owner.render_shortcut_mapper(window, cx),
             DialogKind::About => owner.render_about(window, cx),
@@ -472,9 +472,6 @@ impl Render for FloatingWindow {
             DialogKind::Completion => owner.render_completion(cx),
             DialogKind::Calltip => owner.render_calltip(cx),
             DialogKind::BackupFailure => owner.render_backup_failure(cx),
-            DialogKind::Run => owner.render_run(window, cx),
-            DialogKind::RunVariables => owner.render_run_variables(cx),
-            DialogKind::RunSave => owner.render_run_save(window, cx),
             DialogKind::Close => owner.render_close_dialog(window, cx),
             DialogKind::SaveAll => owner.render_save_all_dialog(cx),
             DialogKind::Reload => owner.render_reload_dialog(cx),
@@ -525,10 +522,11 @@ impl Render for FloatingWindow {
                         }
                     })))
         });
+        let fixed_body = matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator | DialogKind::About | DialogKind::Close | DialogKind::TerminalConfig | DialogKind::TerminalPassword | DialogKind::TerminalHostKey);
         let content = content.map(|content| {
             div().id("matrix-auxiliary-body").relative().flex_1().min_h(gpui::px(0.)).w_full()
-                .when(matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator | DialogKind::About | DialogKind::Close), |body| body.overflow_hidden())
-                .when(!matches!(kind, DialogKind::Find | DialogKind::FindSwap | DialogKind::Preferences | DialogKind::StyleConfigurator | DialogKind::About | DialogKind::Close), |body| body.overflow_y_scroll())
+                .when(fixed_body, |body| body.overflow_hidden())
+                .when(!fixed_body, |body| body.overflow_y_scroll())
                 .child(content).into_any_element()
         });
         div()
@@ -617,12 +615,6 @@ impl Render for FloatingWindow {
                 });
                 cx.stop_propagation();
             }))
-            .on_action(cx.listener(|view, _: &CancelRun, window, cx| {
-                view.with_owner(window, cx, |owner, window, cx| {
-                    owner.dismiss_floating(DialogKind::Run, window, cx)
-                });
-                cx.stop_propagation();
-            }))
             .on_action(cx.listener(|view, _: &FindNext, window, cx| {
                 view.with_owner(window, cx, |owner, window, cx| {
                     owner.find_next(false, window, cx)
@@ -694,24 +686,6 @@ impl Render for FloatingWindow {
             .on_action(cx.listener(|view, _: &ConfirmGoTo, window, cx| {
                 view.with_owner(window, cx, |owner, window, cx| {
                     owner.confirm_goto(window, cx)
-                });
-                cx.stop_propagation();
-            }))
-            .on_action(cx.listener(|view, _: &ConfirmRun, window, cx| {
-                view.with_owner(window, cx, |owner, window, cx| {
-                    owner.activate_run_control(window, cx)
-                });
-                cx.stop_propagation();
-            }))
-            .on_action(cx.listener(|view, _: &RunFocusNext, window, cx| {
-                view.with_owner(window, cx, |owner, window, cx| {
-                    owner.move_run_focus(true, window, cx)
-                });
-                cx.stop_propagation();
-            }))
-            .on_action(cx.listener(|view, _: &RunFocusPrevious, window, cx| {
-                view.with_owner(window, cx, |owner, window, cx| {
-                    owner.move_run_focus(false, window, cx)
                 });
                 cx.stop_propagation();
             }))
@@ -880,6 +854,9 @@ impl MatrixWindow {
                 self.preferences_visible = false;
                 self.config_directory.close();
             }
+            DialogKind::TerminalConfig => self.hide_terminal_config(cx),
+            DialogKind::TerminalPassword => self.terminal_config.dismiss_password(),
+            DialogKind::TerminalHostKey => self.cancel_terminal_host_key(cx),
             DialogKind::StyleConfigurator => {
                 if self.style_config.visible { self.close_style_configurator(window, cx); return; }
             }
@@ -909,12 +886,13 @@ impl MatrixWindow {
             DialogKind::Completion => self.dismiss_completion(cx),
             DialogKind::Calltip => self.dismiss_calltip(cx),
             DialogKind::BackupFailure => self.dismiss_backup_failure(cx),
-            DialogKind::Run => self.dismiss_run(cx),
-            DialogKind::RunVariables => { self.close_run_variables(cx); return; }
-            DialogKind::RunSave => { self.dismiss_run_save(cx); return; }
         }
         cx.notify();
-        self.restore_document_focus(cx);
+        if kind == DialogKind::TerminalHostKey && self.ssh_terminal.visible {
+            self.restore_terminal_focus(cx);
+        } else {
+            self.restore_document_focus(cx);
+        }
     }
 
     pub(super) fn present_floating(
@@ -983,8 +961,6 @@ impl MatrixWindow {
             DialogKind::Find => Some(self.find_query.clone()),
             DialogKind::FindInResults => Some(self.find_in_results_input()),
             DialogKind::GoTo => Some(self.goto_input.clone()),
-            DialogKind::Run => Some(self.run_input.clone()),
-            DialogKind::RunSave => Some(self.run_save_input()),
             DialogKind::MacroSave => Some(self.macro_dialogs.name_input.clone()),
             DialogKind::MacroRepeat => Some(self.macro_dialogs.count_input.clone()),
             DialogKind::UdlName => Some(self.udl_name_input()),
@@ -992,9 +968,9 @@ impl MatrixWindow {
         };
         let focus = match kind {
             DialogKind::FindSwap => self.find_swap_popup_focus(),
-            DialogKind::RunVariables => self.run_variables_focus(),
             DialogKind::WindowManager => self.window_manager_focus(),
             DialogKind::Preferences => self.preferences_focus.clone(),
+            DialogKind::TerminalConfig | DialogKind::TerminalPassword | DialogKind::TerminalHostKey => self.terminal_config.focus.clone(),
             DialogKind::StyleConfigurator => self.style_config.focus.clone(),
             DialogKind::ShortcutMapper => self.preferences_focus.clone(),
             DialogKind::Udl => self.udl.focus.clone(),
@@ -1062,11 +1038,9 @@ impl MatrixWindow {
             if kind == DialogKind::WindowManager && let Some(previous) = self.window_manager_bounds() {
                 bounds = previous;
             }
-            if matches!(kind, DialogKind::FindSwap | DialogKind::Completion | DialogKind::Calltip | DialogKind::RunVariables) {
+            if matches!(kind, DialogKind::FindSwap | DialogKind::Completion | DialogKind::Calltip) {
                 let Some(positioned) = (if kind == DialogKind::FindSwap {
                     self.find_swap_popup_bounds()
-                } else if kind == DialogKind::RunVariables {
-                    self.run_variables_bounds()
                 } else {
                     self.intelligence_popup_bounds(kind == DialogKind::Calltip, window, cx)
                 })

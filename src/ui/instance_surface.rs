@@ -173,7 +173,7 @@ impl MatrixWindow {
             Ok(child) => {
                 let executor = cx.background_executor().clone();
                 cx.spawn(async move |_, _| {
-                    if let Err(error) = crate::run_commands::reap(child, || {
+                    if let Err(error) = crate::child_process::reap(child, || {
                         executor.timer(std::time::Duration::from_secs(1))
                     })
                     .await

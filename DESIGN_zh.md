@@ -73,17 +73,37 @@ GPUI 负责编辑区、菜单、面板和多数对话框。AppKit 负责文件�
 
 废纸篓在父目录授权守卫内使用 `NSFileManager.trashItemAtURL`；调用者处理确认和关闭文档。外部应用打开使用 `NSWorkspace`。
 
-F5 将命令展开为私有自删除 `.command` 文件。沙盒中通过 `NSWorkspace.openURLs` 交给 Terminal，非沙盒使用子进程。异步结果表示应用交接。启动选项和完成回调见 [`native_app_open.rs`](src/native_app_open.rs)。
+### 终端
 
-源码：[`ui.rs`](src/ui.rs)、[`view_surface.rs`](src/ui/view_surface.rs)、[`panel_surface.rs`](src/ui/panel_surface.rs)、[`document_map_surface.rs`](src/ui/document_map_surface.rs)、[`native_app_open.rs`](src/native_app_open.rs)、[`folder_workspace.rs`](src/folder_workspace.rs)、[`run_commands.rs`](src/run_commands.rs)。
+| 模块 | 职责 |
+|---|---|
+| `ssh_terminal.rs` | 配置持久化、密钥与主机信任、SSH 网络会话。 |
+| `terminal_config_surface.rs` | 配置草稿、密码输入、颜色板及透明度滑杆。 |
+| `ssh_terminal_surface.rs` | 连接状态、输入队列、`vt100` 解析、终端绘制和选择。 |
+
+本机入口及 F5 调用 `NSWorkspace.openApplication`，直接打开 Terminal.app。远程入口按配置 ID 创建或复用内嵌 SSH 会话。文件及工作区入口也使用 Terminal.app。
+
+每个 SSH 会话使用独立线程和单线程 tokio runtime 运行 `russh`。GPUI 经命令队列发送输入和尺寸请求，经事件队列接收连接状态及输出；`vt100` 解析输出，GPUI canvas 绘制网格。PTY 和 shell 由目标 sshd 提供，网络使用现有沙盒出站权限。
+
+配置保存于 `ssh_terminal`。远程记录使用稳定 `u64` ID，保存地址、账户、认证及外观字段，模式固定为 SSH。面板分开保存加载快照、待保存记录和编辑草稿；`Settings::save(store, expected)` 在写锁内比较快照，冲突时返回错误。旧本机记录保留读写兼容，界面只列出远程记录。加载时清除旧 `UserDefinedCommands`、运行专用快捷键和大写 `Terminal` 设置，其他配置保留。
+
+密码通过 `NSSecureTextField` 输入，提示绑定目标配置快照，认证后释放。各配置共用用户生成的 Ed25519 无口令私钥，保存在容器私有目录，目录权限 0700、文件权限 0600。主机密钥按规范化地址和端口固定，首次确认后保存，变化时拒绝连接；已有 localhost 信任保留。
+
+`State.active` 保存当前 `ConnectionState`，`State.parked` 按 ID 保存后台状态，`tabs` 保存打开顺序。切换标签交换当前和后台状态，保留各自连接、解析器、历史、选区及输入队列；一个轮询任务处理全部连接。地址或账户修改在重连时生效，外观修改直接更新状态。关闭或删除配置会取消对应连接和提示；关闭当前连接切至相邻标签，无剩余连接时收起面板。
+
+`background_color` 保存 24 位 RGB，`transparency` 保存 0–100 的透明百分比，缺省为黑色和 0%。共享 `NSColorPanel` 绑定编辑配置 ID，仅更新草稿；保存前同步选色，结束编辑或切换选色目标时停止更新。滑杆使用首选项配色，支持键盘和辅助功能调值。字号变化重算字宽、行高及 SSH PTY 行列数。
+
+当前终端需要透明时，窗口切换为 `WindowBackgroundAppearance::Transparent`。根背景透明，文档和界面区域单独绘制不透明底板。终端背景逐格绘制一次，ANSI 背景使用同一透明度，剩余边缘单独填充；文字、选区、光标、标签、按钮和滚动条保持不透明。终端关闭、透明度归零或进入 Matrix 界面时恢复不透明窗口。
+
+标签共用文档标签的字体、颜色和边框绘制，以配置颜色绘制上端 4px 活动条。标签、状态及操作按钮同排；目标地址使用悬停提示，按钮使用焦点句柄支持回车/空格触发。滚动条复用主编辑区的 16px 宽度、轨道、滑块和箭头绘制。配置列表高度固定为 148px，含 26px 表头、五条 24px 记录及边框。鼠标粘贴读取共享的 `ssh_terminal.paste_button`，值为 `middle` 或 `right`，缺省为右键。
+
+源码：[`ssh_terminal.rs`](src/ssh_terminal.rs)、[`terminal_config_surface.rs`](src/ui/terminal_config_surface.rs)、[`ssh_terminal_surface.rs`](src/ui/ssh_terminal_surface.rs)、[`ui.rs`](src/ui.rs)、[`view_surface.rs`](src/ui/view_surface.rs)、[`panel_surface.rs`](src/ui/panel_surface.rs)、[`document_map_surface.rs`](src/ui/document_map_surface.rs)、[`native_app_open.rs`](src/native_app_open.rs)、[`folder_workspace.rs`](src/folder_workspace.rs)、[`child_process.rs`](src/child_process.rs)。
 
 ## 6. 内嵌功能模块
 
-Converter、MIME Tools 和 HTML 文件导出随程序编译，使用 Plugins 菜单。模块使用 Rust 编辑事务、原字节接口和面板系统。
+Converter、MIME Tools 和 HTML 文件导出随程序编译，使用“模块”菜单。模块使用 Rust 编辑事务、原字节接口和面板系统。
 
-Run 执行外部命令，与内嵌模块分开。见[配置文件](README_zh.md#配置)。
-
-源码：[`converter.rs`](src/converter.rs)、[`mime.rs`](src/mime.rs)、[`html_export.rs`](src/html_export.rs)、[`macros.rs`](src/macros.rs)、[`shortcuts.rs`](src/shortcuts.rs)、[`run_commands.rs`](src/run_commands.rs)。
+源码：[`converter.rs`](src/converter.rs)、[`mime.rs`](src/mime.rs)、[`html_export.rs`](src/html_export.rs)、[`macros.rs`](src/macros.rs)、[`shortcuts.rs`](src/shortcuts.rs)。
 
 ## 7. 按需解析资源
 

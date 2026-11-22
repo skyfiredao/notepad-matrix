@@ -9,7 +9,7 @@ use gpui::{
     TitlebarOptions, Window, WindowBounds, WindowOptions, actions, div, px, rgb, size,
 };
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSView, NSWindowButton};
+use objc2_app_kit::NSView;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 use crate::config::ConfigStore;
@@ -66,6 +66,8 @@ mod matrix_auth;
 mod matrix_rain;
 mod matrix_surface;
 mod matrix_terminal;
+mod ssh_terminal_surface;
+mod terminal_config_surface;
 mod menu_surface;
 mod mermaid;
 mod mime_surface;
@@ -84,7 +86,6 @@ mod project_surface;
 mod recovery_surface;
 mod reload_actions;
 mod replace_surface;
-mod run_surface;
 mod search_history_surface;
 mod selection_actions_surface;
 mod shortcut_surface;
@@ -119,7 +120,6 @@ actions!(
         OpenEncodingMenu,
         OpenViewMenu,
         OpenWindowMenu,
-        OpenRunMenu,
         OpenToolsMenu,
         OpenMacroMenu,
         OpenLanguageMenu,
@@ -130,12 +130,8 @@ actions!(
         PlaybackMacro,
         SaveCurrentMacro,
         RunMacroMultiple,
-        ShowRun,
+        ShowTerminal,
         PrintFile,
-        ConfirmRun,
-        CancelRun,
-        RunFocusNext,
-        RunFocusPrevious,
         ToggleDocumentList,
         ToggleOverwrite,
         ZoomIn,
@@ -421,13 +417,15 @@ struct MatrixWindow {
     mute_sounds: bool,
     preferences_visible: bool,
     preferences: preferences_surface::State,
+    ssh_terminal: ssh_terminal_surface::State,
+    terminal_config: terminal_config_surface::State,
+    terminal_menu_locale: String,
     config_directory: config_directory_ui::ConfigDirectoryState,
     style_config: style_config_surface::State,
     shortcut_mapper: shortcut_surface::State,
     context_menu: crate::context_menu::ContextMenu,
     about_visible: bool,
     help_state: help_surface::State,
-    run_state: run_surface::State,
     converter_state: converter_surface::State,
     encoding_state: encoding_surface::EncodingState,
     hash_state: hash_surface::State,
@@ -440,10 +438,6 @@ struct MatrixWindow {
     mime_enabled: bool,
     converter_enabled: bool,
     html_export_enabled: bool,
-    run_visible: bool,
-    run_input: gpui::Entity<text_field::TextField>,
-    run_message: String,
-    run_button_focus: [FocusHandle; 2],
     macro_recording: bool,
     macro_dialogs: macro_dialog_surface::MacroDialogs,
     overwrite_mode: bool,
@@ -463,6 +457,40 @@ struct MatrixWindow {
 }
 
 impl MatrixWindow {
+    pub(super) fn refresh_terminal_menu(&mut self, cx: &mut Context<Self>) {
+        self.terminal_menu_locale = self.native_locale();
+        let Some(store) = &self.settings_store else { return; };
+        match crate::ssh_terminal::Settings::load(store) {
+            Ok(settings) => {
+                self.ssh_terminal.paste_button = settings.paste_button;
+                let chinese = self.terminal_menu_locale == "chineseSimplified.xml";
+                self.menu_bar.set_terminal_servers(settings.servers.into_iter().map(|profile| {
+                    let name = profile.name.replace('&', "&&");
+                    (profile.id, if chinese { format!("{name}终端") } else { format!("{name} Terminal") })
+                }).collect());
+                cx.notify();
+            }
+            Err(error) => self.notify_editor_error(format!("无法读取终端配置：{error}"), cx),
+        }
+    }
+
+    pub(super) fn open_system_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.route_to_document(window, cx, |view, window, cx| view.open_system_terminal(window, cx)) { return; }
+        self.menu_input(MenuEvent::Dismiss, window, cx);
+        let opened = match crate::native_app_open::open_terminal() {
+            Ok(opened) => opened,
+            Err(error) => { self.notify_editor_error(format!("无法打开系统终端：{error}"), cx); return; }
+        };
+        cx.spawn(async move |owner, cx| {
+            let result = opened.await.map_err(|error| io::Error::other(format!("Terminal.app 启动回调中断：{error}"))).and_then(|result| result);
+            if let Err(error) = result {
+                if let Err(update) = owner.update(cx, |view, cx| view.notify_editor_error(format!("无法打开系统终端：{error}"), cx)) {
+                    eprintln!("Terminal.app launch error could not reach document: {update}");
+                }
+            }
+        }).detach();
+    }
+
     fn new(dark: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         focus.focus(window, cx);
@@ -669,13 +697,15 @@ impl MatrixWindow {
             mute_sounds: false,
             preferences_visible: false,
             preferences: preferences_surface::State::new(cx),
+            ssh_terminal: ssh_terminal_surface::State::new(cx),
+            terminal_config: terminal_config_surface::State::new(cx),
+            terminal_menu_locale: String::new(),
             config_directory: config_directory_ui::ConfigDirectoryState::new(cx),
             style_config: style_config_surface::State::new(cx),
             shortcut_mapper: shortcut_surface::State::new(cx),
             context_menu: crate::context_menu::ContextMenu::default(),
             about_visible: false,
             help_state: help_surface::State::default(),
-            run_state: run_surface::State::new(cx),
             converter_state: converter_surface::State::new(cx),
             encoding_state: Default::default(),
             hash_state: hash_surface::State::new(cx),
@@ -687,10 +717,6 @@ impl MatrixWindow {
             mime_enabled: true,
             converter_enabled: true,
             html_export_enabled: true,
-            run_visible: false,
-            run_input: cx.new(|cx| text_field::TextField::compact("输入运行程序名", "run-input", cx).without_history_arrow().with_compact_height(22.)),
-            run_message: String::new(),
-            run_button_focus: [cx.focus_handle(), cx.focus_handle()],
             macro_recording: false,
             macro_dialogs: macro_dialog_surface::MacroDialogs::new(cx),
             overwrite_mode: false,
@@ -787,6 +813,26 @@ impl MatrixWindow {
         {
             return;
         }
+        let terminal_root = match &input {
+            MenuEvent::OpenRoot(root) | MenuEvent::ToggleRoot(root) | MenuEvent::HoverRoot(root) => self.menu_bar.definitions().get(*root)
+                .is_some_and(|definition| definition.selector == "terminal-menu-trigger"),
+            MenuEvent::Mnemonic('r') => true,
+            MenuEvent::Left | MenuEvent::Right if self.menu_bar.mode() != MenuMode::Closed
+                && self.menu_bar.selected_path().len() <= 1 && !self.menu_bar.configured_context_menu_open() => {
+                let definitions = self.menu_bar.definitions();
+                if definitions.is_empty() { false } else {
+                    let current = self.menu_bar.active_root();
+                    let next = if matches!(&input, MenuEvent::Right) { (current + 1) % definitions.len() }
+                        else { (current + definitions.len() - 1) % definitions.len() };
+                    definitions[next].selector == "terminal-menu-trigger"
+                }
+            }
+            MenuEvent::Up | MenuEvent::Down | MenuEvent::First | MenuEvent::Last | MenuEvent::Activate
+                if self.menu_bar.mode() == MenuMode::BarFocused => self.menu_bar.definitions().get(self.menu_bar.active_root())
+                    .is_some_and(|definition| definition.selector == "terminal-menu-trigger"),
+            _ => false,
+        };
+        if terminal_root { self.refresh_terminal_menu(cx); }
         let input = if self.symbol_menu_open() {
             let input = if matches!(input, MenuEvent::Left) {
                 MenuEvent::Dismiss
@@ -904,8 +950,6 @@ impl MatrixWindow {
             MenuOutcome::Activate(MenuCommand::Source(id)) => {
                 match id {
                     48016 => self.show_shortcut_mapper(1, window, cx),
-                    48017 => self.show_shortcut_mapper(2, window, cx),
-                    21000..=21999 => self.activate_shortcut_command(crate::shortcuts::CommandKey::Run((id - 21000) as usize), window, cx),
                     _ => self.execute_source_command(id, window, cx),
                 }
             }
@@ -1100,7 +1144,9 @@ impl MatrixWindow {
                 self.perform_window_command(command, window, cx)
             }
             MenuOutcome::Activate(MenuCommand::About) => self.show_about(window, cx),
-            MenuOutcome::Activate(MenuCommand::Run) => self.show_run(window, cx),
+            MenuOutcome::Activate(MenuCommand::OpenTerminal) => self.open_terminal(window, cx),
+            MenuOutcome::Activate(MenuCommand::OpenRemoteTerminal(id)) => self.open_remote_terminal(id, window, cx),
+            MenuOutcome::Activate(MenuCommand::TerminalSettings) => self.show_terminal_config(window, cx),
             MenuOutcome::Activate(MenuCommand::HashSelection(algorithm)) => {
                 self.copy_selection_hash(algorithm, window, cx)
             }
@@ -1147,19 +1193,23 @@ impl MatrixWindow {
 
 impl Render for MatrixWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let terminal_hidden = self.matrix_active() || matrix_surface::locked();
+        let terminal_transparent = self.ssh_terminal.sync_window_background(window, terminal_hidden);
+        if let Err(error) = window_caption::update_native_buttons(window,
+            self.view_chrome_visible() && !self.matrix_active() && !matrix_surface::locked())
+        {
+            eprintln!("window titlebar: {error}");
+        }
         if self.matrix_active() || matrix_surface::locked() {
             return self.render_matrix(window, cx);
         }
         let recent_entries = self.recent_file_menu_entries();
         self.menu_bar.set_recent_file_entries(recent_entries);
-        let run_commands = self.shortcut_mapper.bindings.run_commands.iter().enumerate().map(|(index, command)| {
-            (command.name.clone(), self.shortcut_mapper.bindings.shortcuts.iter().find(|item| item.key == crate::shortcuts::CommandKey::Run(index)).map(|item| item.label()).unwrap_or_default())
-        }).collect();
-        self.menu_bar.set_saved_run_commands(run_commands);
         self.refresh_udl_registry(cx);
         self.flush_udl_style_invalidation(window, cx);
         self.sync_window_manager(window, cx);
         self.sync_floating_windows(window, cx);
+        if self.terminal_menu_locale != self.native_locale() { self.refresh_terminal_menu(cx); }
         self.sync_panel_windows(window, cx);
         self.refresh_function_list(window, cx);
         self.refresh_markdown_preview(cx);
@@ -1778,10 +1828,6 @@ impl Render for MatrixWindow {
                 view.open_menu_root("window-menu-trigger", window, cx);
                 cx.stop_propagation();
             }))
-            .on_action(cx.listener(|view, _: &OpenRunMenu, window, cx| {
-                view.open_menu_root("run-menu-trigger", window, cx);
-                cx.stop_propagation();
-            }))
             .on_action(cx.listener(|view, _: &OpenToolsMenu, window, cx| {
                 view.open_menu_root("tools-menu-trigger", window, cx);
                 cx.stop_propagation();
@@ -1822,24 +1868,8 @@ impl Render for MatrixWindow {
                 view.macro_command(crate::macros::MacroCommand::RunMultiple, window, cx);
                 cx.stop_propagation();
             }))
-            .on_action(cx.listener(|view, _: &ShowRun, window, cx| {
-                view.show_run(window, cx);
-                cx.stop_propagation();
-            }))
-            .on_action(cx.listener(|view, _: &ConfirmRun, window, cx| {
-                view.activate_run_control(window, cx);
-                cx.stop_propagation();
-            }))
-            .on_action(cx.listener(|view, _: &CancelRun, window, cx| {
-                view.cancel_run(window, cx);
-                cx.stop_propagation();
-            }))
-            .on_action(cx.listener(|view, _: &RunFocusNext, window, cx| {
-                view.move_run_focus(true, window, cx);
-                cx.stop_propagation();
-            }))
-            .on_action(cx.listener(|view, _: &RunFocusPrevious, window, cx| {
-                view.move_run_focus(false, window, cx);
+            .on_action(cx.listener(|view, _: &ShowTerminal, window, cx| {
+                view.open_terminal(window, cx);
                 cx.stop_propagation();
             }))
             .on_key_down(cx.listener(|view, _, _, _| {
@@ -1894,13 +1924,15 @@ impl Render for MatrixWindow {
             .relative()
             .flex()
             .flex_col()
-            .bg(rgb(background))
+            .bg(if terminal_transparent { gpui::rgba(0) } else { rgb(background) })
             .text_color(rgb(foreground))
             .font_family("Helvetica")
             .text_size(px(13.))
+            .child(div().id("document-opaque-surface").w_full().flex_1().min_h(px(0.)).flex().flex_col().bg(rgb(background))
             .children(self.view_chrome_visible().then(||
                 div()
                     .h(px(32.))
+                    .pl(px(window_caption::LEFT_INSET))
                     .flex_shrink_0()
                     .flex()
                     .items_center()
@@ -2028,6 +2060,8 @@ impl Render for MatrixWindow {
                     .children(incremental_bottom)
                     .when_some(files_results, |root, results| root.child(results)),
             )
+            )
+            .children(self.render_ssh_terminal(window, cx))
             .when_some(status_bar, |root, status| root.child(status))
             .children(self.render_tab_preview(cx))
             .children(self.window_manager_blocks_document().then(|| div().id("window-manager-modal-shield")
@@ -2044,31 +2078,6 @@ impl Render for MatrixWindow {
                 .child("↙")))
             .into_any_element()
     }
-}
-
-fn hide_host_buttons(window: &Window) -> io::Result<()> {
-    MainThreadMarker::new()
-        .ok_or_else(|| io::Error::other("window controls require the main thread"))?;
-    let handle = HasWindowHandle::window_handle(window)
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
-        return Err(io::Error::other("expected a macOS AppKit window"));
-    };
-    // The borrowed GPUI window handle keeps this NSView alive for this main-thread call.
-    let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
-    let host = view
-        .window()
-        .ok_or_else(|| io::Error::other("GPUI view has no host window"))?;
-    for kind in [
-        NSWindowButton::CloseButton,
-        NSWindowButton::MiniaturizeButton,
-        NSWindowButton::ZoomButton,
-    ] {
-        if let Some(button) = host.standardWindowButton(kind) {
-            button.setHidden(true);
-        }
-    }
-    Ok(())
 }
 
 fn discard_host_composition(window: &Window) -> io::Result<bool> {
@@ -2272,13 +2281,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             KeyBinding::new("ctrl-g", ShowGoTo, None),
             KeyBinding::new("ctrl-+", ZoomIn, Some("MatrixEditor")),
             KeyBinding::new("ctrl--", ZoomOut, Some("MatrixEditor")),
-            KeyBinding::new("f5", ShowRun, None),
+            KeyBinding::new("f5", ShowTerminal, None),
             KeyBinding::new("ctrl-shift-p", PlaybackMacro, None),
-            KeyBinding::new("enter", ConfirmRun, Some("MatrixRun")),
-            KeyBinding::new("escape", CancelRun, Some("MatrixRun")),
-            KeyBinding::new("tab", RunFocusNext, Some("MatrixRun")),
-            KeyBinding::new("shift-tab", RunFocusPrevious, Some("MatrixRun")),
-            KeyBinding::new("space", ConfirmRun, Some("MatrixRunButton")),
             KeyBinding::new("enter", ConfirmGoTo, Some("MatrixGoTo")),
             KeyBinding::new("escape", CloseGoTo, Some("MatrixGoTo")),
             KeyBinding::new("escape", ClosePreferences, Some("MatrixPreferences")),
@@ -2355,7 +2359,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         ]);
         cx.bind_keys(original_bindings.clone());
         cx.set_quit_mode(gpui::QuitMode::LastWindowClosed);
-        let bounds = Bounds::centered(None, size(px(1080.), px(668.)), cx);
+        let bounds = Bounds::centered(None, size(px(1280.), px(800.)), cx);
         let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -2375,6 +2379,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     view.status_visible = status_visible;
                     view.mute_sounds = settings["muteSounds"].as_bool().unwrap_or(false);
                     view.settings_store = Some(ConfigStore::under_home(&home));
+                    view.refresh_terminal_menu(cx);
                     view.preferences.files.launch_no_session = launch.no_session;
                     view.initialize_localization(&mut settings, cx);
                     view.refresh_udl_registry(cx);
@@ -2476,7 +2481,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             .and_then(|handle| {
                 *root.borrow_mut() = Some(handle);
                 handle
-                    .update(cx, |_, window, _| hide_host_buttons(window))
+                    .update(cx, |view, window, _| window_caption::update_native_buttons(window,
+                        view.view_chrome_visible() && !view.matrix_active() && !matrix_surface::locked()))
                     .map_err(|error| io::Error::other(error.to_string()))?
             });
         if let Err(error) = prepared {

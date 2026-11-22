@@ -96,7 +96,7 @@ fn mapper_string(locale: &str, name: &str, fallback: &'static str) -> &'static s
 }
 
 fn mapper_page(locale: &str, page: usize) -> &'static str {
-    let names = ["MainMenuTab", "MacrosTab", "RunCommandsTab", "PluginCommandsTab", "ScintillaCommandsTab"];
+    let names = ["MainMenuTab", "MacrosTab", "PluginCommandsTab", "ScintillaCommandsTab"];
     mapper_string(locale, names[page], shortcuts::PAGES[page])
 }
 
@@ -117,7 +117,8 @@ fn mapper_category(locale: &str, item: &Shortcut) -> String {
         47000..=47999 => return mapper_string(locale, "AboutCategory", "About").to_owned(),
         48000..=48499 => ("settings", "Settings"),
         48500..=48999 => ("tools", "Tools"),
-        _ => ("run", "Run"),
+        49000 => return crate::menu::product_command_label(id, locale).unwrap_or("Terminal").to_owned(),
+        _ => return item.category.clone(),
     };
     crate::localization::menu_root(locale, root).unwrap_or(fallback).to_owned()
 }
@@ -141,9 +142,9 @@ pub(super) struct State {
     pub(super) visible: bool,
     pub(super) bindings: BindingSet,
     pub(super) page: usize,
-    selected: [Option<CommandKey>; 5],
-    scroll: [gpui::ScrollHandle; 5],
-    horizontal_scroll: [gpui::ScrollHandle; 5],
+    selected: [Option<CommandKey>; 4],
+    scroll: [gpui::ScrollHandle; 4],
+    horizontal_scroll: [gpui::ScrollHandle; 4],
     info_scroll: gpui::ScrollHandle,
     scroll_grab: [Cell<Option<f32>>; 3],
     scroll_bounds: [Rc<Cell<gpui::Bounds<gpui::Pixels>>>; 3],
@@ -306,7 +307,10 @@ impl MatrixWindow {
                 };
                 match native {
                     Ok(native) => {
-                        if let Some(native) = native { cx.clear_key_bindings(); cx.bind_keys(native); }
+                        if let Some(native) = native {
+                            cx.clear_key_bindings();
+                            cx.bind_keys(native);
+                        }
                         self.shortcut_mapper.bindings = bindings;
                         self.macro_dialogs.library = library;
                         self.shortcut_mapper.message.clear();
@@ -316,7 +320,7 @@ impl MatrixWindow {
             }
             Err(error) => self.shortcut_mapper.message = format!("Could not load shortcuts.xml: {error}"),
         }
-        for page in 0..5 {
+        for page in 0..shortcuts::PAGES.len() {
             if !self.shortcut_mapper.bindings.shortcuts.iter().any(|item| item.key.page() == page && self.shortcut_mapper.selected[page].as_ref() == Some(&item.key)) {
                 self.shortcut_mapper.selected[page] = self.shortcut_mapper.bindings.shortcuts.iter().find(|item| item.key.page() == page).map(|item| item.key.clone());
             }
@@ -329,7 +333,7 @@ impl MatrixWindow {
         if self.file_busy || self.close_dialog || self.save_all_dialog || self.macro_playing { return; }
         self.menu_input(MenuEvent::Dismiss, window, cx);
         self.refresh_shortcuts(window, cx);
-        self.shortcut_mapper.page = page.min(4);
+        self.shortcut_mapper.page = page.min(shortcuts::PAGES.len() - 1);
         self.shortcut_mapper.visible = true;
         self.shortcut_mapper.edit = None;
         self.shortcut_mapper.confirm = None;
@@ -398,22 +402,14 @@ impl MatrixWindow {
 
     fn dispatch_shortcut_action(&mut self, action: &ShortcutAction, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if matrix_surface::locked() { return false; }
+        if self.ssh_terminal.visible && self.ssh_terminal.focus.contains_focused(window, cx) { return false; }
+        if self.terminal_config.password_visible && self.floating_windows.get(&floating_windows::DialogKind::TerminalPassword)
+            .is_some_and(|handle| gpui::AnyWindowHandle::from(*handle) == Window::window_handle(window)) { return false; }
         if self.file_busy || self.close_dialog || self.save_all_dialog || self.macro_playing || self.shortcut_mapper.visible { return false; }
         let Some(item) = self.shortcut_mapper.bindings.shortcuts.iter().find(|item| item.key == action.key).cloned() else { return false; };
         if let CommandKey::Scintilla { id, .. } = item.key {
             if supplemental_scintilla(id) { self.execute_scintilla_shortcut(id, window, cx); return true; }
             if let Some(action) = scintilla_action(id) { window.dispatch_action(action, cx); return true; }
-            return false;
-        }
-        if let CommandKey::Run(index) = item.key {
-            if let Some(command) = self.shortcut_mapper.bindings.run_commands.get(index) {
-                let command = command.command.clone();
-                self.run_input.update(cx, |field, cx| field.set_text(&command, window, cx));
-                self.run_visible = true;
-                self.confirm_run(window, cx);
-                if self.run_visible { self.present_floating(floating_windows::DialogKind::Run, window, cx); }
-                return true;
-            }
             return false;
         }
         if let CommandKey::Menu { id: id @ 50003..=50005, .. } = item.key {
@@ -426,6 +422,10 @@ impl MatrixWindow {
         }
         let Some(command) = item.command else { return false; };
         if !menu_surface::availability(self, window, cx).allows(command) { return false; }
+        if command == MenuCommand::OpenTerminal {
+            self.open_terminal(window, cx);
+            return true;
+        }
         fn locate(entries: &[crate::menu::MenuEntry], command: MenuCommand, path: &mut Vec<usize>) -> bool {
             for (index, entry) in entries.iter().enumerate() {
                 path.push(index);
@@ -453,6 +453,10 @@ impl MatrixWindow {
     }
 
     fn apply_keypad_shortcut(&mut self, combo: KeyCombo, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if window.context_stack().iter().any(|context| context.contains("MatrixTextField")) { return false; }
+        if self.ssh_terminal.visible && self.ssh_terminal.focus.contains_focused(window, cx) { return false; }
+        if self.terminal_config.password_visible && self.floating_windows.get(&floating_windows::DialogKind::TerminalPassword)
+            .is_some_and(|handle| gpui::AnyWindowHandle::from(*handle) == Window::window_handle(window)) { return false; }
         if self.shortcut_mapper.visible {
             let in_list = self.shortcut_mapper.edit.as_ref().is_some_and(|edit| edit.choose_key) && self.shortcut_mapper.key_list_focus.contains_focused(window, cx);
             if !self.shortcut_mapper.key_focus.is_focused(window) && !in_list { return false; }
@@ -464,21 +468,16 @@ impl MatrixWindow {
         let Some(item) = self.shortcut_mapper.bindings.shortcuts.iter().filter(|item| {
             if editor_focused { return true; }
             let global = self.shortcut_mapper.defaults.iter().any(|(key, binding)| key.as_ref() == Some(&item.key) && binding.predicate().is_none());
-            item.key.page() != 4 && global
+            item.key.page() != 3 && global
         }).filter_map(|item| self.shortcut_mapper.bindings.runtime_binding_priority(item, combo).map(|priority| (priority, item))).min_by_key(|(priority, item)| (*priority, item.key.page())).map(|(_, item)| item.clone()) else { return false; };
         match &item.key {
             CommandKey::Scintilla { id, .. } if scintilla_action(*id).is_none() && !supplemental_scintilla(*id) => return false,
-            CommandKey::Run(index) if self.shortcut_mapper.bindings.run_commands.get(*index).is_none() || self.batch_editing_blocked() => return false,
             _ => {},
         }
         if let Some(command) = item.command {
             if !menu_surface::availability(self, window, cx).allows(command) { return false; }
-        } else if !matches!(item.key, CommandKey::Run(_) | CommandKey::Scintilla { .. } | CommandKey::Menu { id: 50003..=50005, .. }) { return false; }
+        } else if !matches!(item.key, CommandKey::Scintilla { .. } | CommandKey::Menu { id: 50003..=50005, .. }) { return false; }
         self.dispatch_shortcut_action(&ShortcutAction { key: item.key }, window, cx)
-    }
-
-    pub(super) fn activate_shortcut_command(&mut self, key: CommandKey, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_shortcut_action(&ShortcutAction { key }, window, cx);
     }
 
     pub(super) fn set_scintilla_shortcut_target(&mut self, range: Range<ByteOffset>) -> Result<(), EditError> {
@@ -782,14 +781,14 @@ impl MatrixWindow {
         let Some(item) = self.shortcut_mapper.selected().cloned() else { return; };
         let locale = self.native_locale();
         if !item.matches_localized(&self.shortcut_mapper.filter.read(cx).text(), &locale) { return; }
-        let name = if matches!(item.key, CommandKey::Macro(_) | CommandKey::Run(_)) { item.name.clone() } else { item.localized_name(&locale) };
+        let name = if matches!(item.key, CommandKey::Macro(_)) { item.name.clone() } else { item.localized_name(&locale) };
         self.shortcut_mapper.name.update(cx, |field, cx| {
             field.set_text(&name, window, cx);
             field.set_enabled(true, cx);
-            field.set_read_only(!matches!(item.key, CommandKey::Macro(_) | CommandKey::Run(_)), cx);
+            field.set_read_only(!matches!(item.key, CommandKey::Macro(_)), cx);
         });
         let combo = item.bindings.first().copied().unwrap_or_default();
-        let bindings = if item.key.page() == 4 && item.bindings.is_empty() { vec![KeyCombo::default()] } else { item.bindings };
+        let bindings = if item.key.page() == 3 && item.bindings.is_empty() { vec![KeyCombo::default()] } else { item.bindings };
         self.shortcut_mapper.edit = Some(Edit { key: item.key, bindings, selected: 0, combo, choose_key: false, warning_visible: false });
         self.shortcut_mapper.context_menu = None;
         self.shortcut_mapper.confirm = None;
@@ -801,7 +800,7 @@ impl MatrixWindow {
     fn request_shortcut_clear(&mut self, delete: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(item) = self.shortcut_mapper.selected() else { return; };
         if !item.matches_localized(&self.shortcut_mapper.filter.read(cx).text(), &self.native_locale()) { return; }
-        if (delete && !matches!(item.key, CommandKey::Macro(_) | CommandKey::Run(_))) || (!delete && item.key.page() == 4) { return; }
+        if (delete && !matches!(item.key, CommandKey::Macro(_))) || (!delete && item.key.page() == 3) { return; }
         let key = item.key.clone();
         let name = item.name.clone();
         self.shortcut_mapper.context_menu = None;
@@ -846,7 +845,7 @@ impl MatrixWindow {
 
     fn apply_shortcut_combo(&mut self, add: bool, cx: &mut Context<Self>) {
         let Some(edit) = self.shortcut_mapper.edit.as_mut() else { return; };
-        if edit.key.page() != 4 || !edit.combo.valid() { return; }
+        if edit.key.page() != 3 || !edit.combo.valid() { return; }
         if edit.bindings.contains(&edit.combo) || (!add && edit.combo.key == 0 && edit.bindings.len() > 1) { return; }
         edit.warning_visible = true;
         if add {
@@ -864,9 +863,9 @@ impl MatrixWindow {
         if self.shortcut_mapper.name.read(cx).has_composition() { self.shortcut_mapper.message = "Commit the name before saving".into(); cx.notify(); return; }
         let name = self.shortcut_mapper.name.read(cx).text();
         let Some(edit) = self.shortcut_mapper.edit.as_mut() else { return; };
-        if matches!(edit.key, CommandKey::Macro(_) | CommandKey::Run(_)) && name.is_empty() { return; }
-        if edit.key.page() != 4 && !edit.combo.valid() { return; }
-        if edit.key.page() != 4 { edit.bindings = if edit.combo.key == 0 { Vec::new() } else { vec![edit.combo] }; }
+        if matches!(edit.key, CommandKey::Macro(_)) && name.is_empty() { return; }
+        if edit.key.page() != 3 && !edit.combo.valid() { return; }
+        if edit.key.page() != 3 { edit.bindings = if edit.combo.key == 0 { Vec::new() } else { vec![edit.combo] }; }
         let key = edit.key.clone();
         let bindings = edit.bindings.clone();
         self.persist_shortcut_change(key, name, bindings, false, window, cx);
@@ -875,7 +874,7 @@ impl MatrixWindow {
     fn reconcile_shortcut_selection(&mut self, cx: &mut Context<Self>) {
         let filter = self.shortcut_mapper.filter.read(cx).text();
         let locale = self.native_locale();
-        for page in 0..5 {
+        for page in 0..shortcuts::PAGES.len() {
             let mut rows = self.shortcut_mapper.bindings.shortcuts.iter().filter(|item| item.key.page() == page && item.matches_localized(&filter, &locale));
             let first = rows.next();
             let selected = self.shortcut_mapper.selected[page].as_ref();
@@ -1038,9 +1037,9 @@ impl MatrixWindow {
         let mut tabs = div().id("shortcut-mapper-tabs").flex().items_end().role(Role::TabList).h(px(21.)).min_h(px(21.)).ml(px(3.));
         for index in 0..shortcuts::PAGES.len() {
             let label = mapper_page(&locale, index);
-            tabs = tabs.child(div().id(gpui::SharedString::from(format!("shortcut-page-{index}"))).role(Role::Tab).aria_label(label).aria_selected(page == index).tab_index(0).flex_shrink_0().h(px(if page == index { 21. } else { 19. })).px(px(6.)).border_1().border_color(rgb(if self.dark { 0x606060 } else { 0xd0d0d0 })).bg(if page == index { background } else { rgb(if self.dark { 0x202020 } else { 0xf0f0f0 }) }).child(label).on_click(cx.listener(move |view, _, _, cx| { if view.shortcut_mapper.edit.is_some() || view.shortcut_mapper.confirm.is_some() { return; } view.shortcut_mapper.page = index; view.shortcut_mapper.context_menu = None; cx.notify(); })).on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, _, cx| { if view.shortcut_mapper.edit.is_some() || view.shortcut_mapper.confirm.is_some() { return; } let target = match event.keystroke.key.as_str() { "space" | "enter" => index, "left" => view.shortcut_mapper.page.saturating_sub(1), "right" => (view.shortcut_mapper.page + 1).min(4), _ => return }; view.shortcut_mapper.page = target; view.shortcut_mapper.context_menu = None; cx.stop_propagation(); cx.notify(); })));
+            tabs = tabs.child(div().id(gpui::SharedString::from(format!("shortcut-page-{index}"))).role(Role::Tab).aria_label(label).aria_selected(page == index).tab_index(0).flex_shrink_0().h(px(if page == index { 21. } else { 19. })).px(px(6.)).border_1().border_color(rgb(if self.dark { 0x606060 } else { 0xd0d0d0 })).bg(if page == index { background } else { rgb(if self.dark { 0x202020 } else { 0xf0f0f0 }) }).child(label).on_click(cx.listener(move |view, _, _, cx| { if view.shortcut_mapper.edit.is_some() || view.shortcut_mapper.confirm.is_some() { return; } view.shortcut_mapper.page = index; view.shortcut_mapper.context_menu = None; cx.notify(); })).on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, _, cx| { if view.shortcut_mapper.edit.is_some() || view.shortcut_mapper.confirm.is_some() { return; } let target = match event.keystroke.key.as_str() { "space" | "enter" => index, "left" => view.shortcut_mapper.page.saturating_sub(1), "right" => (view.shortcut_mapper.page + 1).min(shortcuts::PAGES.len() - 1), _ => return }; view.shortcut_mapper.page = target; view.shortcut_mapper.context_menu = None; cx.stop_propagation(); cx.notify(); })));
         }
-        let third = match page { 0 => Some(mapper_string(&locale, "ColumnCategory", "Category")), 3 => Some(mapper_string(&locale, "ColumnPlugin", "Plugin")), _ => None };
+        let third = match page { 0 => Some(mapper_string(&locale, "ColumnCategory", "Category")), 2 => Some(mapper_string(&locale, "ColumnPlugin", "Plugin")), _ => None };
         let measure = |text: &str| dialog_font::logical(window.text_system().shape_line(text.to_owned().into(), px(13.5), &[gpui::TextRun { len: text.len(), font: gpui::font(dialog_font::font_family()), color: foreground.into(), background_color: None, underline: None, strikethrough: None }], None).width()).ceil() + 15.;
         let mut widths: [f32; 4] = [30., 210., 154., third.map_or(0., |text| measure(text))];
         for item in state.bindings.shortcuts.iter().filter(|item| item.key.page() == page && item.matches_localized(&filter, &locale)) {
@@ -1078,7 +1077,7 @@ impl MatrixWindow {
             let conflicts = state.bindings.conflicts(key, bindings);
             if conflicts.is_empty() { if state.edit.is_some() { mapper_string(&locale, "ConflictInfoEditing", "No conflicts . . .").into() } else { mapper_string(&locale, "ConflictInfoOk", "No shortcut conflicts for this item.").into() } } else { conflicts.iter().map(|item| {
                 let ordinal = state.bindings.shortcuts.iter().filter(|other| other.key.page() == item.key.page()).position(|other| other.key == item.key).unwrap_or(0) + 1;
-                item.bindings.iter().enumerate().filter(|(_, other)| bindings.iter().any(|candidate| candidate.conflicts_with(**other))).map(|(index, combo)| format!("{}  |  {}{}   {}  ( {} )", mapper_page(&locale, item.key.page()), ordinal, if item.key.page() == 4 && index > 0 { "*" } else { "" }, item.localized_name(&locale), combo.label())).collect::<Vec<_>>().join("\n")
+                item.bindings.iter().enumerate().filter(|(_, other)| bindings.iter().any(|candidate| candidate.conflicts_with(**other))).map(|(index, combo)| format!("{}  |  {}{}   {}  ( {} )", mapper_page(&locale, item.key.page()), ordinal, if item.key.page() == 3 && index > 0 { "*" } else { "" }, item.localized_name(&locale), combo.label())).collect::<Vec<_>>().join("\n")
             }).collect::<Vec<_>>().join("\n") }
         } else { String::new() };
         let grid = div().relative().flex_1().min_h(px(0.)).mb(px(22.)).border_1().border_color(border)
@@ -1098,7 +1097,7 @@ impl MatrixWindow {
             if event.keystroke.key != "escape" && !(event.keystroke.key == "enter" && (view.shortcut_mapper.edit.is_some() || view.shortcut_mapper.confirm.is_some())) && !view.shortcut_mapper.focus.is_focused(window) && !view.shortcut_mapper.grid_focus.is_focused(window) { return; }
             if view.shortcut_mapper.context_menu.is_some() {
                 let page = view.shortcut_mapper.page;
-                let enabled = [0, 1, 2].into_iter().filter(|index| *index == 0 || (*index == 1 && matches!(page, 1 | 2)) || (*index == 2 && page != 4)).collect::<Vec<_>>();
+                let enabled = [0, 1, 2].into_iter().filter(|index| *index == 0 || (*index == 1 && page == 1) || (*index == 2 && page != 3)).collect::<Vec<_>>();
                 match event.keystroke.key.as_str() {
                     "escape" => view.shortcut_mapper.context_menu = None,
                     "up" | "down" => { let index = enabled.iter().position(|index| *index == view.shortcut_mapper.context_selected).unwrap_or(0); let next = if event.keystroke.key == "up" { (index + enabled.len() - 1) % enabled.len() } else { (index + 1) % enabled.len() }; view.shortcut_mapper.context_selected = enabled[next]; }
@@ -1124,11 +1123,11 @@ impl MatrixWindow {
         })).child(tabs).child(div().flex().flex_shrink_0().items_center().justify_end().h(px(24.)).child(dual_modifiers)).child(grid).child(information)
             .child(div().flex().items_center().h(px(21.)).min_h(px(21.)).mb(px(10.5)).gap(px(3.)).child(div().w(px(46.)).text_center().child(mapper_control(2607, "Filter:"))).child(div().flex_1().min_w(px(0.)).child(state.filter.clone())).child(button("shortcut-filter-clear", mapper_control(2609, "✕"), true).w(px(21.)).h(px(21.)).p(px(0.)).text_center().bg(background).on_click(cx.listener(|view, _, window, cx| view.activate_shortcut_button("shortcut-filter-clear", window, cx)))))
             .child(div().flex().flex_shrink_0().h(px(24.5)).justify_center().gap(px(14.))
-                .children([("shortcut-modify", modify_label, selected.is_some()), ("shortcut-clear", clear_label, selected.is_some() && page != 4), ("shortcut-delete", delete_label, selected.is_some() && matches!(page, 1 | 2)), ("shortcut-close", close_label, true)].into_iter().map(|(id, label, enabled)| button(id, label, enabled).w(px(80.)).h(px(24.5)).p(px(0.)).flex().items_center().justify_center().bg(rgb(if self.dark { 0x383838 } else if enabled { 0xe1e1e1 } else { 0xcccccc })).when(id == "shortcut-close", |button| button.border_color(rgb(0x0078d7))).on_click(cx.listener(move |view, _, window, cx| { if enabled { view.activate_shortcut_button(id, window, cx); } })))));
+                .children([("shortcut-modify", modify_label, selected.is_some()), ("shortcut-clear", clear_label, selected.is_some() && page != 3), ("shortcut-delete", delete_label, selected.is_some() && page == 1), ("shortcut-close", close_label, true)].into_iter().map(|(id, label, enabled)| button(id, label, enabled).w(px(80.)).h(px(24.5)).p(px(0.)).flex().items_center().justify_center().bg(rgb(if self.dark { 0x383838 } else if enabled { 0xe1e1e1 } else { 0xcccccc })).when(id == "shortcut-close", |button| button.border_color(rgb(0x0078d7))).on_click(cx.listener(move |view, _, window, cx| { if enabled { view.activate_shortcut_button(id, window, cx); } })))));
         root = root.font_family(dialog_font::font_family());
         if let Some(position) = state.context_menu {
             let mut menu = div().id("shortcut-context-menu").absolute().left(position.x.min(px(620.))).top(position.y.min(px(420.))).w(px(150.)).bg(background).border_1().border_color(border).flex().flex_col().occlude();
-            for (index, (id, label, enabled)) in [("shortcut-modify", mapper_string(&locale, "ModifyContextMenu", "Modify"), selected.is_some()), ("shortcut-delete", mapper_string(&locale, "DeleteContextMenu", "Delete"), selected.is_some() && matches!(page, 1 | 2)), ("shortcut-clear", mapper_string(&locale, "ClearContextMenu", "Clear"), selected.is_some() && page != 4)].into_iter().enumerate() {
+            for (index, (id, label, enabled)) in [("shortcut-modify", mapper_string(&locale, "ModifyContextMenu", "Modify"), selected.is_some()), ("shortcut-delete", mapper_string(&locale, "DeleteContextMenu", "Delete"), selected.is_some() && page == 1), ("shortcut-clear", mapper_string(&locale, "ClearContextMenu", "Clear"), selected.is_some() && page != 3)].into_iter().enumerate() {
                 menu = menu.child(button(id, label, enabled).bg(if state.context_selected == index { rgb(0x0067c0) } else { background }).on_click(cx.listener(move |view, _, window, cx| { view.shortcut_mapper.context_menu = None; if enabled { view.activate_shortcut_button(id, window, cx); } cx.notify(); })));
             }
             root = root.child(div().id("shortcut-context-shield").absolute().inset_0().occlude().on_mouse_down(MouseButton::Left, cx.listener(|view, _, _, cx| { view.shortcut_mapper.context_menu = None; cx.stop_propagation(); cx.notify(); }))).child(menu);
@@ -1142,12 +1141,12 @@ impl MatrixWindow {
             root = root.child(div().id("shortcut-confirm").role(Role::Alert).aria_label(title).absolute().left(px(130.)).top(px(170.)).w(px(520.)).bg(background).occlude().border_1().border_color(border).p(px(8.)).child(message).child(div().flex().gap(px(8.)).child(button("shortcut-confirm-ok", ok_label, true).on_click(cx.listener(move |view, _, window, cx| view.persist_shortcut_change(key.clone(), name.clone(), Vec::new(), true, window, cx)))).child(button("shortcut-confirm-cancel", cancel_label, true).on_click(cx.listener(|view, _, window, cx| view.activate_shortcut_button("shortcut-confirm-cancel", window, cx))))));
         }
         if let Some(edit) = &state.edit {
-            let scintilla = edit.key.page() == 4;
+            let scintilla = edit.key.page() == 3;
             let offset = if scintilla { 178.5 } else { 0. };
             let mut controls = div().absolute().inset_0();
             for (index, label, checked) in [(0, edit_control(5001, "CTRL"), edit.combo.ctrl), (1, edit_control(5002, "ALT"), edit.combo.alt), (2, edit_control(5003, "SHIFT"), edit.combo.shift), (3, "CMD", edit.combo.cmd)] {
                 let (left, top, width) = match index { 0 => (17.5, 40.5, 75.25), 1 => (17.5, 72., 75.25), 2 => (99.75, 40.5, 82.25), _ => (99.75, 72., 82.25) };
-                controls = controls.child(div().id(gpui::SharedString::from(format!("shortcut-modifier-{index}"))).role(Role::CheckBox).aria_label(label).aria_toggled(checked.into()).tab_index(0).absolute().left(px(left + offset)).top(px(top)).w(px(width)).h(px(15.)).child(format!("{} {label}", if checked { "☑" } else { "☐" })).on_click(cx.listener(move |view, _, _, cx| { if let Some(edit) = &mut view.shortcut_mapper.edit { match index { 0 => edit.combo.ctrl = !edit.combo.ctrl, 1 => edit.combo.alt = !edit.combo.alt, 2 => edit.combo.shift = !edit.combo.shift, _ => edit.combo.cmd = !edit.combo.cmd }; if edit.key.page() == 4 { edit.warning_visible = true; } } cx.notify(); })).on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, _, cx| { if event.keystroke.key == "space" { if let Some(edit) = &mut view.shortcut_mapper.edit { match index { 0 => edit.combo.ctrl = !edit.combo.ctrl, 1 => edit.combo.alt = !edit.combo.alt, 2 => edit.combo.shift = !edit.combo.shift, _ => edit.combo.cmd = !edit.combo.cmd }; if edit.key.page() == 4 { edit.warning_visible = true; } } cx.stop_propagation(); cx.notify(); } })));
+                controls = controls.child(div().id(gpui::SharedString::from(format!("shortcut-modifier-{index}"))).role(Role::CheckBox).aria_label(label).aria_toggled(checked.into()).tab_index(0).absolute().left(px(left + offset)).top(px(top)).w(px(width)).h(px(15.)).child(format!("{} {label}", if checked { "☑" } else { "☐" })).on_click(cx.listener(move |view, _, _, cx| { if let Some(edit) = &mut view.shortcut_mapper.edit { match index { 0 => edit.combo.ctrl = !edit.combo.ctrl, 1 => edit.combo.alt = !edit.combo.alt, 2 => edit.combo.shift = !edit.combo.shift, _ => edit.combo.cmd = !edit.combo.cmd }; if edit.key.page() == 3 { edit.warning_visible = true; } } cx.notify(); })).on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, _, cx| { if event.keystroke.key == "space" { if let Some(edit) = &mut view.shortcut_mapper.edit { match index { 0 => edit.combo.ctrl = !edit.combo.ctrl, 1 => edit.combo.alt = !edit.combo.alt, 2 => edit.combo.shift = !edit.combo.shift, _ => edit.combo.cmd = !edit.combo.cmd }; if edit.key.page() == 3 { edit.warning_visible = true; } } cx.stop_propagation(); cx.notify(); } })));
             }
             controls = controls.child(div().absolute().left(px(78.75 + offset)).top(px(58.5)).child("+")).child(div().absolute().left(px(168. + offset)).top(px(58.5)).child("+"));
             controls = controls.child(div().id("shortcut-key-choice").role(Role::ComboBox).aria_label(key_label).aria_value(shortcuts::key_name(edit.combo.key)).aria_expanded(edit.choose_key).track_focus(&state.key_focus).absolute().left(px(192.5 + offset)).top(px(57.)).w(px(112.)).h(px(21.)).border_1().border_color(border).px(px(3.)).child(format!("{} ▾", shortcuts::key_name(edit.combo.key))).on_click(cx.listener(|view, _, window, cx| { view.shortcut_mapper.key_focus.focus(window, cx); if let Some(edit) = &mut view.shortcut_mapper.edit { edit.choose_key = !edit.choose_key; } cx.notify(); })).on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, _, cx| { if let Some(edit) = &mut view.shortcut_mapper.edit { match event.keystroke.key.as_str() { "escape" if edit.choose_key => edit.choose_key = false, "escape" => return, "enter" if !edit.choose_key => return, "space" | "enter" => edit.choose_key = !edit.choose_key, "up" | "down" => { let keys = shortcuts::key_choices(); let index = keys.iter().position(|key| *key == edit.combo.key).unwrap_or(0); let delta = if event.keystroke.key == "up" { -1 } else { 1 }; edit.combo.key = keys[index.saturating_add_signed(delta).min(keys.len() - 1)]; edit.warning_visible = true; }, key => { let Some(combo) = KeyCombo::parse(key) else { return; }; edit.combo.key = combo.key; edit.choose_key = false; edit.warning_visible = true; } }; cx.stop_propagation(); cx.notify(); } })));
@@ -1191,7 +1190,7 @@ impl MatrixWindow {
             let conflicts = state.bindings.conflicts(&edit.key, &[edit.combo]);
             let disabled = edit.warning_visible && if scintilla { edit.bindings.first().is_none_or(|combo| combo.key == 0) } else { edit.combo.key == 0 };
             let warning = if disabled { edit_control(5007, if scintilla { "This will remove shortcut from this command" } else { "This will disable the accelerator" }) } else if conflicts.is_empty() { "" } else { edit_control(5012, "CONFLICT FOUND!") };
-            let name_valid = !matches!(edit.key, CommandKey::Macro(_) | CommandKey::Run(_)) || !state.name.read(cx).text().is_empty();
+            let name_valid = !matches!(edit.key, CommandKey::Macro(_)) || !state.name.read(cx).text().is_empty();
             editor = editor.child(div().absolute().left(px(10.5)).top(px(if scintilla { 153. } else { 126. })).child(warning)).child(button("shortcut-edit-ok", ok_label, name_valid && (scintilla || edit.combo.valid())).absolute().left(px(if scintilla { 246.75 } else { 68.25 })).top(px(if scintilla { 126. } else { 99. })).w(px(87.5)).h(px(21.)).p(px(0.)).on_click(cx.listener(|view, _, window, cx| view.confirm_shortcut_edit(window, cx)))).child(button("shortcut-edit-cancel", cancel_label, true).absolute().left(px(if scintilla { 344.75 } else { 166.25 })).top(px(if scintilla { 126. } else { 99. })).w(px(87.5)).h(px(21.)).p(px(0.)).on_click(cx.listener(|view, _, window, cx| view.activate_shortcut_button("shortcut-edit-cancel", window, cx))));
             if let Some(keys) = key_list { editor = editor.child(keys); }
             root = root.child(div().absolute().inset_0().flex().items_center().justify_center().child(editor));
@@ -1211,7 +1210,7 @@ pub(super) fn key_for_action(action: &dyn gpui::Action) -> Option<CommandKey> {
         "ShowFind" => 43001, "ShowReplace" => 43003, "ShowGoTo" => 43004, "ToggleBookmark" => 43005,
         "FindNext" => 43002, "FindPrevious" => 43010,
         "MruPreviousBuffer" => 50003, "MruNextBuffer" => 50004,
-        "NextBookmark" => 43006, "PreviousBookmark" => 43007, "ShowFindInFiles" => 43013, "ShowRun" => 49000, "PlaybackMacro" => 42021,
+        "NextBookmark" => 43006, "PreviousBookmark" => 43007, "ShowFindInFiles" => 43013, "ShowTerminal" => 49000, "PlaybackMacro" => 42021,
         "ShowColumnEditor" => 42034,
         _ => return None,
     };
@@ -1246,7 +1245,7 @@ pub(super) fn key_for_binding(binding: &KeyBinding) -> Option<CommandKey> {
 }
 
 fn shortcut_templates(bindings: &BindingSet) -> Vec<(CommandKey, KeyBinding)> {
-    bindings.shortcuts.iter().filter(|item| item.command.is_some() || matches!(item.key, CommandKey::Run(_) | CommandKey::Scintilla { .. } | CommandKey::Menu { id: 50003..=50005, .. })).map(|item| (item.key.clone(), KeyBinding::new("f24", ShortcutAction { key: item.key.clone() }, Some("MatrixEditor")))).collect()
+    bindings.shortcuts.iter().filter(|item| item.command.is_some() || matches!(item.key, CommandKey::Scintilla { .. } | CommandKey::Menu { id: 50003..=50005, .. })).map(|item| (item.key.clone(), KeyBinding::new("f24", ShortcutAction { key: item.key.clone() }, Some("MatrixEditor")))).collect()
 }
 
 fn shortcut_storage_error(error: impl std::fmt::Display) -> EditError { EditError::Storage(error.to_string()) }

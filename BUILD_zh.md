@@ -32,7 +32,7 @@ xcrun --find swift
 
 ### 将构建文件集中到 workspace
 
-指定 workspace 的绝对路径。每次打开用于安装工具链、下载依赖或构建的终端，都先执行以下环境设置，再运行 Rust 命令：
+指定 workspace 的绝对路径。每个构建终端先设置以下环境变量：
 
 ```sh
 export WORKSPACE="$HOME/workspace/notepad-matrix-build"
@@ -54,9 +54,9 @@ mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" "$CARGO_TARGET_DIR" "$TMPDIR" \
 | `$WORKSPACE/downloads` | rustup 安装脚本。 |
 | `$WORKSPACE/src` | 源码仓库。 |
 
-这些变量仅作用于当前终端及其子进程，不会移动或删除已有的 `~/.cargo`、`~/.rustup`。Xcode、SDK 和 Apple 工具独立管理的缓存不属于该目录布局。参考 [rustup 安装路径](https://rust-lang.github.io/rustup/installation/index.html#choosing-where-to-install)和 [Cargo 环境变量](https://doc.rust-lang.org/cargo/reference/environment-variables.html)。
+这些变量作用于当前终端及其子进程。已有工具目录保持原位；Xcode、SDK 和 Apple 缓存由系统管理。参考 [rustup 安装路径](https://rust-lang.github.io/rustup/installation/index.html#choosing-where-to-install)和 [Cargo 环境变量](https://doc.rust-lang.org/cargo/reference/environment-variables.html)。
 
-首次使用这个 workspace 时，安装 rustup，不修改 shell 启动配置，然后安装项目工具链和目标：
+首次使用时安装 rustup 和项目工具链：
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSLo "$WORKSPACE/downloads/rustup-init.sh" https://sh.rustup.rs
@@ -66,14 +66,14 @@ rustup toolchain install 1.98.1 --profile minimal --target aarch64-apple-darwin
 
 ### 源码目录
 
-从[官方项目仓库](https://github.com/skyfiredao/notepad-matrix)获取源码：
+克隆[项目仓库](https://github.com/skyfiredao/notepad-matrix)：
 
 ```sh
 git clone https://github.com/skyfiredao/notepad-matrix.git "$WORKSPACE/src/notepad-matrix"
 cd "$WORKSPACE/src/notepad-matrix"
 ```
 
-进入同时包含 `Cargo.toml`、`Cargo.lock`、`rust-toolchain.toml`、`src/` 和 `assets/` 的项目目录。下文命令均从该目录执行。
+下文命令均在包含 `Cargo.toml` 的项目目录执行。
 
 ```sh
 rustc --version
@@ -109,7 +109,7 @@ $WORKSPACE/target/aarch64-apple-darwin/release/notepad-matrix
 file "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix"
 ```
 
-应显示 ARM64 Mach-O 可执行文件。后续命令沿用同一个 `CARGO_TARGET_DIR`。
+应显示 ARM64 Mach-O 可执行文件。
 
 调试构建：
 

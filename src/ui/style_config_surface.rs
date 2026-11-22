@@ -752,6 +752,7 @@ impl MatrixWindow {
     }
 
     fn choose_style_color(&mut self, background: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.finish_terminal_color(cx);
         self.finish_udl_styler_color(cx);
         if !self.finish_preference_color(window, cx) { return; }
         self.finish_style_color(window, cx);

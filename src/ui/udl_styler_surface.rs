@@ -442,7 +442,9 @@ impl MatrixWindow {
     }
 
     fn choose_udl_styler_color(&mut self, token: u64, background: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.udl_styler_token_valid(token) || !self.finish_preference_color(window, cx) { return; }
+        if !self.udl_styler_token_valid(token) { return; }
+        self.finish_terminal_color(cx);
+        if !self.finish_preference_color(window, cx) { return; }
         self.finish_style_color(window, cx);
         self.sync_udl_styler_color(cx);
         let value = self.udl_styler_color_value(background);

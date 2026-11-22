@@ -366,7 +366,9 @@ pub enum MenuCommand {
     ExportHtml,
     Window(WindowCommand),
     About,
-    Run,
+    OpenTerminal,
+    OpenRemoteTerminal(u64),
+    TerminalSettings,
     HashSelection(crate::hashes::HashAlgorithm),
     Macro(crate::macros::MacroCommand),
     SavedMacro(usize),
@@ -397,6 +399,12 @@ pub enum SettingsCommand {
 
 pub(crate) fn product_command_label(id: u32, locale: &str) -> Option<&'static str> {
     match (id, locale == "chineseSimplified.xml") {
+        (41020, true) => Some("打开系统终端"),
+        (41020, false) => Some("Open System Terminal"),
+        (49000, true) => Some("本机终端"),
+        (49000, false) => Some("Local Terminal"),
+        (42033, true) => Some("设置 macOS 中的只读属性"),
+        (42033, false) => Some("Read-Only Permissions in macOS"),
         (47000, true) => Some("关于 Notepad Matrix"),
         (47000, false) => Some("About Notepad Matrix"),
         (47002, true) => Some("Notepad Matrix 项目主页"),
@@ -481,7 +489,7 @@ pub fn source_command(id: u32) -> Option<(&'static str, &'static str, &'static s
         42086 => ("日期时间(自定义)", "", "edit-date-custom"),
         42037 => ("列选模式...", "", "edit-column-tip"),
         42028 => ("当前文件设为只读", "", "edit-user-read-only"),
-        42033 => ("设置macOS的只读属性", "", "edit-file-read-only"),
+        42033 => ("设置 macOS 中的只读属性", "", "edit-file-read-only"),
         42073 => ("打开文件", "", "edit-open-selected-file"),
         42074 => (
             "在文件管理器中打开所在文件夹",
@@ -663,7 +671,7 @@ impl MenuCommand {
     pub fn source_id(self) -> Option<u32> {
         match self {
             Self::Source(id) => (source_command(id).is_some()
-                || matches!(id, 48016 | 48017 | 21000..=21999)).then_some(id),
+                || id == 48016).then_some(id),
             Self::ChangeHistory(command) => Some(command.source_id()),
             Self::Edit(command) => Some(match command {
                 EditCommand::Cut => 42001,
@@ -760,7 +768,7 @@ impl MenuCommand {
             Self::Document(command) => command.source_id(),
             Self::View(ViewCommand::ProjectPanel(index @ 0..=2)) => Some(44081 + index as u32),
             Self::About => Some(47000),
-            Self::Run => Some(49000),
+            Self::OpenTerminal => Some(49000),
             Self::DefineUserLanguage => Some(46250),
             Self::Macro(command) => Some(match command {
                 crate::macros::MacroCommand::StartRecording => 42018,
@@ -830,7 +838,9 @@ impl MenuCommand {
             Self::Window(WindowCommand::Zoom) => "Zoom",
             Self::Window(WindowCommand::BringAllToFront) => "Bring All to Front",
             Self::About => "About Notepad Matrix",
-            Self::Run => "Run...",
+            Self::OpenTerminal => "Local Terminal",
+            Self::OpenRemoteTerminal(_) => "Remote Terminal",
+            Self::TerminalSettings => "Terminal Configuration...",
             Self::HashSelection(_) => "Generate from selection into clipboard",
             Self::Language(language) => language.label(),
             Self::Macro(crate::macros::MacroCommand::StartRecording) => "Start Recording",
@@ -950,7 +960,9 @@ impl MenuCommand {
             Self::Window(WindowCommand::Minimize) => "Cmd+M",
             Self::Window(_) => "",
             Self::About => "F1",
-            Self::Run => "F5",
+            Self::OpenTerminal => "F5",
+            Self::OpenRemoteTerminal(_) => "",
+            Self::TerminalSettings => "",
             Self::HashSelection(_) => "",
             Self::Language(_) => "",
             Self::DefineUserLanguage => "",
@@ -1041,7 +1053,9 @@ impl MenuCommand {
             Self::Window(WindowCommand::Zoom) => Some('z'),
             Self::Window(WindowCommand::BringAllToFront) => Some('b'),
             Self::About => Some('a'),
-            Self::Run => Some('r'),
+            Self::OpenTerminal => Some('r'),
+            Self::OpenRemoteTerminal(_) => None,
+            Self::TerminalSettings => None,
             Self::HashSelection(_) => None,
             Self::Language(_) => None,
             Self::Macro(crate::macros::MacroCommand::StartRecording) => Some('c'),
@@ -1193,6 +1207,10 @@ pub struct MenuDefinition {
 }
 
 impl MenuDefinition {
+    pub fn direct_command(&self) -> Option<MenuCommand> {
+        None
+    }
+
     pub fn file_menu() -> Self {
         Self {
             selector: "file-menu-trigger",
@@ -1673,10 +1691,13 @@ impl Default for MenuBar {
                 .collect(),
             },
             MenuDefinition {
-                selector: "run-menu-trigger",
-                label: "运行(R)",
+                selector: "terminal-menu-trigger",
+                label: "终端(R)",
                 mnemonic: 'r',
-                entries: vec![MenuEntry::Action(MenuCommand::Run)],
+                entries: vec![
+                    MenuEntry::Action(MenuCommand::OpenTerminal),
+                    MenuEntry::Action(MenuCommand::TerminalSettings),
+                ],
             },
             MenuDefinition {
                 selector: "window-menu-trigger",
@@ -2337,7 +2358,7 @@ impl MenuBar {
                 position.min(self.definitions.len()),
                 MenuDefinition {
                     selector: "plugins-menu-trigger",
-                    label: "插件(P)",
+                    label: "模块(P)",
                     mnemonic: 'p',
                     entries,
                 },
@@ -2426,31 +2447,17 @@ impl MenuBar {
         }
         if menu.entries != entries { menu.entries = entries; self.revision = self.revision.wrapping_add(1); }
     }
-    pub fn set_saved_run_commands(&mut self, commands: Vec<(String, String)>) {
-        let Some(menu) = self.definitions.iter_mut().find(|menu| menu.selector == "run-menu-trigger") else { return; };
-        let start = if commands.is_empty() { 1 } else { 2 };
-        if menu.entries.len() == start + commands.len() + 2
-            && menu.entries.first() == Some(&MenuEntry::Action(MenuCommand::Run))
-            && (commands.is_empty() || menu.entries.get(1) == Some(&MenuEntry::Separator))
-            && menu.entries.get(start + commands.len()) == Some(&MenuEntry::Separator)
-            && matches!(menu.entries.last(), Some(MenuEntry::DynamicAction { command: MenuCommand::Source(48017), label, shortcut })
-                if label == "管理运行命令快捷键..." && shortcut.is_empty())
-            && commands.iter().enumerate().all(|(index, (label, shortcut))| {
-                matches!(menu.entries.get(start + index), Some(MenuEntry::DynamicAction {
-                    command: MenuCommand::Source(id), label: current_label, shortcut: current_shortcut,
-                }) if *id == 21000 + index as u32 && current_label == label && current_shortcut == shortcut)
-            })
-        { return; }
-        let mut entries = vec![MenuEntry::Action(MenuCommand::Run)];
-        if !commands.is_empty() {
-            entries.push(MenuEntry::Separator);
-            entries.extend(commands.into_iter().enumerate().map(|(index, (label, shortcut))| MenuEntry::DynamicAction {
-                command: MenuCommand::Source(21000 + index as u32), label, shortcut,
-            }));
+    pub fn set_terminal_servers(&mut self, servers: Vec<(u64, String)>) {
+        let Some(menu) = self.definitions.iter_mut().find(|menu| menu.selector == "terminal-menu-trigger") else { return; };
+        let mut entries = vec![MenuEntry::Action(MenuCommand::OpenTerminal), MenuEntry::Action(MenuCommand::TerminalSettings)];
+        if !servers.is_empty() { entries.push(MenuEntry::Separator); }
+        entries.extend(servers.into_iter().map(|(id, label)| MenuEntry::DynamicAction {
+            command: MenuCommand::OpenRemoteTerminal(id), label, shortcut: String::new(),
+        }));
+        if menu.entries != entries {
+            menu.entries = entries;
+            self.revision = self.revision.wrapping_add(1);
         }
-        entries.push(MenuEntry::Separator);
-        entries.push(MenuEntry::DynamicAction { command: MenuCommand::Source(48017), label: "管理运行命令快捷键...".into(), shortcut: String::new() });
-        if menu.entries != entries { menu.entries = entries; self.revision = self.revision.wrapping_add(1); }
     }
     pub fn active_root(&self) -> usize {
         self.root
@@ -2477,6 +2484,9 @@ impl MenuBar {
         })
     }
     pub fn popup_count(&self) -> usize {
+        if self.documents.is_none() && self.configured_popup.is_none()
+            && self.definitions.get(self.root).and_then(MenuDefinition::direct_command).is_some()
+        { return 0; }
         if self.mode == MenuMode::Open {
             self.path.len().max(1)
         } else {
@@ -2637,6 +2647,15 @@ impl MenuBar {
     }
 
     fn activate(&mut self, available: &impl Fn(MenuCommand) -> bool) -> MenuOutcome {
+        if self.mode != MenuMode::Closed && self.documents.is_none() && self.configured_popup.is_none()
+            && let Some(command) = self.definitions.get(self.root).and_then(MenuDefinition::direct_command)
+        {
+            if available(command) {
+                self.handle(MenuEvent::Dismiss, available);
+                return MenuOutcome::Activate(command);
+            }
+            return MenuOutcome::None;
+        }
         if self.mode == MenuMode::BarFocused {
             self.open_root(self.root, available);
             return MenuOutcome::None;
@@ -2739,7 +2758,12 @@ impl MenuBar {
             }
             MenuEvent::ClickAtRevision { .. } => {}
             MenuEvent::OpenSubmenuLimited { .. } => {}
-            MenuEvent::OpenRoot(root) => self.open_root(root, available),
+            MenuEvent::OpenRoot(root) => {
+                self.open_root(root, available);
+                if self.definitions.get(root).and_then(MenuDefinition::direct_command).is_some() {
+                    return self.activate(available);
+                }
+            }
             MenuEvent::OpenSubmenu(selector) => {
                 let target = self.definitions.iter().enumerate().find_map(|(root, definition)| {
                     definition.entries.iter().enumerate().find_map(|(index, entry)| {
@@ -2755,6 +2779,10 @@ impl MenuBar {
                 }
             }
             MenuEvent::ToggleRoot(root) => {
+                if self.definitions.get(root).and_then(MenuDefinition::direct_command).is_some() {
+                    self.open_root(root, available);
+                    return self.activate(available);
+                }
                 if self.mode == MenuMode::Open && root == self.root && self.documents.is_none() && self.configured_popup.is_none() {
                     self.mode = MenuMode::Closed;
                     self.path.clear();
@@ -2838,6 +2866,9 @@ impl MenuBar {
                         .position(|definition| definition.mnemonic == key)
                     {
                         self.open_root(index, available);
+                        if self.definitions[index].direct_command().is_some() {
+                            return self.activate(available);
+                        }
                     }
                 } else if self.mode == MenuMode::Open {
                     let depth = self.path.len().saturating_sub(1);

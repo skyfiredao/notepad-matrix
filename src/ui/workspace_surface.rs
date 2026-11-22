@@ -3,6 +3,37 @@ use super::*;
 const TAB_SCROLL_ARROW_SIZE: f32 = 17.;
 const TAB_SCROLL_ARROW_TOP: f32 = 6.;
 
+pub(super) fn classic_tab_frame(active: bool, background: u32, selected: u32) -> AnyElement {
+    gpui::canvas(
+        |bounds, _, _| bounds,
+        move |bounds, _, window, _| {
+            let left = bounds.left();
+            let top = bounds.top();
+            let right = bounds.right();
+            let side_height = bounds.size.height - px(if active { 3. } else { 2. });
+            for (origin, extent, color) in [
+                (gpui::point(left, top), size(bounds.size.width, px(2.)), background),
+                (gpui::point(left + px(2.), top), size(bounds.size.width - px(4.), px(1.)), 0xffffff),
+                (gpui::point(left + px(1.), top + px(1.)), size(bounds.size.width - px(2.), px(1.)), 0xffffff),
+                (gpui::point(left + px(2.), top + px(1.)), size(bounds.size.width - px(4.), px(1.)), 0xe3e3e3),
+                (gpui::point(right - px(2.), top + px(1.)), size(px(1.), px(1.)), 0x696969),
+                (gpui::point(left, top + px(2.)), size(px(1.), side_height), 0xffffff),
+                (gpui::point(left + px(1.), top + px(2.)), size(px(1.), side_height), 0xe3e3e3),
+                (gpui::point(right - px(2.), top + px(2.)), size(px(1.), side_height), 0xa0a0a0),
+                (gpui::point(right - px(1.), top + px(2.)), size(px(1.), side_height), 0x696969),
+            ] {
+                window.paint_quad(gpui::fill(Bounds::new(origin, extent), rgb(color)));
+            }
+            if active {
+                window.paint_quad(gpui::fill(
+                    Bounds::new(gpui::point(left, bounds.bottom() - px(1.)), size(bounds.size.width, px(1.))),
+                    rgb(selected),
+                ));
+            }
+        },
+    ).absolute().top(px(-1.)).left(px(-1.)).right(px(-1.)).bottom(px(0.)).into_any_element()
+}
+
 fn first_visible_tab(scroll: &gpui::ScrollHandle, count: usize) -> Option<usize> {
     (0..count).find(|index| {
         scroll.bounds_for_item(*index).is_some_and(|bounds| {
@@ -11,7 +42,7 @@ fn first_visible_tab(scroll: &gpui::ScrollHandle, count: usize) -> Option<usize>
     })
 }
 
-fn tab_colour(colour: u32, dark: bool, focused: bool, hovered: bool) -> u32 {
+pub(super) fn tab_colour(colour: u32, dark: bool, focused: bool, hovered: bool) -> u32 {
     let red = ((colour >> 16) & 255) as i32;
     let green = ((colour >> 8) & 255) as i32;
     let blue = (colour & 255) as i32;
@@ -839,36 +870,7 @@ impl MatrixWindow {
                             .h(px(1.))
                             .bg(rgb(if dark { 0x646464 } else { 0xffffff })),
                     )
-                    .when(classic_frame, |tab| {
-                        tab.child(gpui::canvas(
-                            |bounds, _, _| bounds,
-                            move |bounds, _, window, _| {
-                                let left = bounds.left();
-                                let top = bounds.top();
-                                let right = bounds.right();
-                                let side_height = bounds.size.height - px(if id == active { 3. } else { 2. });
-                                for (origin, extent, color) in [
-                                    (gpui::point(left, top), size(bounds.size.width, px(2.)), background),
-                                    (gpui::point(left + px(2.), top), size(bounds.size.width - px(4.), px(1.)), 0xffffff),
-                                    (gpui::point(left + px(1.), top + px(1.)), size(bounds.size.width - px(2.), px(1.)), 0xffffff),
-                                    (gpui::point(left + px(2.), top + px(1.)), size(bounds.size.width - px(4.), px(1.)), 0xe3e3e3),
-                                    (gpui::point(right - px(2.), top + px(1.)), size(px(1.), px(1.)), 0x696969),
-                                    (gpui::point(left, top + px(2.)), size(px(1.), side_height), 0xffffff),
-                                    (gpui::point(left + px(1.), top + px(2.)), size(px(1.), side_height), 0xe3e3e3),
-                                    (gpui::point(right - px(2.), top + px(2.)), size(px(1.), side_height), 0xa0a0a0),
-                                    (gpui::point(right - px(1.), top + px(2.)), size(px(1.), side_height), 0x696969),
-                                ] {
-                                    window.paint_quad(gpui::fill(Bounds::new(origin, extent), rgb(color)));
-                                }
-                                if id == active {
-                                    window.paint_quad(gpui::fill(
-                                        Bounds::new(gpui::point(left, bounds.bottom() - px(1.)), size(bounds.size.width, px(1.))),
-                                        rgb(selected),
-                                    ));
-                                }
-                            },
-                        ).absolute().top(px(-1.)).left(px(-1.)).right(px(-1.)).bottom(px(0.)))
-                    })
+                    .when(classic_frame, |tab| tab.child(classic_tab_frame(id == active, background, selected)))
                     .when(id == active && draw_top, |tab| {
                         tab.child(
                             div()

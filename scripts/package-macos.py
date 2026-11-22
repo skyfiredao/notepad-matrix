@@ -109,6 +109,33 @@ def sandbox_entitlements(sandbox, entitlements):
     return values
 
 
+def image_device(image):
+    state = plistlib.loads(subprocess.check_output(['/usr/bin/hdiutil', 'info', '-plist']))
+    for attached in state.get('images', []):
+        if Path(attached['image-path']).resolve() != image.resolve():
+            continue
+        for entity in attached.get('system-entities', []):
+            device = entity.get('dev-entry', '')
+            if re.fullmatch(r'/dev/disk\d+', device):
+                return device
+        raise RuntimeError(f'Cannot identify attached disk image device: {image}')
+    return None
+
+
+def detach_image(image):
+    device = image_device(image)
+    if device is None:
+        return
+    subprocess.run(['/usr/bin/hdiutil', 'detach', device])
+    remaining = image_device(image)
+    if remaining is None:
+        return
+    result = subprocess.run(['/usr/bin/hdiutil', 'detach', '-force', remaining])
+    if image_device(image) is not None:
+        result.check_returncode()
+        raise RuntimeError(f'Disk image remains attached after detach: {image}')
+
+
 def disk_image(app, image, output):
     icon = ROOT / 'assets/notepad-matrix.icns'
     with tempfile.TemporaryDirectory(prefix='.dmg-', dir=output) as temporary:
@@ -127,10 +154,7 @@ def disk_image(app, image, output):
             shutil.copy2(icon, mount / '.VolumeIcon.icns')
             subprocess.run(['/usr/bin/xcrun', 'SetFile', '-a', 'C', str(mount)], check=True)
         finally:
-            if os.path.ismount(mount):
-                result = subprocess.run(['/usr/bin/hdiutil', 'detach', str(mount)])
-                if result.returncode:
-                    subprocess.run(['/usr/bin/hdiutil', 'detach', '-force', str(mount)], check=True)
+            detach_image(writable)
             mount.rmdir()
         subprocess.run(['/usr/bin/hdiutil', 'convert', str(writable), '-format', 'UDZO',
                         '-imagekey', 'zlib-level=9', '-o', str(image)], check=True)

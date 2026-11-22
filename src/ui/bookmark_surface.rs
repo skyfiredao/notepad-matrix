@@ -155,7 +155,7 @@ fn bookmark_image() -> Arc<gpui::Image> {
         .get_or_init(|| {
             Arc::new(gpui::Image::from_bytes(
                 gpui::ImageFormat::Svg,
-                include_bytes!("../../assets/notepad-plus-plus/bookmark14.svg").to_vec(),
+                include_bytes!("../../assets/ui/bookmark14.svg").to_vec(),
             ))
         })
         .clone()

@@ -73,17 +73,37 @@ Native window resizing can synchronously trigger GPUI callbacks. Fullscreen, Pos
 
 Trash uses `NSFileManager.trashItemAtURL` under a parent-directory access guard; callers handle confirmation and document closing. External application opening uses `NSWorkspace`.
 
-F5 expands commands into a private, self-removing `.command` file. Sandboxed launches hand the file to Terminal through `NSWorkspace.openURLs`; unsandboxed launches use a child process. The asynchronous result reports application handoff. See [`native_app_open.rs`](src/native_app_open.rs) for launch options and completion handling.
+### Terminal
 
-Sources: [`ui.rs`](src/ui.rs), [`view_surface.rs`](src/ui/view_surface.rs), [`panel_surface.rs`](src/ui/panel_surface.rs), [`document_map_surface.rs`](src/ui/document_map_surface.rs), [`native_app_open.rs`](src/native_app_open.rs), [`folder_workspace.rs`](src/folder_workspace.rs), [`run_commands.rs`](src/run_commands.rs).
+| Module | Responsibility |
+|---|---|
+| `ssh_terminal.rs` | Configuration persistence, keys, host trust and SSH network sessions. |
+| `terminal_config_surface.rs` | Configuration drafts, password input, color panel and transparency slider. |
+| `ssh_terminal_surface.rs` | Connection state, input queues, `vt100` parsing, terminal painting and selection. |
+
+The local entry and F5 call `NSWorkspace.openApplication` to open Terminal.app. Remote entries create or reuse an embedded SSH session by profile ID. File and workspace entries also use Terminal.app.
+
+Each SSH session runs `russh` on a separate thread with a single-threaded tokio runtime. GPUI sends input and resize requests through a command queue and receives status and output through an event queue. `vt100` parses output; a GPUI canvas paints the grid. The target sshd provides the PTY and shell. Networking uses the existing sandbox outbound permission.
+
+Configuration is stored under `ssh_terminal`. Remote records have stable `u64` IDs and store address, account, authentication and appearance fields, with mode fixed to SSH. The panel keeps separate loaded snapshots, pending records and edit drafts. `Settings::save(store, expected)` compares snapshots under the write lock and returns an error on conflict. Legacy local records remain for read/write compatibility; the interface lists remote records only. Loading clears legacy `UserDefinedCommands`, Run-only shortcuts and uppercase `Terminal` settings, retaining other configuration.
+
+Passwords use `NSSecureTextField`, bind to a target profile snapshot and are released after authentication. Profiles share the user-generated, unencrypted Ed25519 private key in the app's private container directory, with directory mode 0700 and file mode 0600. Host keys are pinned by canonical address and port, saved after first confirmation and rejected on change. Existing localhost trust is retained.
+
+`State.active` holds the current `ConnectionState`; `State.parked` stores background states by ID, and `tabs` records opening order. Switching tabs swaps active and parked states, retaining each connection, parser, history, selection and input queue. One polling task services all connections. Address and account changes take effect on reconnect; appearance changes update state directly. Closing or deleting profiles cancels their connections and prompts. Closing the active connection selects a neighboring tab; no remaining connections hides the panel.
+
+`background_color` stores 24-bit RGB and `transparency` stores a percentage from 0–100, defaulting to black and 0%. The shared `NSColorPanel` binds to the edited profile ID and updates its draft only. Saving synchronizes the color; ending editing or changing the color target stops updates. The slider uses Preferences colors and supports keyboard and accessibility value actions. Font changes recalculate cell metrics and SSH PTY dimensions.
+
+A transparent active terminal switches the window to `WindowBackgroundAppearance::Transparent`. The root background is transparent; document and interface regions paint separate opaque surfaces. Terminal backgrounds are painted once per cell, including ANSI backgrounds, with unused edges filled separately. Text, selections, cursors, tabs, buttons and the scrollbar stay opaque. Closing the terminal, setting transparency to zero or entering the Matrix interface restores an opaque window.
+
+Tabs share document-tab font, color and frame drawing, with a 4px top indicator in the configured color. Tabs, status and controls share one row. The target address uses a tooltip; buttons use focus handles for Enter/Space activation. Scrollbars reuse the main editor's 16px width, track, thumb and arrow drawing. The profile list is fixed at 148px, including a 26px header, five 24px rows and borders. Mouse paste reads the shared `ssh_terminal.paste_button`, either `middle` or `right`, defaulting to Right button.
+
+Sources: [`ssh_terminal.rs`](src/ssh_terminal.rs), [`terminal_config_surface.rs`](src/ui/terminal_config_surface.rs), [`ssh_terminal_surface.rs`](src/ui/ssh_terminal_surface.rs), [`ui.rs`](src/ui.rs), [`view_surface.rs`](src/ui/view_surface.rs), [`panel_surface.rs`](src/ui/panel_surface.rs), [`document_map_surface.rs`](src/ui/document_map_surface.rs), [`native_app_open.rs`](src/native_app_open.rs), [`folder_workspace.rs`](src/folder_workspace.rs), [`child_process.rs`](src/child_process.rs).
 
 ## 6. Compile built-in modules
 
-Converter, MIME Tools, and HTML file export compile into the application and use the Plugins menu. They use Rust editing transactions, raw-byte interfaces, and the panel system.
+Converter, MIME Tools, and HTML file export compile into the application and use the Modules menu. They use Rust editing transactions, raw-byte interfaces, and the panel system.
 
-Run executes external commands separately from built-in modules. See [configuration files](README.md#configuration).
-
-Sources: [`converter.rs`](src/converter.rs), [`mime.rs`](src/mime.rs), [`html_export.rs`](src/html_export.rs), [`macros.rs`](src/macros.rs), [`shortcuts.rs`](src/shortcuts.rs), [`run_commands.rs`](src/run_commands.rs).
+Sources: [`converter.rs`](src/converter.rs), [`mime.rs`](src/mime.rs), [`html_export.rs`](src/html_export.rs), [`macros.rs`](src/macros.rs), [`shortcuts.rs`](src/shortcuts.rs).
 
 ## 7. Parse resources on demand
 

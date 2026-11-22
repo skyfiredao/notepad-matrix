@@ -32,7 +32,7 @@ xcrun --find swift
 
 ### Keep build files in one workspace
 
-Choose an absolute workspace path. Run this block in each terminal used for toolchain installation, dependency downloads or builds, before running any Rust command:
+Choose an absolute workspace path. Set these variables in each build terminal:
 
 ```sh
 export WORKSPACE="$HOME/workspace/notepad-matrix-build"
@@ -54,9 +54,9 @@ mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" "$CARGO_TARGET_DIR" "$TMPDIR" \
 | `$WORKSPACE/downloads` | The rustup installation script. |
 | `$WORKSPACE/src` | Source checkout. |
 
-These variables apply to the current terminal and its child processes. They do not move or delete existing `~/.cargo` or `~/.rustup` directories. Xcode, SDKs and caches managed separately by Apple tools remain outside this layout. See [rustup installation paths](https://rust-lang.github.io/rustup/installation/index.html#choosing-where-to-install) and [Cargo environment variables](https://doc.rust-lang.org/cargo/reference/environment-variables.html).
+These variables apply to the current terminal and its child processes. Existing tool installations stay in place; Xcode, SDKs and Apple caches remain system-managed. See [rustup installation paths](https://rust-lang.github.io/rustup/installation/index.html#choosing-where-to-install) and [Cargo environment variables](https://doc.rust-lang.org/cargo/reference/environment-variables.html).
 
-On first use of this workspace, install rustup without changing shell startup files, then install the project toolchain and target:
+On first use, install rustup and the project toolchain:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSLo "$WORKSPACE/downloads/rustup-init.sh" https://sh.rustup.rs
@@ -66,14 +66,14 @@ rustup toolchain install 1.98.1 --profile minimal --target aarch64-apple-darwin
 
 ### Source directory
 
-Get the source from the [official project repository](https://github.com/skyfiredao/notepad-matrix):
+Clone the [project repository](https://github.com/skyfiredao/notepad-matrix):
 
 ```sh
 git clone https://github.com/skyfiredao/notepad-matrix.git "$WORKSPACE/src/notepad-matrix"
 cd "$WORKSPACE/src/notepad-matrix"
 ```
 
-Enter the project directory containing `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `src/`, and `assets/`. Run all remaining commands from that directory.
+Run the remaining commands from the project directory containing `Cargo.toml`.
 
 ```sh
 rustc --version
@@ -109,7 +109,7 @@ Check its architecture:
 file "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/notepad-matrix"
 ```
 
-The output should identify an ARM64 Mach-O executable. The commands below use the same `CARGO_TARGET_DIR`.
+The output should identify an ARM64 Mach-O executable.
 
 Debug build:
 

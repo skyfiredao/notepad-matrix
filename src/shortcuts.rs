@@ -9,8 +9,7 @@ use crate::menu::{MenuCommand, MenuDefinition, MenuEntry};
 use crate::style_config::{Node, read_xml};
 
 pub const MACRO_BASE: u32 = 20000;
-pub const RUN_BASE: u32 = 21000;
-pub const PAGES: [&str; 5] = ["Main menu", "Macros", "Run commands", "Plugin commands", "Scintilla commands"];
+pub const PAGES: [&str; 4] = ["Main menu", "Macros", "Plugin commands", "Scintilla commands"];
 pub const DUAL_MODIFIERS_SETTING: &str = "ShortcutMapper.dualModifiers";
 
 thread_local! {
@@ -73,21 +72,19 @@ impl Drop for KeyMappingScope {
 pub enum CommandKey {
     Menu { id: u32, nth: u32 },
     Macro(usize),
-    Run(usize),
     Plugin { module: String, internal_id: u32 },
     Scintilla { id: u32, menu_id: u32 },
 }
 
 impl CommandKey {
     pub fn page(&self) -> usize {
-        match self { Self::Menu { .. } => 0, Self::Macro(_) => 1, Self::Run(_) => 2, Self::Plugin { .. } => 3, Self::Scintilla { .. } => 4 }
+        match self { Self::Menu { .. } => 0, Self::Macro(_) => 1, Self::Plugin { .. } => 2, Self::Scintilla { .. } => 3 }
     }
 
     pub fn command_id(&self) -> Option<u32> {
         match self {
             Self::Menu { id, .. } => Some(*id),
             Self::Macro(index) => u32::try_from(*index).ok().and_then(|index| MACRO_BASE.checked_add(index)),
-            Self::Run(index) => u32::try_from(*index).ok().and_then(|index| RUN_BASE.checked_add(index)),
             _ => None,
         }
     }
@@ -275,29 +272,26 @@ impl Shortcut {
     fn matches_name(&self, filter: &str, name: &str) -> bool {
         let name = name.to_lowercase();
         let keys = self.label().to_lowercase();
-        let module = if self.key.page() == 3 { self.category.to_lowercase() } else { String::new() };
+        let module = if self.key.page() == 2 { self.category.to_lowercase() } else { String::new() };
         filter.to_lowercase().split(' ').filter(|word| !word.is_empty()).all(|word| name.contains(word) || keys.contains(word) || module.contains(word))
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct RunCommand { pub name: String, pub command: String, pub bindings: Vec<KeyCombo> }
-
-#[derive(Clone, Debug)]
 pub struct BindingSet {
     pub shortcuts: Vec<Shortcut>,
-    pub run_commands: Vec<RunCommand>,
     pub dual_modifiers: bool,
     overrides: BTreeMap<CommandKey, Vec<KeyCombo>>,
     document: Node,
 }
 
 impl Default for BindingSet {
-    fn default() -> Self { Self { shortcuts: Vec::new(), run_commands: Vec::new(), dual_modifiers: true, overrides: BTreeMap::new(), document: Node { name: "NotepadPlus".into(), ..Node::default() } } }
+    fn default() -> Self { Self { shortcuts: Vec::new(), dual_modifiers: true, overrides: BTreeMap::new(), document: Node { name: "NotepadPlus".into(), ..Node::default() } } }
 }
 
 impl BindingSet {
     pub fn load(store: &ConfigStore, mut catalog: Vec<Shortcut>, macro_names: &[String]) -> io::Result<Self> {
+        let lock = config_write_lock(store)?;
         let path = store.root().join("shortcuts.xml");
         let document = match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => read_xml(&path)?,
@@ -307,6 +301,16 @@ impl BindingSet {
         };
         if document.name != "NotepadPlus" { return Err(invalid("shortcuts.xml requires NotepadPlus")); }
         let mut set = Self { document, ..Self::default() };
+        let previous_sections = set.document.children.len();
+        set.document.children.retain(|node| node.name != "UserDefinedCommands");
+        let mut cleaned = set.document.children.len() != previous_sections;
+        for root in set.document.children.iter_mut().filter(|node| node.name == "InternalCommands") {
+            let previous_shortcuts = root.children.len();
+            root.children.retain(|node| node.name != "Shortcut" || !number(node, "id").ok().is_some_and(|id| id == 48017 || (21000..22000).contains(&id)));
+            cleaned |= root.children.len() != previous_shortcuts;
+        }
+        if cleaned { set.save_locked(store)?; }
+        drop(lock);
         for (section, tag) in [("InternalCommands", "Shortcut"), ("PluginCommands", "PluginCommand"), ("ScintillaKeys", "ScintKey")] {
             if let Some(root) = set.document.child(section) {
                 for node in root.children.iter().filter(|node| node.name == tag) {
@@ -316,7 +320,7 @@ impl BindingSet {
                         _ => CommandKey::Scintilla { id: number(node, "ScintID")?, menu_id: number(node, "menuCmdID")? },
                     };
                     let mut bindings = vec![KeyCombo::read(node)?];
-                    if key.page() == 4 { for next in node.children.iter().filter(|node| node.name == "NextKey") { bindings.push(KeyCombo::read(next)?); } }
+                    if key.page() == 3 { for next in node.children.iter().filter(|node| node.name == "NextKey") { bindings.push(KeyCombo::read(next)?); } }
                     dedup(&mut bindings);
                     set.overrides.insert(key, bindings);
                 }
@@ -339,16 +343,6 @@ impl BindingSet {
             if let Some(root) = macros { macro_nodes.extend(root.children.into_iter().enumerate().filter(|(ordinal, _)| !used.contains(ordinal)).map(|(_, node)| node)); }
             section_mut(&mut set.document, "Macros").children = macro_nodes.into();
         }
-        if let Some(root) = set.document.child("UserDefinedCommands") {
-            for node in root.children.iter().filter(|node| node.name == "Command") {
-                let name = node.attribute("name").ok_or_else(|| invalid("Missing Run command name"))?.to_owned();
-                let bindings = vec![KeyCombo::read(node)?];
-                let index = set.run_commands.len();
-                set.overrides.insert(CommandKey::Run(index), bindings.clone());
-                catalog.push(Shortcut { key: CommandKey::Run(index), name: name.clone(), category: String::new(), bindings: bindings.clone(), command: None });
-                set.run_commands.push(RunCommand { name, command: node.text.clone(), bindings });
-            }
-        }
         for item in &mut catalog { if let Some(keys) = set.overrides.get(&item.key) { item.bindings = keys.clone(); } }
         set.shortcuts = catalog;
         Ok(set)
@@ -356,8 +350,7 @@ impl BindingSet {
 
     pub fn override_for_command(&self, id: u32) -> Option<&[KeyCombo]> {
         self.overrides.get(&CommandKey::Menu { id, nth: 0 }).or_else(|| {
-            if (MACRO_BASE..RUN_BASE).contains(&id) { self.overrides.get(&CommandKey::Macro((id - MACRO_BASE) as usize)) }
-            else if (RUN_BASE..22000).contains(&id) { self.overrides.get(&CommandKey::Run((id - RUN_BASE) as usize)) } else { None }
+            if (MACRO_BASE..MACRO_BASE + 1000).contains(&id) { self.overrides.get(&CommandKey::Macro((id - MACRO_BASE) as usize)) } else { None }
         }).or_else(|| self.overrides.iter().find_map(|(key, bindings)| match key { CommandKey::Scintilla { menu_id, .. } if *menu_id != 0 && *menu_id == id => Some(bindings), _ => None })).map(Vec::as_slice)
     }
 
@@ -374,25 +367,8 @@ impl BindingSet {
     pub fn runtime_binding_priority(&self, item: &Shortcut, combo: KeyCombo) -> Option<u8> {
         let overridden = self.override_for(&item.key).is_some();
         if item.bindings.contains(&combo) { return Some(if overridden { 0 } else { 1 }); }
-        if !self.dual_modifiers || overridden || matches!(item.key, CommandKey::Macro(_) | CommandKey::Run(_)) || self.runtime_alias_reserved(combo) { return None; }
+        if !self.dual_modifiers || overridden || matches!(item.key, CommandKey::Macro(_)) || self.runtime_alias_reserved(combo) { return None; }
         item.bindings.iter().any(|source| source.builtin_alias() == Some(combo)).then_some(2)
-    }
-
-    pub fn add_run(&mut self, name: &str, command: &str, mut combo: KeyCombo) -> io::Result<usize> {
-        if name.is_empty() || name.encode_utf16().count() >= 128 || name.contains('\0') { return Err(invalid("Name must contain 1 to 127 characters")); }
-        if !combo.valid() { return Err(invalid("This key requires Ctrl, Alt or Cmd")); }
-        if command.contains('\0') { return Err(invalid("Run command cannot contain NUL")); }
-        if combo.key == 0 { combo = KeyCombo::default(); }
-        let index = self.run_commands.len();
-        let bindings = if combo.key == 0 { Vec::new() } else { vec![combo] };
-        let mut node = Node { name: "Command".into(), text: command.into(), ..Node::default() };
-        node.attributes.insert("name".into(), name.into());
-        combo.write(&mut node);
-        section_mut(&mut self.document, "UserDefinedCommands").children.push(node);
-        self.overrides.insert(CommandKey::Run(index), bindings.clone());
-        self.shortcuts.push(Shortcut { key: CommandKey::Run(index), name: name.into(), category: String::new(), bindings: bindings.clone(), command: None });
-        self.run_commands.push(RunCommand { name: name.into(), command: command.into(), bindings });
-        Ok(index)
     }
 
     pub fn conflicts(&self, excluded: &CommandKey, bindings: &[KeyCombo]) -> Vec<&Shortcut> {
@@ -400,52 +376,49 @@ impl BindingSet {
     }
 
     pub fn modify(&mut self, key: &CommandKey, name: &str, mut bindings: Vec<KeyCombo>) -> io::Result<()> {
-        if key.page() != 4 && bindings.len() > 1 { return Err(invalid("Only Scintilla commands accept multiple shortcuts")); }
+        if key.page() != 3 && bindings.len() > 1 { return Err(invalid("Only Scintilla commands accept multiple shortcuts")); }
         let previous = self.shortcuts.iter().find(|item| &item.key == key).ok_or_else(|| invalid("Shortcut command is no longer available"))?;
-        if bindings.iter().any(|combo| !combo.valid() && (key.page() != 4 || !previous.bindings.contains(combo))) { return Err(invalid("This key requires Ctrl, Alt or Cmd")); }
-        if matches!(key, CommandKey::Macro(_) | CommandKey::Run(_)) && (name.is_empty() || name.chars().count() >= 128) { return Err(invalid("Name must contain 1 to 127 characters")); }
+        if bindings.iter().any(|combo| !combo.valid() && (key.page() != 3 || !previous.bindings.contains(combo))) { return Err(invalid("This key requires Ctrl, Alt or Cmd")); }
+        if matches!(key, CommandKey::Macro(_)) && (name.is_empty() || name.chars().count() >= 128) { return Err(invalid("Name must contain 1 to 127 characters")); }
         dedup(&mut bindings);
         let item = self.shortcuts.iter_mut().find(|item| &item.key == key).ok_or_else(|| invalid("Shortcut command is no longer available"))?;
         let previous_name = item.name.clone();
-        if matches!(key, CommandKey::Macro(_) | CommandKey::Run(_)) { item.name = name.into(); }
+        if matches!(key, CommandKey::Macro(_)) { item.name = name.into(); }
         item.bindings = bindings.clone();
         self.overrides.insert(key.clone(), bindings.clone());
-        let (section, tag) = match key { CommandKey::Menu { .. } => ("InternalCommands", "Shortcut"), CommandKey::Macro(_) => ("Macros", "Macro"), CommandKey::Run(_) => ("UserDefinedCommands", "Command"), CommandKey::Plugin { .. } => ("PluginCommands", "PluginCommand"), CommandKey::Scintilla { .. } => ("ScintillaKeys", "ScintKey") };
+        let (section, tag) = match key { CommandKey::Menu { .. } => ("InternalCommands", "Shortcut"), CommandKey::Macro(_) => ("Macros", "Macro"), CommandKey::Plugin { .. } => ("PluginCommands", "PluginCommand"), CommandKey::Scintilla { .. } => ("ScintillaKeys", "ScintKey") };
         let duplicate = match key { CommandKey::Macro(index) => self.shortcuts.iter().filter(|item| matches!(&item.key, CommandKey::Macro(other) if other < index) && item.name == previous_name).count(), _ => 0 };
         let root = section_mut(&mut self.document, section);
         let ordinal = match key {
             CommandKey::Macro(_) => root.children.iter().enumerate().filter(|(_, node)| node.name == tag && node.attribute("name") == Some(previous_name.as_str())).nth(duplicate).map(|(index, _)| index),
-            CommandKey::Run(index) => root.children.iter().enumerate().filter(|(_, node)| node.name == tag).nth(*index).map(|(index, _)| index),
             _ => root.children.iter().position(|node| node_matches(node, key)),
         };
         let ordinal = ordinal.unwrap_or_else(|| { root.children.push(Node { name: tag.into(), ..Node::default() }); root.children.len() - 1 });
         let node = &mut root.children[ordinal];
         match key {
             CommandKey::Menu { id, nth } => { node.attributes.insert("id".into(), id.to_string()); if *nth != 0 { node.attributes.insert("nth".into(), nth.to_string()); } }
-            CommandKey::Macro(_) | CommandKey::Run(_) => { node.attributes.insert("name".into(), name.into()); }
+            CommandKey::Macro(_) => { node.attributes.insert("name".into(), name.into()); }
             CommandKey::Plugin { module, internal_id } => { node.attributes.entry("moduleName".into()).or_insert_with(|| module.clone()); node.attributes.insert("internalID".into(), internal_id.to_string()); }
             CommandKey::Scintilla { id, menu_id } => { node.attributes.insert("ScintID".into(), id.to_string()); node.attributes.insert("menuCmdID".into(), menu_id.to_string()); }
         }
         bindings.first().copied().unwrap_or_default().write(node);
-        if key.page() == 4 {
+        if key.page() == 3 {
             node.children.retain(|child| child.name != "NextKey");
             for combo in bindings.iter().skip(1) { let mut next = Node { name: "NextKey".into(), ..Node::default() }; combo.write(&mut next); node.children.push(next); }
         }
-        if let CommandKey::Run(index) = key { if let Some(command) = self.run_commands.get_mut(*index) { command.name = name.into(); command.bindings = bindings; } }
         Ok(())
     }
 
     pub fn delete(&mut self, key: &CommandKey) -> io::Result<()> {
-        let (section, tag, index) = match key { CommandKey::Macro(index) => ("Macros", "Macro", *index), CommandKey::Run(index) => ("UserDefinedCommands", "Command", *index), _ => return Err(invalid("Only macros and Run commands can be deleted")) };
+        let index = match key { CommandKey::Macro(index) => *index, _ => return Err(invalid("Only macros can be deleted")) };
         let item = self.shortcuts.iter().find(|item| &item.key == key).ok_or_else(|| invalid("Shortcut command is no longer available"))?;
         let name = item.name.clone();
         let duplicate = self.shortcuts.iter().filter(|item| item.key.page() == key.page() && item.key < *key && item.name == name).count();
-        let root = section_mut(&mut self.document, section);
-        let ordinal = if key.page() == 1 { root.children.iter().enumerate().filter(|(_, node)| node.name == tag && node.attribute("name") == Some(name.as_str())).nth(duplicate).map(|(ordinal, _)| ordinal) } else { root.children.iter().enumerate().filter(|(_, node)| node.name == tag).nth(index).map(|(ordinal, _)| ordinal) };
+        let root = section_mut(&mut self.document, "Macros");
+        let ordinal = root.children.iter().enumerate().filter(|(_, node)| node.name == "Macro" && node.attribute("name") == Some(name.as_str())).nth(duplicate).map(|(ordinal, _)| ordinal);
         if let Some(ordinal) = ordinal { root.children.remove(ordinal); }
         self.shortcuts.retain(|item| &item.key != key);
         self.overrides.remove(key);
-        if key.page() == 2 { self.run_commands.remove(index); }
         let mut remapped = BTreeMap::new();
         for (mut other, bindings) in std::mem::take(&mut self.overrides) { renumber(&mut other, key.page(), index); remapped.insert(other, bindings); }
         self.overrides = remapped;
@@ -454,12 +427,12 @@ impl BindingSet {
     }
 
     pub fn save(&self, store: &ConfigStore) -> io::Result<()> {
+        let _lock = config_write_lock(store)?;
+        self.save_locked(store)
+    }
+
+    fn save_locked(&self, store: &ConfigStore) -> io::Result<()> {
         let root = store.document_path(Path::new("settings.json"))?.parent().ok_or_else(|| invalid("Missing private configuration root"))?.to_path_buf();
-        let mut options = fs::OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(false);
-        #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
-        let lock = options.open(root.join(".config-write.lock"))?;
-        lock.lock()?;
         let path = root.join("shortcuts.xml");
         match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {},
@@ -475,8 +448,18 @@ impl BindingSet {
     }
 }
 
+fn config_write_lock(store: &ConfigStore) -> io::Result<fs::File> {
+    let root = store.document_path(Path::new("settings.json"))?.parent().ok_or_else(|| invalid("Missing private configuration root"))?.to_path_buf();
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
+    let lock = options.open(root.join(".config-write.lock"))?;
+    lock.lock()?;
+    Ok(lock)
+}
+
 fn renumber(key: &mut CommandKey, page: usize, removed: usize) {
-    match key { CommandKey::Macro(index) if page == 1 && *index > removed => *index -= 1, CommandKey::Run(index) if page == 2 && *index > removed => *index -= 1, _ => {} }
+    match key { CommandKey::Macro(index) if page == 1 && *index > removed => *index -= 1, _ => {} }
 }
 
 fn dedup(bindings: &mut Vec<KeyCombo>) {
@@ -576,8 +559,8 @@ pub fn menu_catalog(definitions: &[MenuDefinition]) -> Vec<Shortcut> {
                         continue;
                     }
                     let id = match command {
-                        MenuCommand::Source(id @ (48016 | 48017)) => Some(*id),
-                        MenuCommand::Run => Some(49000), MenuCommand::About => Some(47000), MenuCommand::DefineUserLanguage => Some(46250),
+                        MenuCommand::Source(48016) => Some(48016),
+                        MenuCommand::OpenTerminal => Some(49000), MenuCommand::About => Some(47000), MenuCommand::DefineUserLanguage => Some(46250),
                         MenuCommand::Settings(command) => Some(match command { crate::menu::SettingsCommand::Preferences => 48011, crate::menu::SettingsCommand::StyleConfigurator => 46001, crate::menu::SettingsCommand::ShortcutMapper => 48009, crate::menu::SettingsCommand::ImportStyleThemes => 48006, crate::menu::SettingsCommand::EditContextMenu => 48018 }),
                         MenuCommand::View(command) => match command {
                             crate::menu::ViewCommand::IndentGuides => Some(44020), crate::menu::ViewCommand::WordWrap => Some(44022), crate::menu::ViewCommand::Summary => Some(44049), crate::menu::ViewCommand::DocumentList => Some(44070), crate::menu::ViewCommand::DocumentMap => Some(44080), crate::menu::ViewCommand::FunctionList => Some(44084), crate::menu::ViewCommand::FolderWorkspace => Some(44085), crate::menu::ViewCommand::Monitoring => Some(44097), crate::menu::ViewCommand::SyncVertical => Some(44035), crate::menu::ViewCommand::SyncHorizontal => Some(44036), crate::menu::ViewCommand::MoveToOtherView => Some(10001), crate::menu::ViewCommand::CloneToOtherView => Some(10002), _ => command_id(*command),
@@ -603,7 +586,10 @@ pub fn menu_catalog(definitions: &[MenuDefinition]) -> Vec<Shortcut> {
         }
     }
     let mut result = Vec::new();
-    for definition in definitions { visit(&definition.entries, &definition.label, &mut result); }
+    for definition in definitions {
+        if let Some(command) = definition.direct_command() { visit(&[MenuEntry::Action(command)], &definition.label, &mut result); }
+        visit(&definition.entries, &definition.label, &mut result);
+    }
     for (id, name, category) in [(50003, "Switch to previous document", "View"), (50004, "Switch to next document", "View"), (50005, "Toggle macro recording", "Macro")] {
         let key = CommandKey::Menu { id, nth: 0 };
         if result.iter().any(|item| item.key == key) { continue; }
@@ -758,7 +744,7 @@ impl BindingSet {
         for (key, binding) in defaults.into_iter().chain(extra.into_iter().filter(|(key, _)| self.override_for(key).is_some() && !registered.contains(key)).map(|(key, binding)| (Some(key), binding))) {
             let Some(combos) = key.as_ref().and_then(|key| self.override_for(key)) else {
                 if key.is_some() && binding.keystrokes().len() == 1 && KeyCombo::parse_source(&binding.keystrokes()[0].unparse(gpui::OperatingSystem::Mac)).is_some_and(KeyCombo::needs_native_adapter) { continue; }
-                if self.dual_modifiers && !matches!(key, Some(CommandKey::Macro(_) | CommandKey::Run(_))) { builtin.push(binding.clone()); }
+                if self.dual_modifiers && !matches!(key, Some(CommandKey::Macro(_))) { builtin.push(binding.clone()); }
                 result.push(binding);
                 continue;
             };

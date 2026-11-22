@@ -220,7 +220,7 @@ fn english_root(selector: &str) -> &str {
         "settings-menu-trigger" => "Settings",
         "tools-menu-trigger" => "Tools",
         "macro-menu-trigger" => "Macro",
-        "run-menu-trigger" => "Run",
+        "terminal-menu-trigger" => "Terminal",
         "plugins-menu-trigger" => "Plugins",
         "window-menu-trigger" => "Window",
         "help-menu-trigger" => "?",

@@ -52,7 +52,7 @@ impl PanelWindow {
     ) -> Self {
         window.set_window_title(&owner.read(cx).panel_title(id));
         if has_window_caption(id)
-            && let Err(error) = window_caption::hide_native_buttons(window)
+            && let Err(error) = window_caption::update_native_buttons(window, true)
         {
             eprintln!("panel titlebar: {error}");
         }
@@ -82,8 +82,9 @@ impl PanelWindow {
             }
             if let Err(error) = weak.update(cx, |owner, cx| owner.hide_panel(id, window, cx)) {
                 eprintln!("panel close lost its document: {error}");
+                return true;
             }
-            true
+            false
         });
         let observed = owner.downgrade();
         let bounds_changed = cx.observe_window_bounds(window, move |_, window, cx| {
@@ -241,6 +242,8 @@ impl MatrixWindow {
                 .unwrap_or("Document List").to_owned(),
             PanelId::DocumentMap => crate::localization::dialog_name(&locale, "DocumentMap/PanelTitle")
                 .unwrap_or("Document Map").to_owned(),
+            PanelId::Folder => crate::localization::dialog_name(&locale, "FolderAsWorkspace/PanelTitle")
+                .unwrap_or("Folder as Workspace").to_owned(),
             _ => id.title().to_owned(),
         }
     }
@@ -521,7 +524,7 @@ impl MatrixWindow {
                     window_min_size: Some(if id == PanelId::Converter {
                         size(super::dialog_font::px(488.), super::dialog_font::px(238.))
                     } else if native_caption {
-                        size(px(140.), px(100. + window_caption::HEIGHT))
+                        size(px(window_caption::LEFT_INSET + 135.), px(100. + window_caption::HEIGHT))
                     } else { size(px(140.), px(100.)) }),
                     ..Default::default()
                 };
@@ -603,7 +606,9 @@ impl MatrixWindow {
             format!("Hide {}", id.title())
         };
         let hide_tooltip = hide_label.clone();
-        let single_title = matches!(id, PanelId::DocumentList | PanelId::DocumentMap | PanelId::Converter);
+        let project_panel = matches!(id, PanelId::Project1 | PanelId::Project2 | PanelId::Project3);
+        let single_title = matches!(id, PanelId::DocumentList | PanelId::DocumentMap | PanelId::Converter)
+            || matches!(id, PanelId::Folder | PanelId::Project1 | PanelId::Project2 | PanelId::Project3) && !floating;
         let content = match id {
             PanelId::Characters => self.render_character_panel(cx),
             PanelId::DocumentList => self.render_document_list(cx),
@@ -744,13 +749,13 @@ impl MatrixWindow {
                     .id(format!("{}-caption", id.key()))
                     .role(Role::GenericContainer)
                     .aria_label(title.clone())
-                    .h(if single_title { dialog_font::px(18.) } else { px(23.) })
+                    .h(if single_title { if project_panel { px(18.) } else { dialog_font::px(18.) } } else { px(23.) })
                     .flex_shrink_0()
                     .flex()
                     .items_center()
                     .when(single_title, |caption| caption
                         .font_family(dialog_font::font_family())
-                        .text_size(dialog_font::px(12.))
+                        .text_size(if project_panel { px(12.) } else { dialog_font::px(12.) })
                         .when(!floating, |caption| caption.bg(rgb(if dark { 0x383838 } else { 0xf0f0f0 })))
                         .border_b_1().border_color(rgb(0x808080))
                         .on_mouse_down(MouseButton::Left, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| {
@@ -819,7 +824,7 @@ impl MatrixWindow {
                     .flex_1()
                     .min_h(px(0.))
                     .min_w(px(0.))
-                    .overflow_hidden()
+                    .when(!project_panel, |body| body.overflow_hidden())
                     .children(content),
             )
             .when(!floating, |frame| {

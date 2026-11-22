@@ -8,6 +8,64 @@ use super::*;
 #[path = "finder_views.rs"]
 mod finder_views;
 
+const FINDER_SCROLLBAR_SIZE: f32 = 16.;
+
+#[derive(Clone)]
+enum FinderScroll {
+    Uniform(gpui::ScrollHandle),
+    Wrapped(gpui::ListState),
+}
+
+impl FinderScroll {
+    fn bounds(&self) -> gpui::Bounds<gpui::Pixels> {
+        match self {
+            Self::Uniform(scroll) => scroll.bounds(),
+            Self::Wrapped(scroll) => scroll.viewport_bounds(),
+        }
+    }
+
+    fn offset(&self) -> gpui::Point<gpui::Pixels> {
+        match self {
+            Self::Uniform(scroll) => scroll.offset(),
+            Self::Wrapped(scroll) => scroll.scroll_px_offset_for_scrollbar(),
+        }
+    }
+
+    fn maximum(&self) -> gpui::Point<gpui::Pixels> {
+        match self {
+            Self::Uniform(scroll) => scroll.max_offset(),
+            Self::Wrapped(scroll) => scroll.max_offset_for_scrollbar(),
+        }
+    }
+
+    fn set_offset(&self, horizontal: bool, value: f32) {
+        let offset = self.offset();
+        let next = if horizontal { gpui::point(px(-value), offset.y) } else { gpui::point(offset.x, px(-value)) };
+        match self {
+            Self::Uniform(scroll) => scroll.set_offset(next),
+            Self::Wrapped(scroll) => {
+                if value > 0. && value >= f32::from(scroll.max_offset_for_scrollbar().y) {
+                    scroll.scroll_to_end();
+                } else {
+                    scroll.set_offset_from_scrollbar(next);
+                }
+            }
+        }
+    }
+
+    fn thumb(&self, horizontal: bool) -> (f32, f32, std::ops::Range<f32>) {
+        let bounds = self.bounds();
+        let viewport = f32::from(if horizontal { bounds.size.width } else { bounds.size.height }).max(0.);
+        let maximum = f32::from(if horizontal { self.maximum().x } else { self.maximum().y }).max(0.);
+        let offset = -f32::from(if horizontal { self.offset().x } else { self.offset().y });
+        let cap = FINDER_SCROLLBAR_SIZE.min(viewport / 2.);
+        let track = (viewport - cap * 2.).max(0.);
+        let length = (track * viewport / (viewport + maximum).max(1.)).max(18.).min(track);
+        let start = cap + if maximum > 0. { (offset / maximum).clamp(0., 1.) * (track - length) } else { 0. };
+        (viewport, maximum, start..start + length)
+    }
+}
+
 fn choose_search_directory(initial: &std::path::Path, title: &str) -> Result<Option<PathBuf>, crate::localization::Text> {
     use objc2_app_kit::{NSModalResponseCancel, NSModalResponseOK, NSOpenPanel};
     use objc2_foundation::{MainThreadMarker, NSString, NSURL};
@@ -173,6 +231,8 @@ pub(super) struct FileSearchState {
     results_focus: FocusHandle,
     results_scroll: gpui::UniformListScrollHandle,
     wrapped_scroll: gpui::ListState,
+    results_scroll_grab: Option<(FinderScroll, bool, f32)>,
+    wrapped_scroll_hint: std::rc::Rc<std::cell::Cell<Option<(gpui::Pixels, usize)>>>,
     results_wrap: bool,
     wrapped_preferred_x: Option<gpui::Pixels>,
     results_selected: usize,
@@ -217,6 +277,8 @@ impl FileSearchState {
             results_focus: cx.focus_handle(),
             results_scroll: gpui::UniformListScrollHandle::new(),
             wrapped_scroll: gpui::ListState::new(0, gpui::ListAlignment::Top, px(100.)),
+            results_scroll_grab: None,
+            wrapped_scroll_hint: Default::default(),
             results_wrap: false,
             wrapped_preferred_x: None,
             results_selected: 0,
@@ -286,6 +348,9 @@ impl MatrixWindow {
 
     pub(super) fn cancel_finder_drag(&mut self) {
         self.files_search.dragging_text = false;
+        if let Some((FinderScroll::Wrapped(scroll), _, _)) = self.files_search.results_scroll_grab.take() {
+            scroll.scrollbar_drag_ended();
+        }
     }
 
     pub(super) fn layout_file_results(&mut self, height: gpui::Pixels, cx: &mut Context<Self>) {
@@ -437,6 +502,7 @@ impl MatrixWindow {
         self.files_search
             .wrapped_scroll
             .reset(self.files_search.results.rows.len());
+        self.files_search.wrapped_scroll_hint.set(None);
         if let Some(index) = self
             .files_search
             .results
@@ -572,6 +638,7 @@ impl MatrixWindow {
         self.files_search.wrapped_preferred_x = None;
         let top = self.files_search.wrapped_scroll.logical_scroll_top();
         self.files_search.wrapped_scroll.reset(self.files_search.results.rows.len());
+        self.files_search.wrapped_scroll_hint.set(None);
         self.files_search.wrapped_scroll.scroll_to(top);
     }
 
@@ -773,6 +840,7 @@ impl MatrixWindow {
         self.files_search.results_cursor_x = None;
         self.files_search.wrapped_preferred_x = None;
         self.files_search.wrapped_scroll.reset(self.files_search.results.rows.len());
+        self.files_search.wrapped_scroll_hint.set(None);
         self.reveal_finder_row(0, gpui::ScrollStrategy::Top);
         self.files_search.results_visible = true;
         self.files_search.message = crate::localization::Text::resource("matrix-find-results-summary", "Search results - ($INT_REPLACE$ hits)")
@@ -790,6 +858,7 @@ impl MatrixWindow {
         self.files_search.results_width = px(0.);
         let top = self.files_search.wrapped_scroll.logical_scroll_top();
         self.files_search.wrapped_scroll.reset(self.files_search.results.rows.len());
+        self.files_search.wrapped_scroll_hint.set(None);
         self.files_search.wrapped_scroll.scroll_to(top);
         let hits = self.files_search.results.searches.first().map_or(0, |search| search.hits);
         self.files_search.message = crate::localization::Text::resource("matrix-find-results-summary", "Search results - ($INT_REPLACE$ hits)")
@@ -1760,6 +1829,7 @@ impl MatrixWindow {
         self.files_search
             .wrapped_scroll
             .reset(self.files_search.results.rows.len());
+        self.files_search.wrapped_scroll_hint.set(None);
         self.files_search.results_width_item = width_row.and_then(|row| {
             self.files_search
                 .results
@@ -1865,6 +1935,7 @@ impl MatrixWindow {
         self.files_search
             .wrapped_scroll
             .reset(self.files_search.results.rows.len());
+        self.files_search.wrapped_scroll_hint.set(None);
         self.cancel_finder_drag();
         self.files_search.results_width_item = None;
         self.files_search.results_width = px(0.);
@@ -1939,6 +2010,7 @@ impl MatrixWindow {
                 self.files_search
                     .wrapped_scroll
                     .reset(self.files_search.results.rows.len());
+                self.files_search.wrapped_scroll_hint.set(None);
                 self.files_search.results_width_item = None;
                 self.files_search.results_width = px(0.);
                 self.files_search.results_focus.focus(window, cx);
@@ -2240,6 +2312,7 @@ impl MatrixWindow {
                     self.files_search
                         .wrapped_scroll
                         .reset(self.files_search.results.rows.len());
+                    self.files_search.wrapped_scroll_hint.set(None);
                     self.files_search
                         .results_scroll
                         .0
@@ -2271,6 +2344,7 @@ impl MatrixWindow {
                 self.files_search
                     .wrapped_scroll
                     .reset(self.files_search.results.rows.len());
+                self.files_search.wrapped_scroll_hint.set(None);
                 self.files_search.results_width_item = None;
                 self.files_search.results_width = px(0.);
                 self.reveal_finder_row(
@@ -2284,6 +2358,7 @@ impl MatrixWindow {
             FinderCommand::ClearAll => {
                 self.files_search.results.clear();
                 self.files_search.wrapped_scroll.reset(0);
+                self.files_search.wrapped_scroll_hint.set(None);
                 self.files_search.results_selected = 0;
                 self.files_search.results_cursor_x = None;
                 self.files_search.wrapped_preferred_x = None;
@@ -2614,6 +2689,126 @@ impl MatrixWindow {
         )
     }
 
+    fn finder_scrollbar(&self, horizontal: bool, cx: &mut Context<Self>) -> AnyElement {
+        let scroll = if self.files_search.results_wrap {
+            FinderScroll::Wrapped(self.files_search.wrapped_scroll.clone())
+        } else {
+            FinderScroll::Uniform(self.files_search.results_scroll.0.borrow().base_handle.clone())
+        };
+        let painted = scroll.clone();
+        let accessible = scroll.clone();
+        let dark = self.dark;
+        let hint = self.files_search.wrapped_scroll_hint.clone();
+        let count = self.files_search.results.rows.len();
+        let metric_runs = self.finder_metric_runs();
+        let move_listener = cx.listener(|view, event: &gpui::MouseMoveEvent, _, cx| view.move_finder_scrollbar(event, cx));
+        let mut bar = div()
+            .id(if horizontal { "files-results-horizontal-scrollbar" } else { "files-results-vertical-scrollbar" })
+            .role(Role::ScrollBar)
+            .aria_orientation(if horizontal { gpui::accesskit::Orientation::Horizontal } else { gpui::accesskit::Orientation::Vertical })
+            .a11y_synthetic_children(move |builder| {
+                let (_, maximum, _) = accessible.thumb(horizontal);
+                let offset = -f32::from(if horizontal { accessible.offset().x } else { accessible.offset().y });
+                let node = builder.parent_node();
+                node.set_min_numeric_value(0.);
+                node.set_max_numeric_value(f64::from(maximum));
+                node.set_numeric_value(f64::from(offset.clamp(0., maximum)));
+                if maximum <= 0. { node.set_disabled(); }
+            })
+            .absolute()
+            .bg(rgb(if dark { 0x282828 } else { 0xf0f0f0 }))
+            .on_mouse_down(MouseButton::Left, cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| {
+                view.cancel_finder_drag();
+                view.files_search.results_focus.focus(window, cx);
+                let bounds = scroll.bounds();
+                let position = f32::from(if horizontal { event.position.x - bounds.left() } else { event.position.y - bounds.top() });
+                let (viewport, maximum, thumb) = scroll.thumb(horizontal);
+                let cap = FINDER_SCROLLBAR_SIZE.min(viewport / 2.);
+                let step = f32::from(view.finder_line_height(window));
+                let delta = if position < cap { -step } else if position >= viewport - cap { step } else if position < thumb.start { -viewport } else if position >= thumb.end { viewport } else { 0. };
+                if maximum > 0. {
+                    if delta == 0. {
+                        if let FinderScroll::Wrapped(list) = &scroll { list.scrollbar_drag_started(); }
+                        view.files_search.results_scroll_grab = Some((scroll.clone(), horizontal, position - thumb.start));
+                    } else {
+                        let offset = -f32::from(if horizontal { scroll.offset().x } else { scroll.offset().y });
+                        scroll.set_offset(horizontal, (offset + delta).clamp(0., maximum));
+                    }
+                }
+                cx.stop_propagation();
+                cx.notify();
+            }))
+            .on_scroll(cx.listener(move |view, event: &gpui::ScrollEvent, window, cx| {
+                let scroll = if view.files_search.results_wrap {
+                    FinderScroll::Wrapped(view.files_search.wrapped_scroll.clone())
+                } else {
+                    FinderScroll::Uniform(view.files_search.results_scroll.0.borrow().base_handle.clone())
+                };
+                let delta = event.delta.pixel_delta(view.finder_line_height(window));
+                let maximum = scroll.maximum();
+                let offset = scroll.offset();
+                let horizontal_delta = !view.files_search.results_wrap && delta.x.abs() > delta.y.abs();
+                let vertical = if horizontal_delta { px(0.) } else { delta.y };
+                scroll.set_offset(false, (-f32::from(offset.y + vertical)).clamp(0., f32::from(maximum.y).max(0.)));
+                if !view.files_search.results_wrap {
+                    let delta = if horizontal_delta { delta.x } else { px(0.) };
+                    scroll.set_offset(true, (-f32::from(offset.x + delta)).clamp(0., f32::from(maximum.x).max(0.)));
+                }
+                cx.stop_propagation();
+                cx.notify();
+            }))
+            .child(gpui::canvas(|_, _, _| (), move |bounds, _, window, _| {
+                if !horizontal {
+                    window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, window, cx| {
+                        if phase == gpui::DispatchPhase::Capture { move_listener(event, window, cx); }
+                    });
+                }
+                if let FinderScroll::Wrapped(list) = &painted {
+                    let key = (list.viewport_bounds().size.width, count);
+                    if hint.get() != Some(key) {
+                        list.clone().with_uniform_item_height(finder_layout::metrics(&metric_runs, window).0);
+                        hint.set(Some(key));
+                        window.on_next_frame(|window, _| window.refresh());
+                    }
+                }
+                let (_, maximum, thumb) = painted.thumb(horizontal);
+                if maximum > 0. && thumb.end > thumb.start {
+                    let thumb_bounds = if horizontal {
+                        gpui::Bounds::new(bounds.origin + gpui::point(px(thumb.start), px(2.)), size(px(thumb.end - thumb.start), (bounds.size.height - px(4.)).max(px(0.))))
+                    } else {
+                        gpui::Bounds::new(bounds.origin + gpui::point(px(2.), px(thumb.start)), size((bounds.size.width - px(4.)).max(px(0.)), px(thumb.end - thumb.start)))
+                    };
+                    window.paint_quad(gpui::fill(thumb_bounds, rgb(if dark { 0x666666 } else { 0xcdcdcd })));
+                }
+            }).size_full());
+        for (end, label) in [(false, if horizontal { "‹" } else { "⌃" }), (true, if horizontal { "›" } else { "⌄" })] {
+            let mut arrow = div().absolute().size(px(FINDER_SCROLLBAR_SIZE)).text_center().line_height(px(FINDER_SCROLLBAR_SIZE)).text_color(rgb(if dark { 0xb0b0b0 } else { 0x606060 })).child(label);
+            arrow = if horizontal { arrow.top_0().when(end, |arrow| arrow.right_0()).when(!end, |arrow| arrow.left_0()) } else { arrow.left_0().when(end, |arrow| arrow.bottom_0()).when(!end, |arrow| arrow.top_0()) };
+            bar = bar.child(arrow);
+        }
+        bar = if horizontal { bar.left_0().right(px(FINDER_SCROLLBAR_SIZE)).bottom_0().h(px(FINDER_SCROLLBAR_SIZE)) } else { bar.right_0().top_0().bottom(px(if self.files_search.results_wrap { 0. } else { FINDER_SCROLLBAR_SIZE })).w(px(FINDER_SCROLLBAR_SIZE)) };
+        bar.into_any_element()
+    }
+
+    fn move_finder_scrollbar(&mut self, event: &gpui::MouseMoveEvent, cx: &mut Context<Self>) {
+        let Some((scroll, horizontal, grab)) = self.files_search.results_scroll_grab.clone() else { return; };
+        if event.pressed_button != Some(MouseButton::Left) {
+            self.cancel_finder_drag();
+            cx.notify();
+            return;
+        }
+        let bounds = scroll.bounds();
+        let (viewport, maximum, thumb) = scroll.thumb(horizontal);
+        let cap = FINDER_SCROLLBAR_SIZE.min(viewport / 2.);
+        let travel = viewport - cap * 2. - (thumb.end - thumb.start);
+        if travel > 0. {
+            let position = f32::from(if horizontal { event.position.x - bounds.left() } else { event.position.y - bounds.top() });
+            scroll.set_offset(horizontal, ((position - cap - grab) / travel).clamp(0., 1.) * maximum);
+            cx.notify();
+        }
+        cx.stop_propagation();
+    }
+
     pub(super) fn render_file_results(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let revision = (self.style_config.revision(), self.dark);
         if self.files_search.style_revision != Some(revision) {
@@ -2784,41 +2979,45 @@ impl MatrixWindow {
                         ),
                 )
                 .children(self.render_finder_tabs(cx))
-                .child(if self.files_search.results_wrap {
-                    if self.files_search.wrapped_scroll.item_count()
-                        != self.files_search.results.rows.len()
-                    {
-                        self.files_search
-                            .wrapped_scroll
-                            .reset(self.files_search.results.rows.len());
-                    }
-                    gpui::list(
-                        self.files_search.wrapped_scroll.clone(),
-                        cx.processor(|view, index, window, cx| view.render_finder_row(index, window, cx)),
-                    )
-                    .flex_1()
-                    .min_h(px(0.))
-                    .into_any_element()
-                } else {
-                    gpui::uniform_list(
-                        "files-result-rows",
-                        self.files_search.results.rows.len(),
-                        cx.processor(|view, range: std::ops::Range<usize>, window, cx| {
-                            view.measure_finder_width(range.clone(), window, cx);
-                            range
-                                .map(|index| view.render_finder_row(index, window, cx))
-                                .collect()
-                        }),
-                    )
-                    .track_scroll(&self.files_search.results_scroll)
-                    .with_width_from_item(self.files_search.results_width_item)
-                    .with_horizontal_sizing_behavior(
-                        gpui::ListHorizontalSizingBehavior::Unconstrained,
-                    )
-                    .flex_1()
-                    .min_h(px(0.))
-                    .into_any_element()
-                })
+                .child(
+                    div().relative().flex_1().min_h(px(0.)).overflow_hidden()
+                        .child(
+                            div().absolute().inset_0().right(px(FINDER_SCROLLBAR_SIZE))
+                                .bottom(px(if self.files_search.results_wrap { 0. } else { FINDER_SCROLLBAR_SIZE }))
+                                .child(if self.files_search.results_wrap {
+                                    if self.files_search.wrapped_scroll.item_count() != self.files_search.results.rows.len() {
+                                        self.files_search.wrapped_scroll.reset(self.files_search.results.rows.len());
+                                        self.files_search.wrapped_scroll_hint.set(None);
+                                    }
+                                    gpui::list(
+                                        self.files_search.wrapped_scroll.clone(),
+                                        cx.processor(|view, index, window, cx| view.render_finder_row(index, window, cx)),
+                                    )
+                                    .size_full()
+                                    .into_any_element()
+                                } else {
+                                    gpui::uniform_list(
+                                        "files-result-rows",
+                                        self.files_search.results.rows.len(),
+                                        cx.processor(|view, range: std::ops::Range<usize>, window, cx| {
+                                            view.measure_finder_width(range.clone(), window, cx);
+                                            range.map(|index| view.render_finder_row(index, window, cx)).collect()
+                                        }),
+                                    )
+                                    .track_scroll(&self.files_search.results_scroll)
+                                    .with_width_from_item(self.files_search.results_width_item)
+                                    .with_horizontal_sizing_behavior(gpui::ListHorizontalSizingBehavior::Unconstrained)
+                                    .on_scroll(cx.listener(|_, _, _, cx| cx.notify()))
+                                    .size_full()
+                                    .into_any_element()
+                                }),
+                        )
+                        .child(self.finder_scrollbar(false, cx))
+                        .when(!self.files_search.results_wrap, |element| element
+                            .child(self.finder_scrollbar(true, cx))
+                            .child(div().absolute().right_0().bottom_0().size(px(FINDER_SCROLLBAR_SIZE))
+                                .bg(rgb(if dark { 0x282828 } else { 0xf0f0f0 })))),
+                )
                 .children(self.render_finder_context(cx))
                 .into_any_element(),
         )

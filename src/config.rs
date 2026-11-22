@@ -130,6 +130,7 @@ impl ConfigStore {
 
     pub fn load_settings(&self) -> io::Result<Value> {
         match self.load_json(Path::new("settings.json")) {
+            Ok(settings) if settings.get("Terminal").is_some() => self.update_settings(|_| Ok(())),
             Ok(settings) => Ok(settings),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 self.update_settings(|_| Ok(()))
@@ -160,7 +161,11 @@ impl ConfigStore {
                 "backup_retention": {"enabled": true, "days": 90},
                 "features": {"html_export": true, "mime_tools": true, "converter": true}
             }),
-            update,
+            |settings| {
+                update(settings)?;
+                if let Some(object) = settings.as_object_mut() { object.remove("Terminal"); }
+                Ok(())
+            },
         )
     }
 

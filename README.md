@@ -97,12 +97,16 @@ Notepad Matrix brings classic Windows Notepad++ editing habits to macOS. It is a
 - Ask before quitting with unsaved documents that have no usable recovery backup; save, discard, or cancel. A failed save does not cause an immediate exit.
 - Configure the large-file threshold and wrapping, completion, smart highlighting, brace matching, and link behavior; restricted large files do not receive periodic content snapshots or save-before `.bak` files.
 
-### Macros and Run commands
+### Macros and shortcuts
 
 - Record text-editing actions, stop, play back, and save named macros; repeat a set number of times or until the end of the file.
-- Change shortcuts for menu and editor commands, macros, Run commands, and built-in modules, with conflict display.
-- Send Run commands to macOS Terminal; save and name commands and assign shortcuts.
-- Use command variables for the current file path, directory, name, extension, selected text, caret line and column, current line text, and application paths.
+- Change shortcuts for menu and editor commands, macros, and built-in modules, with conflict display.
+
+### Terminal
+
+- **Terminal → Local Terminal** or F5 always opens Terminal.app directly, without reading SSH settings.
+- Add remote SSH servers in **Terminal → Terminal Configuration**, save, then open their connections from the **Terminal** menu.
+- Remote terminals support password or public-key login, with configurable font size, background color, transparency and mouse-paste button.
 
 ### Preview and tools
 
@@ -122,10 +126,10 @@ Notepad Matrix brings classic Windows Notepad++ editing habits to macOS. It is a
 - Read document length, line count, caret line and column, selection character and line counts, encoding, and line endings in the status bar, with menus for language, encoding, and line endings.
 - Customize the editor context menu by editing `contextMenu.xml`; changes take effect after restart.
 - Use native file and print dialogs; print the selection or whole document with pagination, syntax colors, line numbers, margins, headers, and footers.
-- Reveal files in Finder, open Terminal at their directory, or open the current file with its default application or a selected browser.
+- Reveal files in Finder or open the current file with its default application or a selected browser.
 - Open a file path from the document or reveal it in Finder, and search selected text with a chosen search engine or custom search URL.
 
-The Plugins menu contains built-in modules. See [platform boundaries](DESIGN.md#goals-and-boundaries).
+The Modules menu contains built-in modules. See [platform boundaries](DESIGN.md#goals-and-boundaries).
 
 ## Matrix Easter egg and screen lock
 
@@ -158,17 +162,26 @@ See [design details](DESIGN.md#8-keep-matrix-animation-separate-from-document-co
 
 ## Configuration
 
-Settings and user data live in `~/.notepad-matrix/`.
+Default configuration directories:
+
+| Build | Directory |
+|---|---|
+| Sandboxed | `.notepad-matrix/` under the application's container `Data` directory. |
+| Unsandboxed | `~/.notepad-matrix/`. |
+
+Select a custom configuration directory in Preferences for the next launch. Existing configuration files stay in their current directory.
 
 | File or directory | Purpose |
 |---|---|
 | `settings.json` | Preferences and built-in module switches. |
 | `macros.json` | Recorded macro actions. |
-| `shortcuts.xml` | Shortcut overrides, including macro bindings matched by name, and saved Run commands. |
+| `shortcuts.xml` | Shortcut overrides and macro bindings matched by name. |
+| `file-access.json` | Sandbox file and directory access bookmarks. |
+| `config-directory.json` | Configuration directory selection, stored in the default directory. |
 | `converter.ini` | Converter formatting options. |
 | `backup/` | Automatic session metadata and independent document backup files. |
 
-Close the application before editing configuration files manually. Run commands can start external programs. See [recovery behavior](DESIGN.md#4-separate-document-backups-from-session-metadata).
+Close the application before editing configuration files manually. See [recovery behavior](DESIGN.md#4-separate-document-backups-from-session-metadata).
 
 ## Development
 

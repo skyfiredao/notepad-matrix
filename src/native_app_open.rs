@@ -29,12 +29,28 @@ pub(crate) fn open_in_application(
     Ok(receiver)
 }
 
-pub(crate) fn open_in_application_detached(path: &Path, bundle: &str) -> io::Result<()> {
-    open_with_completion(path, bundle, |result| {
-        if let Err(error) = result {
-            eprintln!("Native application handoff failed: {error}");
-        }
-    })
+pub(crate) fn open_terminal() -> io::Result<oneshot::Receiver<io::Result<()>>> {
+    let workspace = NSWorkspace::sharedWorkspace();
+    let application = workspace.URLForApplicationWithBundleIdentifier(&NSString::from_str("com.apple.Terminal"))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Terminal.app not found"))?;
+    let configuration = NSWorkspaceOpenConfiguration::configuration();
+    configuration.setActivates(true);
+    let (sender, receiver) = oneshot::channel();
+    let sender = Mutex::new(Some(sender));
+    let completion = RcBlock::new(move |application: *mut NSRunningApplication, error: *mut NSError| {
+        let result = match unsafe { error.as_ref() } {
+            Some(error) => Err(io::Error::other(format!("{} ({}, {})", error.localizedDescription(), error.domain(), error.code()))),
+            None if application.is_null() => Err(io::Error::other("macOS did not return Terminal.app")),
+            None => Ok(()),
+        };
+        let sender = match sender.lock() {
+            Ok(mut sender) => sender.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
+        };
+        if let Some(sender) = sender { drop(sender.send(result)); }
+    });
+    workspace.openApplicationAtURL_configuration_completionHandler(&application, &configuration, Some(&completion));
+    Ok(receiver)
 }
 
 fn open_with_completion(
@@ -54,9 +70,13 @@ fn open_with_completion(
     let completion = RcBlock::new(move |application: *mut NSRunningApplication, error: *mut NSError| {
         let _access = &access;
         let result = match unsafe { error.as_ref() } {
-            Some(error) => Err(io::Error::other(format!(
-                "{} ({}, {})", error.localizedDescription(), error.domain(), error.code()
-            ))),
+            Some(error) => {
+                let mut message = format!("{} ({}, {})", error.localizedDescription(), error.domain(), error.code());
+                for underlying in error.underlyingErrors().iter().take(4) {
+                    message.push_str(&format!("; {} ({}, {})", underlying.localizedDescription(), underlying.domain(), underlying.code()));
+                }
+                Err(io::Error::other(message))
+            }
             None if application.is_null() => Err(io::Error::other("macOS did not return an opened application")),
             None => Ok(()),
         };

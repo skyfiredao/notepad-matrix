@@ -33,12 +33,15 @@ pub mod monitoring;
 mod native_binary_clipboard;
 #[cfg(all(target_os = "macos", feature = "native-ui"))]
 mod native_app_open;
+#[cfg(all(target_os = "macos", feature = "native-ui"))]
+pub(crate) mod ssh_terminal;
 pub mod panel_layout;
 pub mod projects;
 pub mod recovery;
 mod regex_input;
 mod search_matcher;
-pub mod run_commands;
+#[cfg(all(target_os = "macos", feature = "native-ui"))]
+pub(crate) mod child_process;
 pub mod search;
 pub mod search_history;
 pub mod search_regex;

@@ -297,6 +297,7 @@ impl MatrixWindow {
             self.view_state.distraction_free = !self.view_state.distraction_free;
         }
         let handle = window.window_handle();
+        let owner = cx.weak_entity();
         let mut async_cx = cx.to_async();
         cx.foreground_executor().spawn(async move {
             let alive = handle.update(&mut async_cx, |_, _, _| ()).is_ok();
@@ -306,9 +307,13 @@ impl MatrixWindow {
             host.setLevel(level);
             host.makeKeyAndOrderFront(None);
             if let Some(view) = host.contentView() { host.makeFirstResponder(Some(&view)); }
-            for kind in [NSWindowButton::CloseButton, NSWindowButton::MiniaturizeButton, NSWindowButton::ZoomButton] {
-                if let Some(button) = host.standardWindowButton(kind) { button.setHidden(true); }
-            }
+            let restored = handle.update(&mut async_cx, |_, window, cx| {
+                let owner = owner.upgrade().ok_or_else(|| io::Error::other("document window owner was released"))?;
+                let view = owner.read(cx);
+                window_caption::update_native_buttons(window,
+                    view.view_chrome_visible() && !view.matrix_active() && !matrix_surface::locked())
+            }).map_err(|error| io::Error::other(error.to_string())).and_then(|result| result);
+            if let Err(error) = restored { eprintln!("could not restore native window buttons: {error}"); }
         }).detach();
         Ok(())
     }

@@ -70,7 +70,7 @@ macro_rules! embedded_image {
             .get_or_init(|| {
                 Arc::new(Image::from_bytes(
                     ImageFormat::Svg,
-                    include_bytes!(concat!("../../assets/notepad-plus-plus/", $path)).to_vec(),
+                    include_bytes!(concat!("../../assets/ui/", $path)).to_vec(),
                 ))
             })
             .clone()
@@ -86,7 +86,7 @@ impl ToolbarIcon {
             ($name:literal) => {{
                 static IMAGE: OnceLock<Arc<Image>> = OnceLock::new();
                 IMAGE.get_or_init(|| Arc::new(Image::from_bytes(ImageFormat::Svg,
-                    include_bytes!(concat!("../../assets/notepad-plus-plus/icons/standard/tabbar/", $name, "_alt.svg")).to_vec()))).clone()
+                    include_bytes!(concat!("../../assets/ui/icons/standard/tabbar/", $name, "_alt.svg")).to_vec()))).clone()
             }};
         }
         match self {
@@ -138,10 +138,10 @@ impl ToolbarIcon {
             ($name:literal) => { fluent!($name, "off") };
             ($name:literal, $state:literal) => {{
                 let bytes: &[u8] = match (view.dark, matches!(set.as_str(), "small2" | "large2")) {
-                    (false, false) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/light/toolbar/regular/", $name, "_", $state, ".svg")),
-                    (false, true) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/light/toolbar/filled/", $name, "_", $state, ".svg")),
-                    (true, false) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/dark/toolbar/regular/", $name, "_", $state, ".svg")),
-                    (true, true) => include_bytes!(concat!("../../assets/notepad-plus-plus/icons/dark/toolbar/filled/", $name, "_", $state, ".svg")),
+                    (false, false) => include_bytes!(concat!("../../assets/ui/icons/light/toolbar/regular/", $name, "_", $state, ".svg")),
+                    (false, true) => include_bytes!(concat!("../../assets/ui/icons/light/toolbar/filled/", $name, "_", $state, ".svg")),
+                    (true, false) => include_bytes!(concat!("../../assets/ui/icons/dark/toolbar/regular/", $name, "_", $state, ".svg")),
+                    (true, true) => include_bytes!(concat!("../../assets/ui/icons/dark/toolbar/filled/", $name, "_", $state, ".svg")),
                 };
                 Arc::new(Image::from_bytes(ImageFormat::Svg, bytes.to_vec()))
             }};

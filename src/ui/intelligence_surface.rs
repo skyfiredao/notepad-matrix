@@ -154,7 +154,6 @@ impl MatrixWindow {
             || self.udl.visible
             || self.udl.styler_visible
             || self.column_editor.visible
-            || self.run_visible
             || self.editor().marked_range().is_some()
     }
 

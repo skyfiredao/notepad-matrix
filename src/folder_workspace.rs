@@ -170,7 +170,6 @@ fn native_trash(_path: &Path) -> io::Result<()> {
 pub enum FolderShellCommand {
     Open,
     Reveal,
-    Terminal,
 }
 
 pub fn folder_shell(path: &Path, command: FolderShellCommand) -> io::Result<()> {
@@ -179,17 +178,6 @@ pub fn folder_shell(path: &Path, command: FolderShellCommand) -> io::Result<()> 
         match command {
             FolderShellCommand::Open => crate::native_app_open::open_default(path),
             FolderShellCommand::Reveal => crate::native_app_open::reveal(path),
-            FolderShellCommand::Terminal => {
-                let _access = crate::file_access::read(path)?;
-                let directory = if path.is_dir() {
-                    path
-                } else {
-                    path.parent()
-                        .ok_or_else(|| io::Error::other("Missing parent directory"))?
-                };
-                let _directory_access = crate::file_access::read(directory)?;
-                crate::native_app_open::open_in_application_detached(directory, "com.apple.Terminal")
-            }
         }
     }
     #[cfg(not(all(target_os = "macos", feature = "native-ui")))]

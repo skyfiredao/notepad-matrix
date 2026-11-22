@@ -18,7 +18,8 @@ pub(super) mod layout;
 mod selection_geometry;
 mod shaped;
 pub(super) use chrome::{DEFAULT_EDITOR_FONT_FAMILY, EditorSymbols};
-use chrome::{DisplayRow, EditorDisplay, ScrollAxis};
+use chrome::{DisplayRow, EditorDisplay};
+pub(super) use chrome::{ScrollAxis, scrollbar_track};
 use layout::VisualRows;
 use shaped::EditorShapedLine;
 
@@ -292,7 +293,11 @@ impl EditorScrollbars {
     }
 }
 
-fn paint_scroll_arrow(
+pub(super) fn scrollbar_colors(dark: bool) -> (u32, u32) {
+    (if dark { 0x292929 } else { 0xf0f0f0 }, if dark { 0x606060 } else { 0xcdcdcd })
+}
+
+pub(super) fn paint_scroll_arrow(
     bounds: Bounds<Pixels>,
     vertical: bool,
     decrement: bool,
@@ -5071,8 +5076,9 @@ impl Element for EditorElement {
             );
             let vertical = bars.vertical.thumb();
             let horizontal = bars.horizontal.thumb();
-            let track_colour = rgb(if dark { 0x292929 } else { 0xf0f0f0 });
-            let thumb_colour = rgb(if dark { 0x606060 } else { 0xcdcdcd });
+            let (track_colour, thumb_colour) = scrollbar_colors(dark);
+            let track_colour = rgb(track_colour);
+            let thumb_colour = rgb(thumb_colour);
             window.paint_quad(fill(
                 Bounds::new(
                     point(bounds.left() + px(width), bounds.top()),

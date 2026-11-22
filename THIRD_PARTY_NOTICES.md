@@ -32,12 +32,16 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `accesskit_macos` | `0.26.3` | `MIT OR Apache-2.0` | [Source](https://github.com/AccessKit/accesskit) | [mit](#mit) | — |
 | `addr2line` | `0.27.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/gimli-rs/addr2line) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-65](#notice-65) |
 | `adler2` | `2.0.1` | `0BSD OR MIT OR Apache-2.0` | [Source](https://github.com/oyvindln/adler2) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-19](#notice-19) |
+| `aead` | `0.6.1` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-199](#notice-199) |
+| `aes` | `0.9.4` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/block-ciphers) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-200](#notice-200) |
+| `aes-gcm` | `0.11.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/AEADs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-201](#notice-201) |
 | `aho-corasick` | `1.1.5` | `Unlicense OR MIT` | [Source](https://github.com/BurntSushi/aho-corasick) | [mit](#mit) | [notice-188](#notice-188), [notice-42](#notice-42) |
 | `aligned` | `0.4.3` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-embedded-community/aligned) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-70](#notice-70) |
 | `aligned-vec` | `0.6.4` | `MIT` | [Source](https://github.com/sarah-ek/aligned-vec/) | [mit](#mit) | [notice-126](#notice-126) |
 | `allocator-api2` | `0.2.21` | `MIT OR Apache-2.0` | [Source](https://github.com/zakarumych/allocator-api2) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `anyhow` | `1.0.104` | `MIT OR Apache-2.0` | [Source](https://github.com/dtolnay/anyhow) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `arg_enum_proc_macro` | `0.3.4` | `MIT` | [Source](https://github.com/lu-zero/arg_enum_proc_macro) | [mit](#mit) | [notice-77](#notice-77) |
+| `argon2` | `0.6.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/password-hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-202](#notice-202) |
 | `arrayref` | `0.3.9` | `BSD-2-Clause` | [Source](https://github.com/droundy/arrayref) | — | [notice-44](#notice-44) |
 | `arrayvec` | `0.7.8` | `MIT OR Apache-2.0` | [Source](https://github.com/bluss/arrayvec) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-142](#notice-142) |
 | `as-slice` | `0.2.1` | `MIT OR Apache-2.0` | [Source](https://github.com/japaric/as-slice) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-76](#notice-76) |
@@ -47,26 +51,38 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `av1-grain` | `0.2.5` | `BSD-2-Clause` | [Source](https://github.com/rust-av/av1-grain) | — | [notice-12](#notice-12) |
 | `avif-serialize` | `0.8.9` | `BSD-3-Clause` | [Source](https://github.com/kornelski/avif-serialize) | — | [notice-14](#notice-14) |
 | `backtrace` | `0.3.77` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/backtrace-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-30](#notice-30) |
+| `base16ct` | `1.0.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-203](#notice-203) |
 | `base64` | `0.22.1` | `MIT OR Apache-2.0` | [Source](https://github.com/marshallpierce/rust-base64) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-41](#notice-41) |
+| `base64ct` | `1.8.3` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-204](#notice-204) |
+| `bcrypt-pbkdf` | `0.11.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/password-hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-205](#notice-205) |
 | `bit-set` | `0.8.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/contain-rs/bit-set) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-128](#notice-128) |
 | `bit-vec` | `0.8.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/contain-rs/bit-vec) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-128](#notice-128) |
 | `bit_field` | `0.10.3` | `Apache-2.0/MIT` | [Source](https://github.com/phil-opp/rust-bit-field) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-170](#notice-170), [notice-59](#notice-59) |
 | `bitflags` | `1.3.2` | `MIT/Apache-2.0` | [Source](https://github.com/bitflags/bitflags) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-34](#notice-34) |
 | `bitflags` | `2.13.2` | `MIT OR Apache-2.0` | [Source](https://github.com/bitflags/bitflags) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-34](#notice-34) |
 | `bitstream-io` | `4.10.0` | `MIT/Apache-2.0` | [Source](https://github.com/tuffy/bitstream-io) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-69](#notice-69) |
+| `blake2` | `0.11.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-206](#notice-206) |
 | `block-buffer` | `0.10.4` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-85](#notice-85) |
+| `block-buffer` | `0.12.1` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-207](#notice-207) |
+| `block-padding` | `0.4.2` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-207](#notice-207) |
 | `block2` | `0.5.1` | `MIT` | [Source](https://github.com/madsmtm/objc2) | [mit](#mit) | [notice-139](#notice-139), [notice-179](#notice-179) |
 | `block2` | `0.6.2` | `MIT` | [Source](https://github.com/madsmtm/objc2) | [mit](#mit) | [notice-1](#notice-1), [notice-178](#notice-178) |
+| `blowfish` | `0.10.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/block-ciphers) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-208](#notice-208) |
 | `bumpalo` | `3.20.3` | `MIT OR Apache-2.0` | [Source](https://github.com/fitzgen/bumpalo) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-97](#notice-97) |
 | `bytemuck` | `1.25.2` | `Zlib OR Apache-2.0 OR MIT` | [Source](https://github.com/Lokathor/bytemuck) | [apache-2.0](#apache-2.0), [zlib](#zlib) | [notice-90](#notice-90), [notice-91](#notice-91) |
 | `bytemuck_derive` | `1.12.1` | `Zlib OR Apache-2.0 OR MIT` | [Source](https://github.com/Lokathor/bytemuck) | [apache-2.0](#apache-2.0), [zlib](#zlib) | [notice-90](#notice-90), [notice-91](#notice-91) |
 | `byteorder` | `1.5.0` | `Unlicense OR MIT` | [Source](https://github.com/BurntSushi/byteorder) | [mit](#mit) | [notice-188](#notice-188), [notice-42](#notice-42) |
 | `byteorder-lite` | `0.1.0` | `Unlicense OR MIT` | [Source](https://github.com/image-rs/byteorder-lite) | [mit](#mit) | [notice-42](#notice-42) |
 | `bytes` | `1.12.1` | `MIT` | [Source](https://github.com/tokio-rs/bytes) | [mit](#mit) | [notice-75](#notice-75) |
+| `cbc` | `0.2.1` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/block-modes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-209](#notice-209) |
 | `cfg-if` | `1.0.5` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/cfg-if) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-30](#notice-30) |
+| `chacha20` | `0.10.2` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/stream-ciphers) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-201](#notice-201) |
 | `chrono` | `0.4.45` | `MIT OR Apache-2.0` | [Source](https://github.com/chronotope/chrono) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-187](#notice-187) |
+| `cipher` | `0.5.2` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-210](#notice-210) |
+| `cmov` | `0.5.4` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-211](#notice-211) |
 | `color_quant` | `1.1.0` | `MIT` | [Source](https://github.com/image-rs/color_quant.git) | [mit](#mit) | [notice-60](#notice-60) |
 | `concurrent-queue` | `2.5.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/smol-rs/concurrent-queue) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
+| `const-oid` | `0.10.3` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-212](#notice-212) |
 | `convert_case` | `0.10.0` | `MIT` | [Source](https://github.com/rutrum/convert-case) | [mit](#mit) | [notice-133](#notice-133) |
 | `core-foundation` | `0.10.1` | `MIT OR Apache-2.0` | [Source](https://github.com/servo/core-foundation-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-25](#notice-25) |
 | `core-foundation-sys` | `0.8.7` | `MIT OR Apache-2.0` | [Source](https://github.com/servo/core-foundation-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-25](#notice-25) |
@@ -74,24 +90,41 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `core-graphics-types` | `0.2.0` | `MIT OR Apache-2.0` | [Source](https://github.com/servo/core-foundation-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-25](#notice-25) |
 | `core-text` | `21.0.0` | `MIT OR Apache-2.0` | [Source](https://github.com/servo/core-foundation-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-25](#notice-25) |
 | `core_maths` | `0.1.1` | `MIT` | [Source](https://github.com/robertbastian/core_maths) | [mit](#mit) | [notice-132](#notice-132) |
+| `cpubits` | `0.1.1` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-213](#notice-213) |
 | `cpufeatures` | `0.2.17` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-118](#notice-118) |
+| `cpufeatures` | `0.3.1` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-212](#notice-212) |
 | `crc32fast` | `1.5.4` | `MIT OR Apache-2.0` | [Source](https://github.com/srijs/rust-crc32fast) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-170](#notice-170), [notice-81](#notice-81) |
 | `crossbeam-deque` | `0.8.8` | `MIT OR Apache-2.0` | [Source](https://github.com/crossbeam-rs/crossbeam) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-104](#notice-104) |
 | `crossbeam-epoch` | `0.9.21` | `MIT OR Apache-2.0` | [Source](https://github.com/crossbeam-rs/crossbeam) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-104](#notice-104) |
 | `crossbeam-utils` | `0.8.23` | `MIT OR Apache-2.0` | [Source](https://github.com/crossbeam-rs/crossbeam) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-104](#notice-104) |
+| `crypto-bigint` | `0.7.11` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/crypto-bigint) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-202](#notice-202) |
 | `crypto-common` | `0.1.7` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-121](#notice-121) |
+| `crypto-common` | `0.2.2` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-214](#notice-214) |
 | `ctor` | `1.0.13` | `Apache-2.0 OR MIT` | [Source](https://github.com/mmastrac/linktime) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-170](#notice-170) |
+| `ctr` | `0.10.1` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/block-modes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-209](#notice-209) |
+| `ctutils` | `0.4.8` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-215](#notice-215) |
+| `curve25519-dalek` | `5.0.0` | `BSD-3-Clause` | [Source](https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek) | — | [notice-216](#notice-216) |
+| `data-encoding` | `2.11.1` | `MIT` | [Source](https://github.com/ia0/data-encoding) | [mit](#mit) | [notice-217](#notice-217) |
 | `data-url` | `0.3.2` | `MIT OR Apache-2.0` | [Source](https://github.com/servo/rust-url) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-28](#notice-28) |
+| `delegate` | `0.13.5` | `MIT OR Apache-2.0` | [Source](https://github.com/kobzol/rust-delegate) | [apache-2.0](#apache-2.0) | — |
+| `der` | `0.8.3` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-212](#notice-212) |
 | `derive_more` | `2.1.1` | `MIT` | [Source](https://github.com/JelteF/derive_more) | [mit](#mit) | [notice-58](#notice-58) |
 | `derive_more-impl` | `2.1.1` | `MIT` | [Source](https://github.com/JelteF/derive_more) | [mit](#mit) | [notice-58](#notice-58) |
+| `des` | `0.9.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/block-ciphers) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-218](#notice-218) |
 | `digest` | `0.10.7` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-68](#notice-68) |
+| `digest` | `0.11.3` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-219](#notice-219) |
 | `dirs` | `5.0.1` | `MIT OR Apache-2.0` | [Source](https://github.com/soc/dirs-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-86](#notice-86) |
 | `dirs-sys` | `0.4.1` | `MIT OR Apache-2.0` | [Source](https://github.com/dirs-dev/dirs-sys-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-86](#notice-86) |
 | `dispatch2` | `0.3.1` | `Zlib OR Apache-2.0 OR MIT` | [Source](https://github.com/madsmtm/objc2) | [mit](#mit) | [notice-1](#notice-1), [notice-183](#notice-183) |
 | `displaydoc` | `0.2.7` | `MIT OR Apache-2.0` | [Source](https://github.com/yaahc/displaydoc) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `dyn-clone` | `1.0.20` | `MIT OR Apache-2.0` | [Source](https://github.com/dtolnay/dyn-clone) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
+| `ecdsa` | `0.17.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/signatures) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-220](#notice-220) |
+| `ed25519` | `3.0.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/signatures) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-220](#notice-220) |
+| `ed25519-dalek` | `3.0.0` | `BSD-3-Clause` | [Source](https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek) | — | [notice-221](#notice-221) |
 | `either` | `1.19.0` | `MIT OR Apache-2.0` | [Source](https://github.com/rayon-rs/either) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-40](#notice-40) |
+| `elliptic-curve` | `0.14.3` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-222](#notice-222) |
 | `encoding_rs` | `0.8.44` | `(Apache-2.0 OR MIT) AND BSD-3-Clause` | [Source](https://github.com/hsivonen/encoding_rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-168](#notice-168), [notice-172](#notice-172) |
+| `enum_dispatch` | `0.3.13` | `MIT OR Apache-2.0` | [Source](https://gitlab.com/antonok/enum_dispatch) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-223](#notice-223) |
 | `enumn` | `0.1.14` | `MIT OR Apache-2.0` | [Source](https://github.com/dtolnay/enumn) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `equator` | `0.4.2` | `MIT` | [Source](https://github.com/sarah-ek/equator/) | [mit](#mit) | [notice-130](#notice-130) |
 | `equator-macro` | `0.4.2` | `MIT` | [Source](https://github.com/sarah-ek/equator/) | [mit](#mit) | [notice-130](#notice-130) |
@@ -106,6 +139,7 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `fastrand` | `2.5.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/smol-rs/fastrand) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `fax` | `0.2.7` | `MIT` | [Source](https://github.com/pdf-rs/fax) | [mit](#mit) | [notice-171](#notice-171) |
 | `fdeflate` | `0.3.7` | `MIT OR Apache-2.0` | [Source](https://github.com/image-rs/fdeflate) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
+| `ff` | `0.14.0` | `MIT/Apache-2.0` | [Source](https://github.com/zkcrypto/ff) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-224](#notice-224) |
 | `flate2` | `1.1.10` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/flate2-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-38](#notice-38) |
 | `float-cmp` | `0.9.0` | `MIT` | [Source](https://github.com/mikedilger/float-cmp) | [mit](#mit) | [notice-37](#notice-37) |
 | `float-ord` | `0.3.2` | `MIT / Apache-2.0` | [Source](https://github.com/notriddle/rust-float-ord) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-170](#notice-170), [notice-50](#notice-50) |
@@ -127,8 +161,10 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `futures-task` | `0.3.34` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/futures-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-54](#notice-54), [notice-55](#notice-55) |
 | `futures-util` | `0.3.34` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/futures-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-54](#notice-54), [notice-55](#notice-55) |
 | `generic-array` | `0.14.7` | `MIT` | [Source](https://github.com/fizyk20/generic-array.git) | [mit](#mit) | [notice-43](#notice-43) |
+| `getrandom` | `0.2.17` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-random/getrandom) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-225](#notice-225) |
 | `getrandom` | `0.3.4` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-random/getrandom) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-87](#notice-87) |
 | `getrandom` | `0.4.3` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-random/getrandom) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-88](#notice-88) |
+| `ghash` | `0.6.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/universal-hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-201](#notice-201) |
 | `gif` | `0.14.2` | `MIT OR Apache-2.0` | [Source](https://github.com/image-rs/image-gif) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-51](#notice-51) |
 | `gimli` | `0.34.0` | `MIT OR Apache-2.0` | [Source](https://github.com/gimli-rs/gimli) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-48](#notice-48) |
 | `gpui-pre` | `0.3.11` | `Apache-2.0` | [Source](https://github.com/zed-industries/zed) | [apache-2.0](#apache-2.0) | [notice-161](#notice-161) |
@@ -146,14 +182,20 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `gpui-pre-util` | `0.3.11` | `Apache-2.0` | [Source](https://github.com/zed-industries/zed) | [apache-2.0](#apache-2.0) | [notice-161](#notice-161) |
 | `gpui-pre-ztracing` | `0.3.11` | `Apache-2.0` | [Source](https://github.com/zed-industries/zed) | [apache-2.0](#apache-2.0) | [notice-161](#notice-161) |
 | `gpui-pre-ztracing-macro` | `0.3.11` | `Apache-2.0` | [Source](https://github.com/zed-industries/zed) | [apache-2.0](#apache-2.0) | [notice-161](#notice-161) |
+| `group` | `0.14.0` | `MIT/Apache-2.0` | [Source](https://github.com/zkcrypto/group) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-226](#notice-226) |
 | `half` | `2.7.1` | `MIT OR Apache-2.0` | [Source](https://github.com/VoidStarKat/half-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `hash32` | `0.3.1` | `MIT OR Apache-2.0` | [Source](https://github.com/japaric/hash32) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-76](#notice-76) |
 | `hashbrown` | `0.16.1` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/hashbrown) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-56](#notice-56) |
 | `hashbrown` | `0.17.1` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/hashbrown) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-56](#notice-56) |
 | `heapless` | `0.9.3` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-embedded/heapless) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-70](#notice-70) |
 | `heck` | `0.5.0` | `MIT OR Apache-2.0` | [Source](https://github.com/withoutboats/heck) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-48](#notice-48) |
+| `hex` | `0.4.3` | `MIT OR Apache-2.0` | [Source](https://github.com/KokaKiwi/rust-hex) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-227](#notice-227) |
+| `hex-literal` | `1.1.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-228](#notice-228) |
+| `hkdf` | `0.13.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/KDFs/) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-229](#notice-229) |
+| `hmac` | `0.13.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/MACs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-68](#notice-68) |
 | `http` | `1.5.0` | `MIT OR Apache-2.0` | [Source](https://github.com/hyperium/http) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-153](#notice-153), [notice-74](#notice-74) |
 | `http-body` | `1.1.0` | `MIT` | [Source](https://github.com/hyperium/http-body) | [mit](#mit) | [notice-108](#notice-108) |
+| `hybrid-array` | `0.4.15` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/hybrid-array) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-211](#notice-211) |
 | `iana-time-zone` | `0.1.65` | `MIT OR Apache-2.0` | [Source](https://github.com/strawlab/iana-time-zone) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-109](#notice-109), [notice-158](#notice-158) |
 | `icu_collections` | `2.4.0` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
 | `icu_locale_core` | `2.4.0` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
@@ -173,9 +215,12 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `imagesize` | `0.14.0` | `MIT` | [Source](https://github.com/Roughsketch/imagesize) | [mit](#mit) | [notice-71](#notice-71) |
 | `imgref` | `1.12.3` | `CC0-1.0 OR Apache-2.0` | [Source](https://github.com/kornelski/imgref) | [apache-2.0](#apache-2.0) | [notice-173](#notice-173) |
 | `indexmap` | `2.14.2` | `Apache-2.0 OR MIT` | [Source](https://github.com/indexmap-rs/indexmap) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-62](#notice-62) |
+| `inout` | `0.2.6` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-230](#notice-230) |
 | `inventory` | `0.3.25` | `MIT OR Apache-2.0` | [Source](https://github.com/dtolnay/inventory) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `itertools` | `0.14.0` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-itertools/itertools) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-40](#notice-40) |
 | `itoa` | `1.0.18` | `MIT OR Apache-2.0` | [Source](https://github.com/dtolnay/itoa) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
+| `keccak` | `0.2.2` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/sponges) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-231](#notice-231) |
+| `kem` | `0.3.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-232](#notice-232), [notice-214](#notice-214) |
 | `kurbo` | `0.13.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/linebender/kurbo) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-79](#notice-79) |
 | `lazy_static` | `1.5.1` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang-nursery/lazy-static.rs) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `lebe` | `0.5.3` | `BSD-3-Clause` | [Source](https://github.com/johannesvollmer/lebe) | — | [notice-123](#notice-123) |
@@ -195,17 +240,23 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `mach2` | `0.6.0` | `BSD-2-Clause OR MIT OR Apache-2.0` | [Source](https://github.com/JohnTitor/mach2) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-98](#notice-98), [notice-99](#notice-99) |
 | `maybe-rayon` | `0.1.1` | `MIT` | [Source](https://github.com/shssoichiro/maybe-rayon) | [mit](#mit) | [notice-119](#notice-119) |
 | `md-5` | `0.10.6` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-21](#notice-21) |
+| `md5` | `0.8.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/stainless-steel/md5) | [apache-2.0](#apache-2.0) | [notice-233](#notice-233) |
 | `memchr` | `2.8.3` | `Unlicense OR MIT` | [Source](https://github.com/BurntSushi/memchr) | [mit](#mit) | [notice-188](#notice-188), [notice-42](#notice-42) |
 | `memmap2` | `0.9.12` | `MIT OR Apache-2.0` | [Source](https://github.com/RazrFalcon/memmap2-rs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-115](#notice-115), [notice-169](#notice-169) |
 | `miniz_oxide` | `0.8.9` | `MIT OR Zlib OR Apache-2.0` | [Source](https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide) | [apache-2.0](#apache-2.0), [mit](#mit), [zlib](#zlib) | [notice-146](#notice-146), [notice-147](#notice-147) |
 | `miniz_oxide` | `0.9.1` | `MIT OR Zlib OR Apache-2.0` | [Source](https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide) | [apache-2.0](#apache-2.0), [mit](#mit), [zlib](#zlib) | [notice-146](#notice-146), [notice-147](#notice-147) |
+| `mio` | `1.2.5` | `MIT` | [Source](https://github.com/tokio-rs/mio) | [mit](#mit) | [notice-234](#notice-234) |
+| `ml-kem` | `0.3.4` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/KEMs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-235](#notice-235) |
+| `module-lattice` | `0.2.4` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/KEMs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-235](#notice-235) |
 | `moxcms` | `0.8.1` | `BSD-3-Clause OR Apache-2.0` | [Source](https://github.com/awxkee/moxcms.git) | [apache-2.0](#apache-2.0) | [notice-138](#notice-138), [notice-166](#notice-166) |
 | `multiversion_no_op` | `1.0.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/hsivonen/multiversion_no_op) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-168](#notice-168) |
 | `new_debug_unreachable` | `1.0.6` | `MIT` | [Source](https://github.com/mbrubeck/rust-debug-unreachable) | [mit](#mit) | [notice-45](#notice-45) |
+| `nix` | `0.31.4` | `MIT` | [Source](https://github.com/nix-rust/nix) | [mit](#mit) | [notice-236](#notice-236) |
 | `no_std_io2` | `0.9.4` | `Apache-2.0 OR MIT` | [Source](https://github.com/wcampbell0x2a/no-std-io2) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-116](#notice-116), [notice-170](#notice-170) |
 | `nom` | `8.0.0` | `MIT` | [Source](https://github.com/rust-bakery/nom) | [mit](#mit) | [notice-36](#notice-36) |
 | `noop_proc_macro` | `0.3.0` | `MIT` | [Source](https://github.com/lu-zero/noop_proc_macro) | [mit](#mit) | [notice-94](#notice-94) |
 | `num-bigint` | `0.4.8` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-num/num-bigint) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-34](#notice-34) |
+| `num-bigint` | `0.5.1` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-num/num-bigint) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-34](#notice-34) |
 | `num-complex` | `0.4.6` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-num/num-complex) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-34](#notice-34) |
 | `num-derive` | `0.4.2` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-num/num-derive) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-34](#notice-34) |
 | `num-integer` | `0.1.47` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-num/num-integer) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-34](#notice-34) |
@@ -238,24 +289,37 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `object` | `0.40.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/gimli-rs/object) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-47](#notice-47) |
 | `once_cell` | `1.21.4` | `MIT OR Apache-2.0` | [Source](https://github.com/matklad/once_cell) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `option-ext` | `0.2.0` | `MPL-2.0` | [Source](https://github.com/soc/option-ext.git) | [mpl-2.0](#mpl-2.0) | — |
+| `p256` | `0.14.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/elliptic-curves) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-222](#notice-222) |
+| `p384` | `0.14.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/elliptic-curves) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-237](#notice-237) |
+| `p521` | `0.14.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/elliptic-curves) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-222](#notice-222) |
 | `parking` | `2.2.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/smol-rs/parking) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-9](#notice-9) |
 | `parking_lot` | `0.12.5` | `MIT OR Apache-2.0` | [Source](https://github.com/Amanieu/parking_lot) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-61](#notice-61) |
 | `parking_lot_core` | `0.9.12` | `MIT OR Apache-2.0` | [Source](https://github.com/Amanieu/parking_lot) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-61](#notice-61) |
+| `password-hash` | `0.6.1` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-222](#notice-222) |
 | `paste` | `1.0.15` | `MIT OR Apache-2.0` | [Source](https://github.com/dtolnay/paste) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `pastey` | `0.1.1` | `MIT OR Apache-2.0` | [Source](https://github.com/as1100k/pastey) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `pathfinder_geometry` | `0.5.1` | `MIT/Apache-2.0` | [Source](https://github.com/servo/pathfinder) | [mit](#mit) | [notice-181](#notice-181) |
 | `pathfinder_simd` | `0.5.6` | `MIT OR Apache-2.0` | [Source](https://github.com/servo/pathfinder) | [mit](#mit) | [notice-22](#notice-22) |
+| `pbkdf2` | `0.13.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/password-hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-238](#notice-238) |
+| `pem-rfc7468` | `1.0.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-239](#notice-239) |
 | `percent-encoding` | `2.3.2` | `MIT OR Apache-2.0` | [Source](https://github.com/servo/rust-url/) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-28](#notice-28) |
+| `phc` | `0.6.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-202](#notice-202) |
 | `pico-args` | `0.5.0` | `MIT` | [Source](https://github.com/RazrFalcon/pico-args) | [mit](#mit) | [notice-107](#notice-107) |
 | `pin-project` | `1.1.13` | `Apache-2.0 OR MIT` | [Source](https://github.com/taiki-e/pin-project) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `pin-project-internal` | `1.1.13` | `Apache-2.0 OR MIT` | [Source](https://github.com/taiki-e/pin-project) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `pin-project-lite` | `0.2.17` | `Apache-2.0 OR MIT` | [Source](https://github.com/taiki-e/pin-project-lite) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
+| `pkcs5` | `0.8.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-202](#notice-202) |
+| `pkcs8` | `0.11.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-212](#notice-212) |
 | `png` | `0.17.16` | `MIT OR Apache-2.0` | [Source](https://github.com/image-rs/image-png) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-51](#notice-51) |
 | `png` | `0.18.1` | `MIT OR Apache-2.0` | [Source](https://github.com/image-rs/image-png) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-51](#notice-51) |
 | `pollster` | `0.4.0` | `Apache-2.0/MIT` | [Source](https://github.com/zesterer/pollster) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-117](#notice-117) |
+| `poly1305` | `0.9.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/universal-hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-240](#notice-240) |
 | `polycool` | `0.4.0` | `MIT OR Apache-2.0` | [Source](https://github.com/linebender/kurbo) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-79](#notice-79) |
+| `polyval` | `0.7.3` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/universal-hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-201](#notice-201) |
 | `potential_utf` | `0.1.6` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
 | `ppv-lite86` | `0.2.21` | `MIT OR Apache-2.0` | [Source](https://github.com/cryptocorrosion/cryptocorrosion) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-105](#notice-105), [notice-156](#notice-156) |
+| `primefield` | `0.14.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/elliptic-curves) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-235](#notice-235) |
+| `primeorder` | `0.14.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/elliptic-curves) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-241](#notice-241) |
 | `proc-macro-crate` | `3.5.0` | `MIT OR Apache-2.0` | [Source](https://github.com/bkchr/proc-macro-crate) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `proc-macro2` | `1.0.107` | `MIT OR Apache-2.0` | [Source](https://github.com/dtolnay/proc-macro2) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `profiling` | `1.0.18` | `MIT OR Apache-2.0` | [Source](https://github.com/aclysma/profiling) | [mit](#mit) | [notice-112](#notice-112) |
@@ -267,8 +331,10 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `qoi` | `0.4.1` | `MIT/Apache-2.0` | [Source](https://github.com/aldanor/qoi-rust) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-124](#notice-124) |
 | `quick-error` | `2.0.1` | `MIT/Apache-2.0` | [Source](http://github.com/tailhook/quick-error) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-170](#notice-170), [notice-49](#notice-49) |
 | `quote` | `1.0.47` | `MIT OR Apache-2.0` | [Source](https://github.com/dtolnay/quote) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
+| `rand` | `0.10.4` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-random/rand) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-242](#notice-242), [notice-155](#notice-155) |
 | `rand` | `0.9.5` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-random/rand) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-155](#notice-155) |
 | `rand_chacha` | `0.9.0` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-random/rand) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-155](#notice-155) |
+| `rand_core` | `0.10.1` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-random/rand_core) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-243](#notice-243), [notice-244](#notice-244) |
 | `rand_core` | `0.9.5` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-random/rand) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-155](#notice-155) |
 | `rav1e` | `0.8.1` | `BSD-2-Clause` | [Source](https://github.com/xiph/rav1e/) | — | [notice-11](#notice-11) |
 | `ravif` | `0.13.0` | `BSD-3-Clause` | [Source](https://github.com/kornelski/cavif-rs) | — | [notice-15](#notice-15) |
@@ -282,19 +348,27 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `regex-automata` | `0.4.18` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/regex) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-34](#notice-34) |
 | `regex-syntax` | `0.8.11` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/regex) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-193](#notice-193), [notice-34](#notice-34) |
 | `resvg` | `0.46.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/linebender/resvg) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-154](#notice-154) |
+| `rfc6979` | `0.6.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/signatures) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-220](#notice-220) |
 | `rgb` | `0.8.53` | `MIT` | [Source](https://github.com/kornelski/rust-rgb) | [mit](#mit) | [notice-93](#notice-93) |
+| `ring` | `0.17.14` | `Apache-2.0 AND ISC` | [Source](https://github.com/briansmith/ring) | [apache-2.0](#apache-2.0), [isc](#isc) | [notice-245](#notice-245), [notice-246](#notice-246), [notice-247](#notice-247), [notice-248](#notice-248), [notice-249](#notice-249), [notice-250](#notice-250) |
 | `ropey` | `2.0.0-beta.1` | `MIT OR Apache-2.0` | [Source](https://github.com/cessen/ropey) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-127](#notice-127) |
 | `roxmltree` | `0.21.2` | `MIT OR Apache-2.0` | [Source](https://github.com/RazrFalcon/roxmltree) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-84](#notice-84) |
+| `russh` | `0.65.4` | `Apache-2.0` | [Source](https://github.com/warp-tech/russh) | [apache-2.0](#apache-2.0) | — |
+| `russh-cryptovec` | `0.62.0` | `Apache-2.0` | [Source](https://github.com/warp-tech/russh) | [apache-2.0](#apache-2.0) | — |
+| `russh-util` | `0.52.0` | `Apache-2.0` | [Source](https://github.com/warp-tech/russh) | [apache-2.0](#apache-2.0) | — |
 | `rustc-demangle` | `0.1.28` | `MIT/Apache-2.0` | [Source](https://github.com/rust-lang/rustc-demangle) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-30](#notice-30) |
 | `rustc-hash` | `2.1.3` | `Apache-2.0 OR MIT` | [Source](https://github.com/rust-lang/rustc-hash) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `rustix` | `1.1.6` | `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` | [Source](https://github.com/bytecodealliance/rustix) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `rustybuzz` | `0.20.1` | `MIT` | [Source](https://github.com/harfbuzz/rustybuzz) | [mit](#mit) | [notice-134](#notice-134), [notice-137](#notice-137) |
 | `ryu` | `1.0.23` | `Apache-2.0 OR BSL-1.0` | [Source](https://github.com/dtolnay/ryu) | [apache-2.0](#apache-2.0), [bsl-1.0](#bsl-1.0) | — |
+| `salsa20` | `0.11.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/stream-ciphers) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-252](#notice-252) |
 | `same-file` | `1.0.6` | `Unlicense/MIT` | [Source](https://github.com/BurntSushi/same-file) | [mit](#mit) | [notice-188](#notice-188), [notice-67](#notice-67) |
 | `schemars` | `1.2.3` | `MIT` | [Source](https://github.com/GREsau/schemars) | [mit](#mit) | [notice-92](#notice-92) |
 | `schemars_derive` | `1.2.3` | `MIT` | [Source](https://github.com/GREsau/schemars) | [mit](#mit) | [notice-92](#notice-92) |
 | `scopeguard` | `1.2.0` | `MIT OR Apache-2.0` | [Source](https://github.com/bluss/scopeguard) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-66](#notice-66) |
+| `scrypt` | `0.12.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/password-hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-202](#notice-202) |
 | `seahash` | `4.1.0` | `MIT` | [Source](https://gitlab.redox-os.org/redox-os/seahash) | [mit](#mit) | [notice-180](#notice-180) |
+| `sec1` | `0.8.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-202](#notice-202) |
 | `semver` | `1.0.28` | `MIT OR Apache-2.0` | [Source](https://github.com/dtolnay/semver) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `serde` | `1.0.229` | `MIT OR Apache-2.0` | [Source](https://github.com/serde-rs/serde) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `serde_core` | `1.0.229` | `MIT OR Apache-2.0` | [Source](https://github.com/serde-rs/serde) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
@@ -302,8 +376,14 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `serde_derive_internals` | `0.30.0` | `MIT OR Apache-2.0` | [Source](https://github.com/serde-rs/serde) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `serde_json` | `1.0.154` | `MIT OR Apache-2.0` | [Source](https://github.com/serde-rs/json) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `serde_urlencoded` | `0.7.1` | `MIT/Apache-2.0` | [Source](https://github.com/nox/serde_urlencoded) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-57](#notice-57) |
+| `serdect` | `0.4.3` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-253](#notice-253) |
+| `sha1` | `0.11.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-254](#notice-254) |
 | `sha1_smol` | `1.0.1` | `BSD-3-Clause` | [Source](https://github.com/mitsuhiko/sha1-smol) | [mit](#mit) | [notice-13](#notice-13), [notice-7](#notice-7) |
 | `sha2` | `0.10.9` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-21](#notice-21) |
+| `sha2` | `0.11.1` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-254](#notice-254) |
+| `sha3` | `0.12.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/hashes) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-255](#notice-255) |
+| `shake` | `0.1.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/XOFs) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-256](#notice-256) |
+| `signature` | `3.0.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-220](#notice-220) |
 | `simd-adler32` | `0.3.10` | `MIT` | [Source](https://github.com/mcountryman/simd-adler32) | [mit](#mit) | [notice-143](#notice-143) |
 | `simd_helpers` | `0.1.0` | `MIT` | [Source](https://github.com/lu-zero/simd_helpers) | [mit](#mit) | [notice-177](#notice-177) |
 | `simdutf8` | `0.1.5` | `MIT OR Apache-2.0` | [Source](https://github.com/rusticstuff/simdutf8) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
@@ -313,8 +393,14 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `slotmap` | `1.1.1` | `Zlib` | [Source](https://github.com/orlp/slotmap) | [zlib](#zlib) | [notice-120](#notice-120) |
 | `smallvec` | `1.16.4` | `MIT OR Apache-2.0` | [Source](https://github.com/servo/rust-smallvec) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-82](#notice-82) |
 | `smol_str` | `0.3.7` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/rust-analyzer/tree/master/lib/smol_str) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
+| `socket2` | `0.6.5` | `MIT OR Apache-2.0` | [Source](https://github.com/rust-lang/socket2) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-30](#notice-30) |
 | `spin` | `0.10.1` | `MIT` | [Source](https://github.com/mvdnes/spin-rs.git) | [mit](#mit) | [notice-32](#notice-32) |
 | `spin` | `0.9.9` | `MIT` | [Source](https://github.com/mvdnes/spin-rs.git) | [mit](#mit) | [notice-32](#notice-32) |
+| `spki` | `0.8.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/formats) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-202](#notice-202) |
+| `sponge-cursor` | `0.1.0` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-256](#notice-256) |
+| `ssh-cipher` | `0.3.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/SSH) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-213](#notice-213) |
+| `ssh-encoding` | `0.3.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/SSH) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-202](#notice-202) |
+| `ssh-key` | `0.7.0-rc.12` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/SSH) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-202](#notice-202) |
 | `stable_deref_trait` | `1.2.1` | `MIT OR Apache-2.0` | [Source](https://github.com/storyyeller/stable_deref_trait) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-72](#notice-72) |
 | `str_indices` | `0.4.4` | `MIT OR Apache-2.0` | [Source](https://github.com/cessen/str_indices) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `strict-num` | `0.1.1` | `MIT` | [Source](https://github.com/RazrFalcon/strict-num) | [mit](#mit) | [notice-125](#notice-125) |
@@ -335,6 +421,8 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `tiny-skia-path` | `0.11.4` | `BSD-3-Clause` | [Source](https://github.com/RazrFalcon/tiny-skia/tree/master/path) | — | [notice-23](#notice-23) |
 | `tinystr` | `0.8.5` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
 | `tinyvec` | `1.13.3` | `Zlib OR Apache-2.0 OR MIT` | [Source](https://github.com/Lokathor/tinyvec) | [apache-2.0](#apache-2.0), [mit](#mit), [zlib](#zlib) | [notice-90](#notice-90) |
+| `tokio` | `1.54.1` | `MIT` | [Source](https://github.com/tokio-rs/tokio) | [mit](#mit) | [notice-257](#notice-257) |
+| `tokio-macros` | `2.7.2` | `MIT` | [Source](https://github.com/tokio-rs/tokio) | [mit](#mit) | [notice-258](#notice-258) |
 | `toml_datetime` | `1.1.2+spec-1.1.0` | `MIT OR Apache-2.0` | [Source](https://github.com/toml-rs/toml) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-136](#notice-136), [notice-167](#notice-167) |
 | `toml_edit` | `0.25.18+spec-1.1.0` | `MIT OR Apache-2.0` | [Source](https://github.com/toml-rs/toml) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-136](#notice-136), [notice-167](#notice-167) |
 | `toml_parser` | `1.1.5+spec-1.1.0` | `MIT OR Apache-2.0` | [Source](https://github.com/toml-rs/toml) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-136](#notice-136), [notice-167](#notice-167) |
@@ -353,12 +441,17 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `unicode-script` | `0.5.9` | `MIT OR Apache-2.0` | [Source](https://github.com/unicode-rs/unicode-script) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-160](#notice-160), [notice-95](#notice-95) |
 | `unicode-segmentation` | `1.13.3` | `MIT OR Apache-2.0` | [Source](https://github.com/unicode-rs/unicode-segmentation) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-48](#notice-48) |
 | `unicode-vo` | `0.1.0` | `MIT/Apache-2.0` | [Source](https://github.com/RazrFalcon/unicode-vo) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-80](#notice-80) |
+| `unicode-width` | `0.2.3` | `MIT OR Apache-2.0` | [Source](https://github.com/unicode-rs/unicode-width) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-259](#notice-259), [notice-48](#notice-48) |
+| `universal-hash` | `0.6.1` | `MIT OR Apache-2.0` | [Source](https://github.com/RustCrypto/traits) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-260](#notice-260) |
+| `untrusted` | `0.9.0` | `ISC` | [Source](https://github.com/briansmith/untrusted) | [isc-authors](#isc-authors) | [notice-261](#notice-261) |
 | `url` | `2.5.8` | `MIT OR Apache-2.0` | [Source](https://github.com/servo/rust-url) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-28](#notice-28) |
 | `usvg` | `0.46.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/linebender/resvg) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-154](#notice-154) |
 | `utf8_iter` | `1.1.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/hsivonen/utf8_iter) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-168](#notice-168) |
 | `utf_types` | `1.0.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/hsivonen/utf_types) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-168](#notice-168) |
 | `uuid` | `1.29.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/uuid-rs/uuid) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-35](#notice-35) |
 | `v_frame` | `0.3.9` | `BSD-2-Clause` | [Source](https://github.com/rust-av/v_frame) | — | [notice-10](#notice-10) |
+| `vt100` | `0.18.1` | `MIT` | [Source](https://github.com/doy/vt100-rust) | [mit](#mit) | [notice-262](#notice-262) |
+| `vte` | `0.15.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/alacritty/vte) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-263](#notice-263) |
 | `waker-fn` | `1.2.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/smol-rs/waker-fn) | [apache-2.0](#apache-2.0), [mit](#mit) | — |
 | `walkdir` | `2.5.0` | `Unlicense/MIT` | [Source](https://github.com/BurntSushi/walkdir) | [mit](#mit) | [notice-188](#notice-188), [notice-42](#notice-42) |
 | `wasm-bindgen` | `0.2.130` | `MIT OR Apache-2.0` | [Source](https://github.com/wasm-bindgen/wasm-bindgen) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-30](#notice-30) |
@@ -368,6 +461,7 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `web-time` | `1.1.0` | `MIT OR Apache-2.0` | [Source](https://github.com/daxpedda/web-time) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-129](#notice-129), [notice-165](#notice-165) |
 | `weezl` | `0.1.12` | `MIT OR Apache-2.0` | [Source](https://github.com/image-rs/weezl) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-135](#notice-135) |
 | `winnow` | `1.0.5` | `MIT` | [Source](https://github.com/winnow-rs/winnow) | [mit](#mit) | — |
+| `wnaf` | `0.14.1` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/elliptic-curves) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-264](#notice-264) |
 | `writeable` | `0.6.4` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
 | `xmlwriter` | `0.1.0` | `MIT` | [Source](https://github.com/RazrFalcon/xmlwriter) | [mit](#mit) | [notice-103](#notice-103) |
 | `y4m` | `0.8.0` | `MIT` | [Source](https://github.com/image-rs/y4m.git) | [mit](#mit) | [notice-52](#notice-52) |
@@ -378,6 +472,8 @@ This inventory follows the locked macOS ARM64 normal dependency graph with `nati
 | `zerocopy-derive` | `0.8.63` | `BSD-2-Clause OR Apache-2.0 OR MIT` | [Source](https://github.com/google/zerocopy) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-157](#notice-157), [notice-163](#notice-163), [notice-164](#notice-164) |
 | `zerofrom` | `0.1.8` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
 | `zerofrom-derive` | `0.1.8` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
+| `zeroize` | `1.9.2` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-231](#notice-231) |
+| `zeroize_derive` | `1.5.0` | `Apache-2.0 OR MIT` | [Source](https://github.com/RustCrypto/utils) | [apache-2.0](#apache-2.0), [mit](#mit) | [notice-201](#notice-201) |
 | `zerotrie` | `0.2.5` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
 | `zerovec` | `0.11.9` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
 | `zerovec-derive` | `0.11.7` | `Unicode-3.0` | [Source](https://github.com/unicode-org/icu4x) | [unicode-3.0](#unicode-3.0) | [notice-192](#notice-192) |
@@ -1106,6 +1202,42 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
 WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE
 OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+<a id="isc"></a>
+
+### ISC (single author)
+
+```text
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+<a id="isc-authors"></a>
+
+### ISC (multiple authors)
+
+```text
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHORS DISCLAIM ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
 ## Copyright and additional notices
@@ -2692,4 +2824,860 @@ zlib License (C) zune-image developers
 
 ```text
 © Kornel Lesiński
+```
+
+<a id="notice-199"></a>
+
+### notice-199
+
+```text
+Copyright (c) 2019-2026 The RustCrypto Project Developers
+Copyright (c) 2019 MobileCoin, LLC
+```
+
+<a id="notice-200"></a>
+
+### notice-200
+
+```text
+Copyright (c) 2018-2024 The RustCrypto Project Developers
+Copyright (c) 2018 Artyom Pavlov
+```
+
+<a id="notice-201"></a>
+
+### notice-201
+
+```text
+Copyright (c) 2019-2026 The RustCrypto Project Developers
+```
+
+<a id="notice-202"></a>
+
+### notice-202
+
+```text
+Copyright (c) 2021-2026 The RustCrypto Project Developers
+```
+
+<a id="notice-203"></a>
+
+### notice-203
+
+```text
+Copyright (c) 2014 Steve "Sc00bz" Thomas (steve at tobtu dot com)
+Copyright (c) 2022-2025 The RustCrypto Project Developers
+```
+
+<a id="notice-204"></a>
+
+### notice-204
+
+```text
+Copyright (c) 2014 Steve "Sc00bz" Thomas (steve at tobtu dot com)
+Copyright (c) 2021-2025 The RustCrypto Project Developers
+```
+
+<a id="notice-205"></a>
+
+### notice-205
+
+```text
+Copyright (c) 2019 Jack Grigg
+Copyright (c) 2019-2026 The RustCrypto Project Developers
+```
+
+<a id="notice-206"></a>
+
+### notice-206
+
+```text
+Copyright (c) 2017-2026 The RustCrypto Project Developers
+Copyright (c) 2017 Artyom Pavlov
+Copyright (c) 2015-2016 The blake2-rfc Developers, Cesar Barros
+```
+
+<a id="notice-207"></a>
+
+### notice-207
+
+```text
+Copyright (c) 2018-2025 The RustCrypto Project Developers
+```
+
+<a id="notice-208"></a>
+
+### notice-208
+
+```text
+Copyright (c) 2016-2024 The RustCrypto Project Developers
+```
+
+<a id="notice-209"></a>
+
+### notice-209
+
+```text
+Copyright (c) 2018-2022 RustCrypto Developers
+Copyright (c) 2018 Artyom Pavlov
+```
+
+<a id="notice-210"></a>
+
+### notice-210
+
+```text
+Copyright (c) 2016-2025 RustCrypto Developers
+```
+
+<a id="notice-211"></a>
+
+### notice-211
+
+```text
+Copyright (c) 2022-2026 The RustCrypto Project Developers
+```
+
+<a id="notice-212"></a>
+
+### notice-212
+
+```text
+Copyright (c) 2020-2026 The RustCrypto Project Developers
+```
+
+<a id="notice-213"></a>
+
+### notice-213
+
+```text
+Copyright (c) 2023-2026 The RustCrypto Project Developers
+```
+
+<a id="notice-214"></a>
+
+### notice-214
+
+```text
+Copyright (c) 2021-2026 RustCrypto Developers
+```
+
+<a id="notice-215"></a>
+
+### notice-215
+
+```text
+Copyright (c) 2025-2026 The RustCrypto Project Developers
+```
+
+<a id="notice-216"></a>
+
+### notice-216
+
+```text
+Copyright (c) 2016-2021 isis agora lovecruft. All rights reserved.
+Copyright (c) 2016-2021 Henry de Valence. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+<a id="notice-217"></a>
+
+### notice-217
+
+```text
+Copyright (c) 2015-2020 Julien Cretin
+Copyright (c) 2017-2020 Google Inc.
+```
+
+<a id="notice-218"></a>
+
+### notice-218
+
+```text
+Copyright (c) 2017-2024 The RustCrypto Project Developers
+Copyright (c) 2017 Gulshan Singh, Antoni Boucher, Artyom Pavlov
+```
+
+<a id="notice-219"></a>
+
+### notice-219
+
+```text
+Copyright (c) 2017-2025 RustCrypto Developers
+Copyright (c) 2017 Artyom Pavlov
+```
+
+<a id="notice-220"></a>
+
+### notice-220
+
+```text
+Copyright (c) 2018-2026 RustCrypto Developers
+```
+
+<a id="notice-221"></a>
+
+### notice-221
+
+```text
+Copyright (c) 2017-2019 isis agora lovecruft. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+<a id="notice-222"></a>
+
+### notice-222
+
+```text
+Copyright (c) 2020-2026 RustCrypto Developers
+```
+
+<a id="notice-223"></a>
+
+### notice-223
+
+```text
+Copyright (c) 2019 Anton Lazarev
+```
+
+<a id="notice-224"></a>
+
+### notice-224
+
+```text
+Copyright (c) 2017 Sean Bowe
+```
+
+<a id="notice-225"></a>
+
+### notice-225
+
+```text
+Copyright (c) 2018-2024 The rust-random Project Developers
+Copyright (c) 2014 The Rust Project Developers
+```
+
+<a id="notice-226"></a>
+
+### notice-226
+
+```text
+Copyrights in the "group" library are retained by their contributors. No
+copyright assignment is required to contribute to the "group" library.
+
+The "group" library is licensed under either of
+
+ * Apache License, Version 2.0, (see ./LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license (see ./LICENSE-MIT or http://opensource.org/licenses/MIT)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in the work by you, as defined in the Apache-2.0
+license, shall be dual licensed as above, without any additional terms or
+conditions.
+```
+
+<a id="notice-227"></a>
+
+### notice-227
+
+```text
+Copyright (c) 2013-2014 The Rust Project Developers.
+Copyright (c) 2015-2020 The rust-hex Developers
+```
+
+<a id="notice-228"></a>
+
+### notice-228
+
+```text
+Copyright (c) 2018-2025 The RustCrypto Project Developers
+Copyright (c) 2018 Artyom Pavlov
+```
+
+<a id="notice-229"></a>
+
+### notice-229
+
+```text
+Copyright (c) 2015-2018 Vlad Filippov
+Copyright (c) 2018-2021 RustCrypto Developers
+```
+
+<a id="notice-230"></a>
+
+### notice-230
+
+```text
+Copyright (c) 2022-2025 The RustCrypto Project Developers
+Copyright (c) 2022 Artyom Pavlov
+```
+
+<a id="notice-231"></a>
+
+### notice-231
+
+```text
+Copyright (c) 2018-2026 The RustCrypto Project Developers
+```
+
+<a id="notice-232"></a>
+
+### notice-232
+
+```text
+Copyright 2021 RustCrypto Developers
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+<a id="notice-233"></a>
+
+### notice-233
+
+```text
+# License
+
+The project is dual licensed under the terms of the Apache License, Version 2.0,
+and the MIT License. You may obtain copies of the two licenses at
+
+* https://www.apache.org/licenses/LICENSE-2.0 and
+* https://opensource.org/licenses/MIT, respectively.
+
+The following two notices apply to every file of the project.
+
+## The Apache License
+
+Copyright 2015–2026 The md5 Developers
+
+Licensed under the Apache License, Version 2.0 (the “License”); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an “AS IS” BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+## The MIT License
+
+Copyright 2015–2026 The md5 Developers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the “Software”), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+<a id="notice-234"></a>
+
+### notice-234
+
+```text
+Copyright (c) 2014 Carl Lerche and other MIO contributors
+```
+
+<a id="notice-235"></a>
+
+### notice-235
+
+```text
+Copyright (c) 2024-2026 RustCrypto Developers
+```
+
+<a id="notice-236"></a>
+
+### notice-236
+
+```text
+Copyright (c) 2015 Carl Lerche + nix-rust Authors
+```
+
+<a id="notice-237"></a>
+
+### notice-237
+
+```text
+Copyright (c) 2020-2021 RustCrypto Developers
+```
+
+<a id="notice-238"></a>
+
+### notice-238
+
+```text
+Copyright (c) 2017 Artyom Pavlov
+Copyright (c) 2018-2023 The RustCrypto Project Developers
+```
+
+<a id="notice-239"></a>
+
+### notice-239
+
+```text
+Copyright (c) 2021-2025 The RustCrypto Project Developers
+```
+
+<a id="notice-240"></a>
+
+### notice-240
+
+```text
+Copyright (c) 2015-2026 The RustCrypto Project Developers
+```
+
+<a id="notice-241"></a>
+
+### notice-241
+
+```text
+Copyright (c) 2020-2023 RustCrypto Developers
+```
+
+<a id="notice-242"></a>
+
+### notice-242
+
+```text
+Copyrights in the Rand project are retained by their contributors. No
+copyright assignment is required to contribute to the Rand project.
+
+For full authorship information, see the version control history.
+
+Except as otherwise noted (below and/or in individual files), Rand is
+licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
+<http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+<LICENSE-MIT> or <http://opensource.org/licenses/MIT>, at your option.
+
+The Rand project includes code from the Rust project
+published under these same licenses.
+```
+
+<a id="notice-243"></a>
+
+### notice-243
+
+```text
+Copyrights in the Rand project are retained by their contributors. No
+copyright assignment is required to contribute to the Rand project.
+
+For full authorship information, see the version control history.
+
+Except as otherwise noted (below and/or in individual files), Rand is
+licensed under the Apache License, Version 2.0 <LICENSE-APACHE> or
+<http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+<LICENSE-MIT> or <http://opensource.org/licenses/MIT>, at your option.
+```
+
+<a id="notice-244"></a>
+
+### notice-244
+
+```text
+Copyright (c) 2018-2026 The Rand Project Developers
+```
+
+<a id="notice-245"></a>
+
+### notice-245
+
+```text
+*ring* uses an "ISC" license, like BoringSSL used to use, for new code
+files. See LICENSE-other-bits for the text of that license.
+
+See LICENSE-BoringSSL for code that was sourced from BoringSSL under the
+Apache 2.0 license. Some code that was sourced from BoringSSL under the ISC
+license. In each case, the license info is at the top of the file.
+
+See src/polyfill/once_cell/LICENSE-APACHE and src/polyfill/once_cell/LICENSE-MIT
+for the license to code that was sourced from the once_cell project.
+```
+
+<a id="notice-246"></a>
+
+### notice-246
+
+```text
+Copyright 2015-2025 Brian Smith.
+```
+
+<a id="notice-247"></a>
+
+### notice-247
+
+```text
+Licenses for support code
+-------------------------
+
+Parts of the TLS test suite are under the Go license. This code is not included
+in BoringSSL (i.e. libcrypto and libssl) when compiled, however, so
+distributing code linked against BoringSSL does not trigger this license:
+
+Copyright (c) 2009 The Go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+BoringSSL uses the Chromium test infrastructure to run a continuous build,
+trybots etc. The scripts which manage this, and the script for generating build
+metadata, are under the Chromium license. Distributing code linked against
+BoringSSL does not trigger this license.
+
+Copyright 2015 The Chromium Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+<a id="notice-248"></a>
+
+### notice-248
+
+```text
+The Apache License, Version 2.0 (Apache-2.0)
+
+Copyright 2015-2020 the fiat-crypto authors (see the AUTHORS file)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+<a id="notice-249"></a>
+
+### notice-249
+
+```text
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHOR OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
+<a id="notice-250"></a>
+
+### notice-250
+
+```text
+Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved.
+Copyright (c) 2014, Google Inc.
+Copyright (c) 2014, Intel Corporation.
+Copyright (c) 2014, Intel Corporation. All Rights Reserved.
+Copyright (c) 2015, Google Inc.
+Copyright (c) 2015, Intel Inc.
+Copyright (c) 2019, Google Inc.
+Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 1999-2016 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2001-2016 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2002-2016 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2014 The BoringSSL Authors
+Copyright 2014-2016 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2015 Brian Smith.
+Copyright 2015 The BoringSSL Authors
+Copyright 2015-2016 Brian Smith.
+Copyright 2015-2017 Brian Smith.
+Copyright 2015-2019 Brian Smith.
+Copyright 2015-2021 Brian Smith.
+Copyright 2015-2022 Brian Smith.
+Copyright 2015-2023 Brian Smith.
+Copyright 2015-2024 Brian Smith.
+Copyright 2015-2025 Brian Smith.
+Copyright 2016 Brian Smith.
+Copyright 2016 David Judd.
+Copyright 2016 Simon Sapin.
+Copyright 2016-2017 Brian Smith.
+Copyright 2016-2019 Brian Smith.
+Copyright 2016-2021 Brian Smith.
+Copyright 2016-2023 Brian Smith.
+Copyright 2016-2024 Brian Smith.
+Copyright 2016-2025 Brian Smith.
+Copyright 2017 Brian Smith.
+Copyright 2017-2023 Brian Smith.
+Copyright 2017-2025 Brian Smith.
+Copyright 2018 Brian Smith.
+Copyright 2018 Trent Clarke.
+Copyright 2018-2024 Brian Smith.
+Copyright 2018-2025 Brian Smith.
+Copyright 2019-2024 Brian Smith.
+Copyright 2019-2025 Brian Smith.
+Copyright 2020 Brian Smith.
+Copyright 2020 The BoringSSL Authors
+Copyright 2021 Brian Smith.
+Copyright 2022 Brian Smith.
+Copyright 2023 Brian Smith.
+Copyright 2023 The BoringSSL Authors
+Copyright 2024 Brian Smith.
+Copyright 2024-2025 Brian Smith.
+Copyright 2025 Brian Smith.
+```
+
+<a id="notice-252"></a>
+
+### notice-252
+
+```text
+Copyright (c) 2019-2026 The RustCrypto Project Developers
+Copyright (c) 2019 Eric McCorkle
+```
+
+<a id="notice-253"></a>
+
+### notice-253
+
+```text
+Copyright (c) 2022-2025 The RustCrypto Project Developers
+```
+
+<a id="notice-254"></a>
+
+### notice-254
+
+```text
+Copyright (c) 2016-2026 The RustCrypto Project Developers
+Copyright (c) 2016 Artyom Pavlov
+Copyright (c) 2009-2013 Mozilla Foundation
+Copyright (c) 2006-2009 Graydon Hoare
+```
+
+<a id="notice-255"></a>
+
+### notice-255
+
+```text
+Copyright (c) 2020-2026 The RustCrypto Project Developers
+Copyright (c) 2016-2023 Artyom Pavlov, Marek Kotewicz
+Copyright (c) 2014 Sébastien Martini
+Copyright (c) 2009-2013 Mozilla Foundation
+Copyright (c) 2006-2009 Graydon Hoare
+```
+
+<a id="notice-256"></a>
+
+### notice-256
+
+```text
+Copyright (c) 2026 The RustCrypto Project Developers
+```
+
+<a id="notice-257"></a>
+
+### notice-257
+
+```text
+Copyright (c) Tokio Contributors
+```
+
+<a id="notice-258"></a>
+
+### notice-258
+
+```text
+Copyright (c) 2019 Yoshua Wuyts
+Copyright (c) Tokio Contributors
+```
+
+<a id="notice-259"></a>
+
+### notice-259
+
+```text
+Licensed under the Apache License, Version 2.0
+<LICENSE-APACHE or
+http://www.apache.org/licenses/LICENSE-2.0> or the MIT
+license <LICENSE-MIT or http://opensource.org/licenses/MIT>,
+at your option. All files in the project carrying such
+notice may not be copied, modified, or distributed except
+according to those terms.
+```
+
+<a id="notice-260"></a>
+
+### notice-260
+
+```text
+Copyright (c) 2019-2025 RustCrypto Developers
+```
+
+<a id="notice-261"></a>
+
+### notice-261
+
+```text
+Copyright 2015-2016 Brian Smith.
+```
+
+<a id="notice-262"></a>
+
+### notice-262
+
+```text
+Copyright (c) 2016 Jesse Luehrs
+```
+
+<a id="notice-263"></a>
+
+### notice-263
+
+```text
+Copyright (c) 2016 Joe Wilm
+```
+
+<a id="notice-264"></a>
+
+### notice-264
+
+```text
+Copyright (c) 2026 RustCrypto Developers
+Copyright (c) 2018-2025 `group` crate developers
 ```

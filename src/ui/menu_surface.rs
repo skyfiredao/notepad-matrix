@@ -63,8 +63,10 @@ fn root_label<'a>(filename: &str, selector: &str, fallback: &'a str) -> &'a str 
         "search-menu-trigger" => "search", "view-menu-trigger" => "view",
         "encoding-menu-trigger" => "encoding", "language-menu-trigger" => "language",
         "settings-menu-trigger" => "settings", "tools-menu-trigger" => "tools",
-        "macro-menu-trigger" => "macro", "run-menu-trigger" => "run",
-        "plugins-menu-trigger" => "Plugins", "window-menu-trigger" => "Window",
+        "macro-menu-trigger" => "macro",
+        "terminal-menu-trigger" => return if filename == "chineseSimplified.xml" { "终端" } else { "Terminal" },
+        "plugins-menu-trigger" => return if filename == "chineseSimplified.xml" { "模块" } else { "Modules" },
+        "window-menu-trigger" => "Window",
         _ => return fallback,
     };
     crate::localization::menu_root(filename, id).unwrap_or(fallback)
@@ -72,11 +74,12 @@ fn root_label<'a>(filename: &str, selector: &str, fallback: &'a str) -> &'a str 
 
 fn entry_label<'a>(filename: &str, entry: &'a MenuEntry, configured: bool) -> &'a str {
     match entry {
+        MenuEntry::Action(MenuCommand::TerminalSettings) => if filename == "chineseSimplified.xml" { "终端配置..." } else { "Terminal Configuration..." },
         MenuEntry::Action(command) if command.source_id().and_then(|id| crate::menu::product_command_label(id, filename)).is_some() => {
             command.source_id().and_then(|id| crate::menu::product_command_label(id, filename)).unwrap_or_else(|| entry.label())
         }
         MenuEntry::Action(command) => command.source_id().and_then(|id| crate::localization::menu_command(filename, id)).unwrap_or_else(|| entry.label()),
-        MenuEntry::DynamicAction { command: MenuCommand::Source(id @ (48016 | 48017)), .. } if !configured => crate::localization::menu_command(filename, *id).unwrap_or_else(|| entry.label()),
+        MenuEntry::DynamicAction { command: MenuCommand::Source(id @ 48016), .. } if !configured => crate::localization::menu_command(filename, *id).unwrap_or_else(|| entry.label()),
         MenuEntry::DynamicAction { command: MenuCommand::Language(crate::syntax::Language::UserDefined(0)), .. } if !configured => crate::localization::menu_command(filename, 46180).unwrap_or_else(|| entry.label()),
         MenuEntry::Submenu { selector, .. } => {
             let id = match *selector {
@@ -288,7 +291,7 @@ pub(super) fn bindings() -> [KeyBinding; 22] {
         KeyBinding::new("alt-w", OpenWindowMenu, None),
         KeyBinding::new("alt-h", OpenHelpMenu, None),
         KeyBinding::new("cmd-m", MinimizeWindow, None),
-        KeyBinding::new("alt-r", OpenRunMenu, None),
+        KeyBinding::new("alt-r", ShowTerminal, None),
         KeyBinding::new("alt-o", OpenToolsMenu, None),
         KeyBinding::new("alt-m", OpenMacroMenu, None),
         KeyBinding::new("alt-l", OpenLanguageMenu, None),
@@ -349,7 +352,7 @@ impl Availability {
         match command {
             MenuCommand::Source(id) => {
                 self.navigation_ready
-                    && (crate::menu::source_command(id).is_some() || matches!(id, 48016 | 48017 | 21000..=21999))
+                    && (crate::menu::source_command(id).is_some() || id == 48016)
                     && (!matches!(
                         id,
                         42084..=42086
@@ -436,7 +439,7 @@ impl Availability {
             MenuCommand::ExportHtml => true,
             MenuCommand::Window(_) => true,
             MenuCommand::About => true,
-            MenuCommand::Run => true,
+            MenuCommand::OpenTerminal | MenuCommand::OpenRemoteTerminal(_) | MenuCommand::TerminalSettings => true,
             MenuCommand::HashSelection(_) => true,
             MenuCommand::Language(_) => true,
             MenuCommand::DefineUserLanguage => true,
@@ -576,7 +579,9 @@ fn selector(command: MenuCommand) -> String {
             "window-menu-bring-all-to-front"
         }
         MenuCommand::About => "help-menu-about",
-        MenuCommand::Run => "run-command",
+        MenuCommand::OpenTerminal => "terminal-open",
+        MenuCommand::OpenRemoteTerminal(id) => return format!("terminal-server-{id}"),
+        MenuCommand::TerminalSettings => "terminal-settings",
         MenuCommand::Language(crate::syntax::Language::NormalText) => "language-normal-text",
         MenuCommand::Language(crate::syntax::Language::Json) => "language-json",
         MenuCommand::Language(crate::syntax::Language::Builtin(0)) => "language-normal-text",
@@ -1283,14 +1288,15 @@ pub(super) fn render(
         .map(|(index, definition)| {
             let id = definition.selector;
             let label = root_label(&filename, id, definition.label);
+            let direct = definition.direct_command().is_some();
             div()
                 .id(("menu-root", index))
                 .debug_selector(move || id.into())
                 .role(Role::MenuItem)
                 .aria_label(label)
-                .aria_expanded(
+                .when(!direct, |row| row.aria_expanded(
                     open && root == index && !view.menu_bar.document_menu_open() && !symbol_popup && !configured_popup,
-                )
+                ))
                 .h(metrics.row)
                 .w(root_widths[index])
                 .flex_shrink_0()

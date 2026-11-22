@@ -85,6 +85,7 @@ pub(super) struct TextField {
     label: &'static str,
     selector: &'static str,
     layout: Option<FieldLayout>,
+    drag_anchor: Option<ByteOffset>,
     error: Option<String>,
     compact: bool,
     compact_height: f32,
@@ -131,6 +132,12 @@ pub(super) fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("ctrl-v", EditorPaste, Some("MatrixTextField")),
         KeyBinding::new("ctrl-z", EditorUndo, Some("MatrixTextField")),
         KeyBinding::new("ctrl-y", EditorRedo, Some("MatrixTextField")),
+        KeyBinding::new("cmd-a", EditorSelectAll, Some("MatrixTextField")),
+        KeyBinding::new("cmd-c", EditorCopy, Some("MatrixTextField")),
+        KeyBinding::new("cmd-x", EditorCut, Some("MatrixTextField")),
+        KeyBinding::new("cmd-v", EditorPaste, Some("MatrixTextField")),
+        KeyBinding::new("cmd-z", EditorUndo, Some("MatrixTextField")),
+        KeyBinding::new("cmd-shift-z", EditorRedo, Some("MatrixTextField")),
     ]
 }
 
@@ -146,6 +153,7 @@ impl TextField {
             label,
             selector,
             layout: None,
+            drag_anchor: None,
             error: None,
             compact: false,
             compact_height: 21.,
@@ -310,6 +318,7 @@ impl TextField {
     }
     pub(super) fn set_enabled(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.enabled = enabled;
+        if !enabled { self.drag_anchor = None; }
         self.focus = self.focus.clone().tab_stop(enabled);
         cx.notify();
     }
@@ -324,6 +333,8 @@ impl TextField {
         self.state.has_composition()
     }
     pub(super) fn set_text(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.drag_anchor = None;
+        self.layout = None;
         self.state = EditorSession::new(text);
         self.state.set_read_only(self.read_only);
         self.select_all(window, cx);
@@ -388,6 +399,7 @@ impl TextField {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.enabled { cx.stop_propagation(); return; }
         let mut selection = self.state.selection();
         let range = selection.range();
         selection.head = if !extend && !range.is_empty() {
@@ -439,6 +451,50 @@ impl TextField {
             .as_ref()
             .filter(|layout| layout.revision == self.state.display_revision())
     }
+    fn byte_at(&self, position: Point<Pixels>) -> Option<ByteOffset> {
+        let layout = self.current_layout()?;
+        Some(ByteOffset(layout.line.closest_index_for_x(
+            position.x - layout.bounds.left() + layout.offset,
+        )))
+    }
+    fn begin_selection(&mut self, event: &gpui::MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.enabled { return; }
+        self.focus.focus(window, cx);
+        self.drag_anchor = None;
+        if let Some(head) = self.byte_at(event.position) {
+            let anchor = if event.modifiers.shift { self.state.display_selection().anchor } else { head };
+            let result = if event.click_count == 2 {
+                let position = self.current_layout().map_or(head, |layout| {
+                    let x = event.position.x - layout.bounds.left() + layout.offset;
+                    if head.0 > 0 && x < layout.line.x_for_index(head.0) {
+                        ByteOffset(self.adjacent(head.0, false))
+                    } else { head }
+                });
+                self.state.word_selection_at(position).and_then(|selection| self.state.select_display(selection))
+            } else { self.state.select_display(Selection { anchor, head }) };
+            if result.is_ok() && event.click_count != 2 { self.drag_anchor = Some(anchor); }
+            self.changed(result, window, cx);
+        }
+        cx.stop_propagation();
+    }
+    fn drag_selection(&mut self, position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(anchor) = self.drag_anchor else { return; };
+        let revision = self.state.display_revision();
+        if let Some(layout) = self.layout.as_mut().filter(|layout| layout.revision == revision) {
+            let shift = if position.x < layout.bounds.left() { position.x - layout.bounds.left() }
+                else if position.x > layout.bounds.right() { position.x - layout.bounds.right() }
+                else { px(0.) };
+            let maximum = (layout.line.width() - layout.bounds.size.width + px(3.)).max(px(0.));
+            if layout.line.width() >= layout.bounds.size.width {
+                layout.offset = (layout.offset + shift).clamp(px(0.), maximum);
+            }
+        }
+        if let Some(head) = self.byte_at(position) {
+            let result = self.state.select_display(Selection { anchor, head });
+            if result.is_err() { self.drag_anchor = None; }
+            self.changed(result, window, cx);
+        }
+    }
 }
 
 impl Render for TextField {
@@ -478,22 +534,7 @@ impl Render for TextField {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|field, event: &gpui::MouseDownEvent, window, cx| {
-                    if !field.enabled { return; }
-                    field.focus.focus(window, cx);
-                    let byte = field
-                        .current_layout()
-                        .map(|layout| {
-                            layout.line.closest_index_for_x(
-                                event.position.x - layout.bounds.left() + layout.offset,
-                            )
-                        })
-                        .unwrap_or_else(|| field.state.display_snapshot().len());
-                    let result = field.state.select_display(Selection {
-                        anchor: ByteOffset(byte),
-                        head: ByteOffset(byte),
-                    });
-                    field.changed(result, window, cx);
-                    cx.stop_propagation();
+                    field.begin_selection(event, window, cx);
                 }),
             )
             .on_action(
@@ -517,15 +558,17 @@ impl Render for TextField {
                 field.move_cursor(true, true, window, cx)
             }))
             .on_action(cx.listener(|field, _: &EditorSelectAll, window, cx| {
-                field.select_all(window, cx);
+                if field.enabled { field.select_all(window, cx); }
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|field, _: &EditorDocumentStart, window, cx| {
+                if !field.enabled { cx.stop_propagation(); return; }
                 let result = field.state.move_to_document_edge(false, false);
                 field.changed(result, window, cx);
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|field, _: &EditorDocumentEnd, window, cx| {
+                if !field.enabled { cx.stop_propagation(); return; }
                 let result = field.state.move_to_document_edge(true, false);
                 field.changed(result, window, cx);
                 cx.stop_propagation();
@@ -619,6 +662,7 @@ impl EntityInputHandler for TextField {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.enabled { return; }
         let result =
             editor_surface::byte_range(&self.state.display_snapshot(), range).and_then(|range| {
                 self.state.select_display(Selection {
@@ -832,7 +876,16 @@ impl Element for FieldElement {
         let offset = match field.text_alignment {
             gpui::TextAlign::Center if line.width() < bounds.size.width => (line.width() - bounds.size.width) / 2.,
             gpui::TextAlign::Right if line.width() < bounds.size.width => (line.width() - bounds.size.width + px(1.)).min(px(0.)),
-            _ => (line.x_for_index(field.state.selection().head.0) - bounds.size.width + px(3.)).max(px(0.)),
+            _ => {
+                let maximum = (line.width() - bounds.size.width + px(3.)).max(px(0.));
+                let mut offset = field.current_layout().map_or(px(0.), |layout| layout.offset).clamp(px(0.), maximum);
+                let head = line.x_for_index(field.state.selection().head.0);
+                if head < offset { offset = head; }
+                else if head > offset + bounds.size.width - px(3.) {
+                    offset = (head - bounds.size.width + px(3.)).min(maximum);
+                }
+                offset.max(px(0.))
+            },
         };
         Some(FieldLayout {
             line,
@@ -903,7 +956,7 @@ impl Element for FieldElement {
             {
                 eprintln!("Text field paint failed");
             }
-            if focus.is_focused(window) {
+            if focused {
                 window.paint_quad(fill(
                     Bounds::new(
                         point(
@@ -919,5 +972,34 @@ impl Element for FieldElement {
         });
         self.field
             .update(cx, |field, _| field.layout = Some(layout));
+        let field = self.field.downgrade();
+        window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, window, cx| {
+            if phase != gpui::DispatchPhase::Capture { return; }
+            let Some(field) = field.upgrade() else { return; };
+            if field.read(cx).drag_anchor.is_none() { return; }
+            field.update(cx, |field, cx| {
+                if !field.enabled || !field.focus.is_focused(window) || event.pressed_button != Some(MouseButton::Left) {
+                    field.drag_anchor = None;
+                    return;
+                }
+                field.drag_selection(event.position, window, cx);
+                cx.stop_propagation();
+            });
+        });
+        let field = self.field.downgrade();
+        window.on_mouse_event(move |event: &gpui::MouseUpEvent, phase, window, cx| {
+            if phase != gpui::DispatchPhase::Capture || event.button != MouseButton::Left { return; }
+            let Some(field) = field.upgrade() else { return; };
+            if field.read(cx).drag_anchor.is_none() { return; }
+            field.update(cx, |field, cx| {
+                if !field.enabled || !field.focus.is_focused(window) {
+                    field.drag_anchor = None;
+                    return;
+                }
+                field.drag_selection(event.position, window, cx);
+                field.drag_anchor = None;
+                cx.stop_propagation();
+            });
+        });
     }
 }

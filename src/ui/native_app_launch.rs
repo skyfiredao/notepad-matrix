@@ -28,7 +28,7 @@ pub(super) async fn launch_handoff(
         let child = executor.spawn(async move { bootstrap.spawn(&executable) }).await?;
         let reaper = executor.clone();
         executor.spawn(async move {
-            if let Err(error) = crate::run_commands::reap(child, || reaper.timer(std::time::Duration::from_secs(1))).await {
+            if let Err(error) = crate::child_process::reap(child, || reaper.timer(std::time::Duration::from_secs(1))).await {
                 eprintln!("instance launcher could not be reaped: {error}");
             }
         }).detach();
