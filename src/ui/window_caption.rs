@@ -10,6 +10,12 @@ pub(super) const HEIGHT: f32 = 32.;
 pub(super) const BACKGROUND: u32 = 0x357ec7;
 pub(super) const FOREGROUND: u32 = 0xffffff;
 
+pub(super) fn update_title(window: &mut Window, title: &str) {
+    if window.window_title() != title {
+        window.set_window_title(title);
+    }
+}
+
 pub(super) fn frame() -> Div {
     div().h(px(HEIGHT)).flex_shrink_0().flex().items_center()
         .bg(rgb(BACKGROUND)).text_color(rgb(FOREGROUND))

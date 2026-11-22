@@ -133,7 +133,7 @@ pub(super) fn prompt_for_new_path_in(
     })
 }
 
-fn host_window(window: &Window) -> io::Result<Retained<NSWindow>> {
+pub(super) fn host_window(window: &Window) -> io::Result<Retained<NSWindow>> {
     MainThreadMarker::new().ok_or_else(|| io::Error::other("文件选择需要主线程"))?;
     let handle = HasWindowHandle::window_handle(window).map_err(|error| io::Error::other(error.to_string()))?;
     let RawWindowHandle::AppKit(handle) = handle.as_raw() else {

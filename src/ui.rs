@@ -1177,7 +1177,7 @@ impl Render for MatrixWindow {
             },
             title_document
         );
-        window.set_window_title(&title);
+        window_caption::update_title(window, &title);
         let background = self.appearance_colour("DarkMode.customColorTop", if self.dark { 0x202020 } else { 0xffffff });
         let toolbar = self.appearance_colour("DarkMode.customColorMain", if self.dark { 0x2b2b2b } else { 0xffffff });
         let foreground = self.appearance_colour("DarkMode.customColorText", if self.dark { 0xeeeeee } else { 0x202020 });
@@ -2408,7 +2408,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     view.tab_compact_label_len = settings
                         .get("tabCompactLabelLen")
                         .and_then(serde_json::Value::as_u64)
-                        .unwrap_or(20)
+                        .unwrap_or(10)
                         .min(257) as usize;
                     view.configure_editor_symbols(&settings);
                     view.line_copy_cut_without_selection = settings["lineCopyCutWithoutSelection"].as_bool().unwrap_or(true);

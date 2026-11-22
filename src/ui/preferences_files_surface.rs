@@ -1078,8 +1078,8 @@ impl MatrixWindow {
                 body = body.child(at(34.,178.,directory_label_width,8.).whitespace_nowrap()
                     .when(crate::localization::current_preference_rtl(),|element| element.text_right())
                     .text_color(rgb(palette.control_text(custom))).child(directory_label));
-                input!("backup_directory",custom,directory_input_x,176.,(193. - directory_input_x).max(1.));
-                button!("pref-backup-browse","...",custom,202.,175.,16.,Self::preferences_browse_backup_directory);
+                input!("backup_directory",custom,directory_input_x,176.,(185. - directory_input_x).max(1.));
+                button!("pref-backup-browse","...",custom,194.,175.,16.,Self::preferences_browse_backup_directory);
                 group!(crate::localization::current_preference_control(6830).unwrap_or("备份保留期限"),234.,106.,208.,95.);
                 let retention = self.pref_bool("backup_retention.enabled",true);
                 check!("pref-backup-retention-enabled","自动清理过期备份","backup_retention.enabled",true,false,true,242.,123.,192.);

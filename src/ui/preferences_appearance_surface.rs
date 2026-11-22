@@ -89,7 +89,7 @@ const DARK_COLORS: [(&str, &str, u32, f32, f32); 12] = [
 
 pub(super) fn fields() -> Vec<FieldSpec> {
     vec![
-        FieldSpec::integer("tabCompactLabelLen", 20, 0, 257, Commit::Blur).signed_prefix(3),
+        FieldSpec::integer("tabCompactLabelLen", 10, 0, 257, Commit::Blur).signed_prefix(3),
         FieldSpec::text("ScintillaPrimaryView.edgeMultiColumnPos", "", 259),
     ]
 }
@@ -558,7 +558,7 @@ impl MatrixWindow {
         self.tab_vertical = bool_setting(settings, "tab_vertical", false);
         self.tab_multiline = bool_setting(settings, "tab_multiline", false);
         self.tab_compact_label_len =
-            int_setting(settings, "tabCompactLabelLen", 20).clamp(0, 257) as usize;
+            int_setting(settings, "tabCompactLabelLen", 10).clamp(0, 257) as usize;
         self.line_copy_cut_without_selection =
             bool_setting(settings, "lineCopyCutWithoutSelection", true);
         self.builtin.tag_match_options.enabled =

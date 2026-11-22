@@ -1433,14 +1433,11 @@ impl RecoverySnapshot {
             ));
         }
         let selection = buffer.editor.document().selection();
-        let mut disk = buffer
+        let disk = buffer
             .disk_file
             .as_ref()
             .map(DiskFile::recovery_state)
             .transpose()?;
-        if let Some(state) = disk.as_mut().and_then(Value::as_object_mut) {
-            state.remove("bytes");
-        }
         let raw_utf8 = buffer.byte_code_page().is_none()
             && buffer.format() == UnicodeFormat::Utf8(Utf8Format::Plain);
         let raw = if raw_utf8 || buffer.byte_code_page() == Some(crate::files::ByteFormatCodePage::Unspecified) {
@@ -1481,41 +1478,46 @@ impl RecoverySnapshot {
         modified: bool,
     ) -> io::Result<()> {
         let metadata_path = snapshot_metadata_path(key)?;
-        let mut backup_missing = false;
         let mut metadata_has_body = false;
         let previous = match store.load_json(&metadata_path) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => store.load_json(&snapshot_path(key)?),
             result => result,
         };
-        let existing = match previous {
+        let (existing, body_changed) = match previous {
             Ok(document) => {
                 metadata_has_body = document.get("text").is_some() || document["disk"].get("bytes").is_some();
-                backup_missing = if document.get("backupFilePath").is_some() {
+                let backup_missing = if document.get("backupFilePath").is_some() {
                     !raw_backup::path(store, &document)?.try_exists()?
                 } else { true };
                 if modified || backup_missing {
-                    Some(Self { document,text:self.text.clone(),loaded_bytes:self.loaded_bytes,raw:self.raw.clone() })
-                } else { Some(Self::from_document(store, document)?) }
+                    (Some(document), true)
+                } else {
+                    let snapshot = Self::from_document(store, document)?;
+                    let body_changed = snapshot.text != self.text || snapshot.raw != self.raw
+                        || snapshot.document["format"] != self.document["format"]
+                        || snapshot.document["codepage"] != self.document["codepage"];
+                    (Some(snapshot.document), body_changed)
+                }
             }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => (None, true),
             Err(error) => return Err(error),
         };
         let backup = match &existing {
-            Some(snapshot) if snapshot.document.get("backupFilePath").is_some() => raw_backup::path(store, &snapshot.document)?,
+            Some(document) if document.get("backupFilePath").is_some() => raw_backup::path(store, document)?,
             Some(_) => raw_backup::new_path(store, &self.document)?,
             None => raw_backup::new_path(store, &self.document)?,
         };
-        if modified || backup_missing
-            || existing.as_ref().is_none_or(|snapshot| {
-                snapshot.text != self.text || snapshot.raw != self.raw || snapshot.document["format"] != self.document["format"] || snapshot.document["codepage"] != self.document["codepage"]
-            })
-        {
+        if body_changed {
             if let Some(codepage) = crate::files::ByteFormatCodePage::from_value(&self.document["codepage"])? {
                 use std::io::Write;
-                let bytes = match &self.raw { Some(bytes) => bytes.clone(),None => codepage.encode(&self.text)? };
+                let encoded;
+                let bytes = match &self.raw {
+                    Some(bytes) => bytes.as_slice(),
+                    None => { encoded = codepage.encode(&self.text)?; encoded.as_slice() },
+                };
                 let parent = backup.parent().ok_or_else(|| invalid("backup directory is missing"))?;
                 let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-                temporary.write_all(&bytes)?;
+                temporary.write_all(bytes)?;
                 temporary.as_file().sync_all()?;
                 temporary.persist(&backup).map_err(|error| error.error)?;
             } else {
@@ -1527,9 +1529,9 @@ impl RecoverySnapshot {
         current["backupFilePath"] = serde_json::to_value(&backup)?;
         if metadata_has_body || !existing
             .as_ref()
-            .is_some_and(|snapshot| contains_fields(&snapshot.document, &current))
+            .is_some_and(|document| contains_fields(document, &current))
         {
-            let defaults = existing.as_ref().map(|snapshot| &snapshot.document).unwrap_or(&current);
+            let defaults = existing.as_ref().unwrap_or(&current);
             store.update_json(&metadata_path, defaults, |document| {
                 merge_fields(document, &current);
                 if let Some(fields) = document.as_object_mut() { fields.remove("text"); }
@@ -1635,7 +1637,7 @@ impl RecoverySnapshot {
             Some(Value::Null) => None,
             Some(state) => {
                 let mut state = state.clone();
-                if state.get("bytes").is_none() {
+                let bytes = if state.get("bytes").is_none() {
                     let path: PathBuf = serde_json::from_value(state["path"].clone())?;
                     let _access = match crate::file_access::read(&path) {
                         Ok(access) => Some(access),
@@ -1644,7 +1646,6 @@ impl RecoverySnapshot {
                     };
                     match fs::read(&path) {
                         Ok(bytes) => {
-                            state["bytes"] = serde_json::to_value(bytes)?;
                             #[cfg(unix)]
                             {
                                 use std::os::unix::fs::MetadataExt;
@@ -1652,14 +1653,15 @@ impl RecoverySnapshot {
                                 state["device"] = metadata.dev().into();
                                 state["inode"] = metadata.ino().into();
                             }
+                            Some(bytes)
                         }
                         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                            state["bytes"] = serde_json::json!([]);
+                            Some(Vec::new())
                         }
                         Err(error) => return Err(error),
                     }
-                }
-                Some(DiskFile::from_recovery_state(&state, raw_utf8)?)
+                } else { None };
+                Some(DiskFile::from_recovery_state(&state, raw_utf8, bytes)?)
             }
             None => return Err(invalid("recovery disk association is missing")),
         };

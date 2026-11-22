@@ -16,6 +16,7 @@ SANDBOX_ENTITLEMENTS = {
     'com.apple.security.app-sandbox': True,
     'com.apple.security.files.user-selected.read-write': True,
     'com.apple.security.files.bookmarks.app-scope': True,
+    'com.apple.security.network.client': True,
     'com.apple.security.print': True,
 }
 
@@ -102,8 +103,9 @@ def sandbox_entitlements(sandbox, entitlements):
         if not isinstance(supplied, dict):
             raise ValueError('Entitlements must be a plist dictionary')
         values.update(supplied)
-    if any(values.get(key) is not True for key in SANDBOX_ENTITLEMENTS):
-        raise ValueError('Sandbox, user-selected read/write and print entitlements must remain enabled')
+    disabled = [key for key in SANDBOX_ENTITLEMENTS if values.get(key) is not True]
+    if disabled:
+        raise ValueError('Required sandbox entitlements must remain enabled: ' + ', '.join(disabled))
     return values
 
 
@@ -131,7 +133,7 @@ def disk_image(app, image, output):
                     subprocess.run(['/usr/bin/hdiutil', 'detach', '-force', str(mount)], check=True)
             mount.rmdir()
         subprocess.run(['/usr/bin/hdiutil', 'convert', str(writable), '-format', 'UDZO',
-                        '-o', str(image)], check=True)
+                        '-imagekey', 'zlib-level=9', '-o', str(image)], check=True)
         script = work / 'disk-icon.swift'
         script.write_text('''import AppKit
 let arguments = CommandLine.arguments

@@ -236,7 +236,7 @@ impl MatrixWindow {
     }
 
     pub(super) fn render_matrix(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        window.set_window_title("Matrix - Notepad Matrix");
+        window_caption::update_title(window, "Matrix - Notepad Matrix");
         let animation = if let Some(terminal) = &mut self.matrix.terminal {
             terminal.render(window)
         } else {

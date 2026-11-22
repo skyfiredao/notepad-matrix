@@ -851,7 +851,7 @@ impl MatrixWindow {
     }
 
     fn editor_layout_for_width(&self, width: Pixels, window: &Window) -> Arc<EditorLayout> {
-        let key = EditorLayoutKey {
+        let mut key = EditorLayoutKey {
             collapsed: self.editor_collapsed_headers(),
             hidden: self.editor_hidden_lines(),
             revision: self.editor().display_revision(),
@@ -880,6 +880,16 @@ impl MatrixWindow {
         {
             return layout.clone();
         }
+        let width_key = key.width;
+        let shapes: std::collections::BTreeMap<usize, Arc<EditorShapedLine>> = self.editor_chrome.layout.as_ref()
+            .filter(|layout| {
+                key.width = layout.key.width;
+                let reusable = layout.key == key;
+                key.width = width_key;
+                reusable
+            })
+            .map(|layout| layout.shapes.borrow().clone())
+            .unwrap_or_default();
         let text = self.editor().display_snapshot();
         let mut rows = VisualRows::default();
         let mut starts = Vec::new();
@@ -906,15 +916,22 @@ impl MatrixWindow {
             for (logical, raw_bytes) in self.editor().display_byte_snapshot().lines().enumerate() {
                 let raw = text.line(logical, LineType::LF_CR).to_string();
                 let content = raw.trim_end_matches(['\r', '\n']);
-                let (start, shape) = shape_editor_row(
-                    self,
-                    &text,
-                    logical,
-                    &raw_bytes,
-                    space_width,
-                    baseline,
-                    window,
-                );
+                let fresh_shape;
+                let (start, shape) = if let Some(shape) = shapes.get(&logical) {
+                    (text.line_to_byte_idx(logical, LineType::LF_CR), shape.as_ref())
+                } else {
+                    let (start, shape) = shape_editor_row(
+                        self,
+                        &text,
+                        logical,
+                        &raw_bytes,
+                        space_width,
+                        baseline,
+                        window,
+                    );
+                    fresh_shape = shape;
+                    (start, &fresh_shape)
+                };
                 starts.push(start);
                 ends.push(start + content.len());
                 let indent_byte = content
@@ -980,7 +997,7 @@ impl MatrixWindow {
         Arc::new(EditorLayout {
             key,
             rows,
-            shapes: Default::default(),
+            shapes: std::cell::RefCell::new(shapes),
             starts,
             ends,
             content_width: std::cell::Cell::new(content_width),
@@ -4256,6 +4273,7 @@ impl Element for EditorElement {
                     },
             );
             let top_line = rows.start;
+            let mut frame_space_width = None;
             for index in rows {
                 if top >= bounds.bottom() || index >= layout.rows.len() {
                     break;
@@ -4304,7 +4322,7 @@ impl Element for EditorElement {
                         line_height,
                     ),
                 );
-                let space_width = window
+                let space_width = *frame_space_width.get_or_insert_with(|| window
                     .text_system()
                     .shape_line(
                         " ".into(),
@@ -4319,7 +4337,7 @@ impl Element for EditorElement {
                         }],
                         None,
                     )
-                    .width();
+                    .width());
                 let guides = if view.editor_indent_guides_shown() && visual.first {
                     let blank = |line: &str| line.trim_matches([' ', '\t', '\r', '\n']).is_empty();
                     let previous = if blank(&raw) {

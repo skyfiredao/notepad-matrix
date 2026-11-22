@@ -21,14 +21,16 @@ impl ConfigDirectoryState {
 }
 
 impl MatrixWindow {
-    fn apply_config_directory_selection(&mut self, index: usize, cx: &mut Context<Self>) {
+    fn apply_config_directory_selection(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if self.config_directory.selection.is_some() { return; }
         self.config_directory.open = false;
         self.config_directory.error = None;
         if index == 0 {
             self.config_directory.error = crate::config_directory::select_automatic().err();
         } else {
-            match crate::config_directory::choose_custom_directory(&self.native_locale()) {
+            let selection = native_path_prompt::host_window(window)
+                .and_then(|parent| crate::config_directory::choose_custom_directory(&self.native_locale(), &parent));
+            match selection {
                 Ok(selection) => {
                     self.config_directory.selection = Some(cx.spawn(async move |view, cx| {
                         let result = selection.await.unwrap_or_else(|error| Err(io::Error::other(format!("configuration directory selection disconnected: {error}"))));
@@ -98,11 +100,11 @@ impl MatrixWindow {
                     view.config_directory.focus.focus(window, cx);
                     cx.notify();
                 }))
-                .on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, _, cx| {
+                .on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, window, cx| {
                     if view.config_directory.selection.is_some() { return; }
                     match event.keystroke.key.as_str() {
                         "space" | "enter" if view.config_directory.open => {
-                            view.apply_config_directory_selection(view.config_directory.cursor, cx);
+                            view.apply_config_directory_selection(view.config_directory.cursor, window, cx);
                         }
                         "space" | "enter" | "down" if !view.config_directory.open => {
                             view.config_directory.open = true;
@@ -129,7 +131,7 @@ impl MatrixWindow {
                         .when(index == cursor, |element| element.bg(rgb(palette.hot_background)))
                         .hover(move |style| style.bg(rgb(palette.hot_background)))
                         .child(label)
-                        .on_click(cx.listener(move |view, _, _, cx| view.apply_config_directory_selection(index, cx)))
+                        .on_click(cx.listener(move |view, _, window, cx| view.apply_config_directory_selection(index, window, cx)))
                 }))).priority(2));
         }
         let failure = self.config_directory.error.as_ref().map(|error|

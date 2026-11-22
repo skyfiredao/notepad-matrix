@@ -1368,6 +1368,7 @@ pub struct MenuBar {
     popup_limit: Option<(usize, usize)>,
     documents: Option<Vec<MenuEntry>>,
     configured_popup: Option<Vec<MenuEntry>>,
+    recent_range: Option<std::ops::Range<usize>>,
 }
 
 impl Default for MenuBar {
@@ -2093,6 +2094,26 @@ fn transform_label(id: u32) -> &'static str {
 impl MenuBar {
     pub fn set_window_documents(&mut self, documents: Vec<(crate::workspace::BufferId, String)>) {
         let Some(menu) = self.definitions.iter_mut().find(|menu| menu.selector == "window-menu-trigger") else { return; };
+        let unchanged = if documents.is_empty() {
+            menu.entries.iter().all(|entry| !matches!(entry,
+                MenuEntry::DynamicAction { command: MenuCommand::ActivateDocument(_), .. } | MenuEntry::Separator))
+        } else {
+            menu.entries.iter().position(|entry| matches!(entry, MenuEntry::Separator)).is_some_and(|start| {
+                menu.entries[..start].iter().all(|entry| !matches!(entry,
+                    MenuEntry::DynamicAction { command: MenuCommand::ActivateDocument(_), .. }))
+                    && menu.entries.len() - start - 1 == documents.len()
+                    && menu.entries[start + 1..].iter().zip(&documents).enumerate().all(|(index, (entry, (id, name)))| {
+                        match entry {
+                            MenuEntry::DynamicAction { command: MenuCommand::ActivateDocument(current), label, shortcut } => {
+                                current == id && shortcut.is_empty()
+                                    && label.split_once(": ").is_some_and(|(number, text)| number == (index + 1).to_string() && text == name)
+                            }
+                            _ => false,
+                        }
+                    })
+            })
+        };
+        if unchanged { return; }
         let mut entries: Vec<_> = menu.entries.iter().filter(|entry| !matches!(entry,
             MenuEntry::DynamicAction { command: MenuCommand::ActivateDocument(_), .. } | MenuEntry::Separator)).cloned().collect();
         if !documents.is_empty() {
@@ -2339,10 +2360,12 @@ impl MenuBar {
             popup_limit: None,
             documents: None,
             configured_popup: None,
+            recent_range: None,
         }
     }
 
     pub fn set_recent_files(&mut self, paths: &[std::path::PathBuf]) {
+        self.recent_range = None;
         let Some(menu) = self
             .definitions
             .iter_mut()
@@ -2394,14 +2417,30 @@ impl MenuBar {
     }
     pub fn set_recent_file_entries(&mut self, recent: Vec<MenuEntry>) {
         let Some(menu) = self.definitions.iter_mut().find(|menu| menu.selector == "file-menu-trigger") else { return; };
+        if self.recent_range.as_ref().is_some_and(|range| menu.entries.get(range.clone()) == Some(recent.as_slice())) { return; }
+        self.recent_range = None;
         let mut entries = MenuDefinition::file_menu().entries;
         if let Some(position) = entries.iter().position(|entry| matches!(entry, MenuEntry::Action(MenuCommand::File(FileCommand::Exit)))) {
+            self.recent_range = Some(position..position + recent.len());
             entries.splice(position..position, recent);
         }
         if menu.entries != entries { menu.entries = entries; self.revision = self.revision.wrapping_add(1); }
     }
     pub fn set_saved_run_commands(&mut self, commands: Vec<(String, String)>) {
         let Some(menu) = self.definitions.iter_mut().find(|menu| menu.selector == "run-menu-trigger") else { return; };
+        let start = if commands.is_empty() { 1 } else { 2 };
+        if menu.entries.len() == start + commands.len() + 2
+            && menu.entries.first() == Some(&MenuEntry::Action(MenuCommand::Run))
+            && (commands.is_empty() || menu.entries.get(1) == Some(&MenuEntry::Separator))
+            && menu.entries.get(start + commands.len()) == Some(&MenuEntry::Separator)
+            && matches!(menu.entries.last(), Some(MenuEntry::DynamicAction { command: MenuCommand::Source(48017), label, shortcut })
+                if label == "管理运行命令快捷键..." && shortcut.is_empty())
+            && commands.iter().enumerate().all(|(index, (label, shortcut))| {
+                matches!(menu.entries.get(start + index), Some(MenuEntry::DynamicAction {
+                    command: MenuCommand::Source(id), label: current_label, shortcut: current_shortcut,
+                }) if *id == 21000 + index as u32 && current_label == label && current_shortcut == shortcut)
+            })
+        { return; }
         let mut entries = vec![MenuEntry::Action(MenuCommand::Run)];
         if !commands.is_empty() {
             entries.push(MenuEntry::Separator);

@@ -228,8 +228,8 @@ pub fn select_automatic() -> io::Result<()> {
 }
 
 #[cfg(all(target_os = "macos", feature = "native-ui"))]
-pub fn choose_custom_directory(locale: &str) -> io::Result<futures::channel::oneshot::Receiver<io::Result<bool>>> {
-    native::choose(locale)
+pub fn choose_custom_directory(locale: &str, parent: &objc2_app_kit::NSWindow) -> io::Result<futures::channel::oneshot::Receiver<io::Result<bool>>> {
+    native::choose(locale, parent)
 }
 
 #[cfg(unix)]
@@ -271,7 +271,7 @@ mod native {
     use futures::channel::oneshot;
     use std::cell::Cell;
     use objc2::{MainThreadMarker, rc::Retained, runtime::Bool};
-    use objc2_app_kit::{NSModalResponseOK, NSOpenPanel};
+    use objc2_app_kit::{NSModalResponseOK, NSOpenPanel, NSWindow};
     use objc2_foundation::{NSData, NSError, NSString, NSURL, NSURLBookmarkCreationOptions, NSURLBookmarkResolutionOptions};
 
     pub(super) struct Scope {
@@ -358,7 +358,7 @@ mod native {
         Ok(scope)
     }
 
-    pub(super) fn choose(locale: &str) -> io::Result<oneshot::Receiver<io::Result<bool>>> {
+    pub(super) fn choose(locale: &str, parent: &NSWindow) -> io::Result<oneshot::Receiver<io::Result<bool>>> {
         let mtm = MainThreadMarker::new().ok_or_else(|| error(io::ErrorKind::Other, Text::resource("ConfigDirectoryChooseNeedsMainThread", "Choosing a configuration directory requires the main thread.")))?;
         let panel = NSOpenPanel::openPanel(mtm);
         panel.setCanChooseDirectories(true);
@@ -366,6 +366,7 @@ mod native {
         panel.setAllowsMultipleSelection(false);
         panel.setCanCreateDirectories(true);
         panel.setResolvesAliases(false);
+        panel.setShowsHiddenFiles(true);
         panel.setTitle(Some(&NSString::from_str(&Text::resource("ConfigDirectoryPickerTitle", "Choose a custom configuration directory").render(locale))));
         panel.setMessage(Some(&NSString::from_str(&Text::resource("ConfigDirectoryPickerMessage", "Restart to apply; no migration.").render(locale))));
         let (sender, receiver) = oneshot::channel();
@@ -381,7 +382,7 @@ mod native {
                 }
             }
         });
-        panel.beginWithCompletionHandler(&completion);
+        panel.beginSheetModalForWindow_completionHandler(parent, &completion);
         Ok(receiver)
     }
 

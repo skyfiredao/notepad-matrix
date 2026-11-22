@@ -742,7 +742,7 @@ impl MatrixWindow {
         self.line_copy_cut_without_selection = settings["lineCopyCutWithoutSelection"].as_bool().unwrap_or(true);
         self.tab_multiline = settings["tab_multiline"].as_bool().unwrap_or(false);
         self.tab_vertical = settings["tab_vertical"].as_bool().unwrap_or(false);
-        self.tab_compact_label_len = settings["tabCompactLabelLen"].as_u64().unwrap_or(20).min(257) as usize;
+        self.tab_compact_label_len = settings["tabCompactLabelLen"].as_u64().unwrap_or(10).min(257) as usize;
         self.document_switcher = settings["document_switcher"].as_bool().unwrap_or(true);
         self.mru_switching = self.document_switcher && settings["mru_switching"].as_bool().unwrap_or(true);
         self.set_tab_preview_enabled(settings["docPeekOnTab"].as_bool().unwrap_or(false), cx);
@@ -1068,7 +1068,7 @@ impl MatrixWindow {
         let rtl = crate::localization::is_rtl(&filename);
         let shell_x = |x: f32, width: f32| if rtl { 1015. - x - width } else { x };
         let title = crate::localization::preference_title(&filename, "").unwrap_or("Preferences");
-        window.set_window_title(title);
+        window_caption::update_title(window, title);
         self.preferences.radio_groups.borrow_mut().clear();
         let section = crate::localization::preference_section(page as usize).unwrap_or("");
         let content = crate::localization::with_preference(&filename, section, || match page {

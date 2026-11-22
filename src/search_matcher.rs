@@ -2083,11 +2083,24 @@ mod native_traits {
     #[repr(C)]
     struct CfRange { location: isize, length: isize }
 
+    #[repr(isize)]
+    enum CfCharacterSet {
+        Control = 1,
+        Whitespace = 2,
+        WhitespaceAndNewline = 3,
+        DecimalDigit = 4,
+        Letter = 5,
+        LowercaseLetter = 6,
+        UppercaseLetter = 7,
+        Punctuation = 11,
+        Symbol = 14,
+    }
+
     #[link(name = "CoreFoundation", kind = "framework")]
     unsafe extern "C" {
         fn CFRelease(value: CfRef);
         fn CFLocaleCopyCurrent() -> CfRef;
-        fn CFCharacterSetGetPredefined(index: isize) -> CfRef;
+        fn CFCharacterSetGetPredefined(index: CfCharacterSet) -> CfRef;
         fn CFCharacterSetIsCharacterMember(set: CfRef, unit: u16) -> u8;
         fn CFStringCreateWithCharacters(allocator: CfRef, units: *const u16, length: isize) -> CfRef;
         fn CFStringCreateMutableCopy(allocator: CfRef, maximum: isize, string: CfRef) -> CfRef;
@@ -2115,7 +2128,17 @@ mod native_traits {
 
     pub(super) fn build() -> Result<UnitTraits, String> {
         let locale = OwnedCf::new(unsafe { CFLocaleCopyCurrent() })?;
-        let categories = [(10, 1u16), (9, 2), (5, 4), (3, 8), (11, 16), (14, 16), (1, 32), (2, 64), (4, 256)];
+        let categories = [
+            (CfCharacterSet::UppercaseLetter, 1u16),
+            (CfCharacterSet::LowercaseLetter, 2),
+            (CfCharacterSet::DecimalDigit, 4),
+            (CfCharacterSet::WhitespaceAndNewline, 8),
+            (CfCharacterSet::Punctuation, 16),
+            (CfCharacterSet::Symbol, 16),
+            (CfCharacterSet::Control, 32),
+            (CfCharacterSet::Whitespace, 64),
+            (CfCharacterSet::Letter, 256),
+        ];
         let mut sets = Vec::new();
         for (category, mask) in categories {
             let set = unsafe { CFCharacterSetGetPredefined(category) };

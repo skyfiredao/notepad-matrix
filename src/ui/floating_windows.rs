@@ -330,7 +330,7 @@ impl FloatingWindow {
         let changed = cx.observe_in(&owner, window, move |_, owner, window, cx| {
             let view = owner.read(cx);
             if kind.visible(view) {
-                window.set_window_title(&kind.window_title(view));
+                window_caption::update_title(window, &kind.window_title(view));
                 if kind == DialogKind::Close {
                     let dimensions = kind.dimensions(view, window);
                     if (f32::from(window.viewport_size().width - dimensions.width)).abs() > 1.

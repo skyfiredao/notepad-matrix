@@ -67,7 +67,7 @@ impl PanelWindow {
             let view = owner.read(cx);
             let p = view.panels.layout.panel(id);
             if p.visible && p.placement == Placement::Floating {
-                window.set_window_title(&view.panel_title(id));
+                window_caption::update_title(window, &view.panel_title(id));
                 cx.notify();
             } else {
                 window.remove_window();
@@ -148,7 +148,7 @@ impl Render for PanelWindow {
                 (None, id.title().to_owned())
             }
         };
-        window.set_window_title(&title);
+        window_caption::update_title(window, &title);
         let owner = self.owner.clone();
         let caption = has_window_caption(id).then(|| {
             let button = |button_id: &'static str, label: &'static str, icon: caption_icons::Icon, icon_id: &'static str| {

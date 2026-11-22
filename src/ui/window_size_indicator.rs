@@ -51,7 +51,7 @@ impl IndicatorState {
             NSSize::new(width, height),
         ));
         self.label.setHidden(false);
-        self.label.displayIfNeeded();
+        NSView::setNeedsDisplay(&self.label, true);
     }
 
     fn hide(&self) {

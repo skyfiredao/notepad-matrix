@@ -29,9 +29,13 @@ pub(super) fn initialize(settings: &Value, cx: &App) {
     FONT.with(|font| {
         font.get_or_init(|| {
             let configured = settings["DialogFont"]["fontName"].as_str().unwrap_or_default();
-            let family = cx.text_system().all_font_names().into_iter()
-                .find(|name| name.eq_ignore_ascii_case(configured))
-                .unwrap_or_else(system_font_family);
+            let family = if configured.is_empty() {
+                system_font_family()
+            } else {
+                cx.text_system().all_font_names().into_iter()
+                    .find(|name| name.eq_ignore_ascii_case(configured))
+                    .unwrap_or_else(system_font_family)
+            };
             let size = settings["DialogFont"]["size"].as_i64()
                 .filter(|size| SIZES.contains(size)).unwrap_or(8) as f32;
             DialogFont { family, size }

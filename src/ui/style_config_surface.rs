@@ -873,7 +873,7 @@ impl MatrixWindow {
         if !self.style_config.visible { return None; }
         let filename = self.native_locale();
         let title = crate::localization::dialog_title(&filename, "StyleConfig").unwrap_or(TITLE);
-        window.set_window_title(title);
+        window_caption::update_title(window, title);
         self.apply_style_transparency(window);
         let dark = self.dark;
         let palette = self.preferences_render_palette();

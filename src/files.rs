@@ -417,7 +417,6 @@ impl DiskFile {
     pub(crate) fn recovery_state(&self) -> io::Result<serde_json::Value> {
         let mut state = serde_json::json!({
             "path": serde_json::to_value(&self.path)?,
-            "bytes": self.bytes.as_ref(),
             "read_only": self.read_only,
             "original_modified": self.original_modified.map(encode_modification_time),
             "codepage": self.byte_code_page.map(ByteFormatCodePage::value),
@@ -430,7 +429,7 @@ impl DiskFile {
         Ok(state)
     }
 
-    pub(crate) fn from_recovery_state(state: &serde_json::Value, raw_utf8: bool) -> io::Result<Self> {
+    pub(crate) fn from_recovery_state(state: &serde_json::Value, raw_utf8: bool, bytes: Option<Vec<u8>>) -> io::Result<Self> {
         let invalid =
             || io::Error::new(io::ErrorKind::InvalidData, "invalid recovery disk baseline");
         let path: PathBuf = serde_json::from_value(state.get("path").ok_or_else(invalid)?.clone())?;
@@ -442,8 +441,10 @@ impl DiskFile {
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
             Err(error) => return Err(error),
         };
-        let bytes: Vec<u8> =
-            serde_json::from_value(state.get("bytes").ok_or_else(invalid)?.clone())?;
+        let bytes = match bytes {
+            Some(bytes) => bytes,
+            None => serde_json::from_value(state.get("bytes").ok_or_else(invalid)?.clone())?,
+        };
         let read_only = state
             .get("read_only")
             .and_then(serde_json::Value::as_bool)
