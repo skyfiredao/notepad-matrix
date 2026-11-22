@@ -2408,7 +2408,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     view.tab_compact_label_len = settings
                         .get("tabCompactLabelLen")
                         .and_then(serde_json::Value::as_u64)
-                        .unwrap_or(0)
+                        .unwrap_or(20)
                         .min(257) as usize;
                     view.configure_editor_symbols(&settings);
                     view.line_copy_cut_without_selection = settings["lineCopyCutWithoutSelection"].as_bool().unwrap_or(true);

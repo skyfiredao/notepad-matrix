@@ -228,7 +228,7 @@ pub fn select_automatic() -> io::Result<()> {
 }
 
 #[cfg(all(target_os = "macos", feature = "native-ui"))]
-pub fn choose_custom_directory(locale: &str) -> io::Result<bool> {
+pub fn choose_custom_directory(locale: &str) -> io::Result<futures::channel::oneshot::Receiver<io::Result<bool>>> {
     native::choose(locale)
 }
 
@@ -267,6 +267,9 @@ pub(crate) fn instance_socket(home: &Path, root: &Path) -> io::Result<PathBuf> {
 #[cfg(all(target_os = "macos", feature = "native-ui"))]
 mod native {
     use super::*;
+    use block2::RcBlock;
+    use futures::channel::oneshot;
+    use std::cell::Cell;
     use objc2::{MainThreadMarker, rc::Retained, runtime::Bool};
     use objc2_app_kit::{NSModalResponseOK, NSOpenPanel};
     use objc2_foundation::{NSData, NSError, NSString, NSURL, NSURLBookmarkCreationOptions, NSURLBookmarkResolutionOptions};
@@ -355,7 +358,7 @@ mod native {
         Ok(scope)
     }
 
-    pub(super) fn choose(locale: &str) -> io::Result<bool> {
+    pub(super) fn choose(locale: &str) -> io::Result<oneshot::Receiver<io::Result<bool>>> {
         let mtm = MainThreadMarker::new().ok_or_else(|| error(io::ErrorKind::Other, Text::resource("ConfigDirectoryChooseNeedsMainThread", "Choosing a configuration directory requires the main thread.")))?;
         let panel = NSOpenPanel::openPanel(mtm);
         panel.setCanChooseDirectories(true);
@@ -364,9 +367,25 @@ mod native {
         panel.setCanCreateDirectories(true);
         panel.setResolvesAliases(false);
         panel.setTitle(Some(&NSString::from_str(&Text::resource("ConfigDirectoryPickerTitle", "Choose a custom configuration directory").render(locale))));
-        panel.setMessage(Some(&NSString::from_str(&Text::resource("ConfigDirectoryPickerMessage", "Choose your configuration directory. Restart required; existing configuration will not be moved.").render(locale))));
-        let response = panel.runModal();
-        panel.orderOut(None);
+        panel.setMessage(Some(&NSString::from_str(&Text::resource("ConfigDirectoryPickerMessage", "Restart to apply; no migration.").render(locale))));
+        let (sender, receiver) = oneshot::channel();
+        let sender = Cell::new(Some(sender));
+        let completion = RcBlock::new({
+            let panel = panel.clone();
+            move |response: isize| {
+                let Some(sender) = sender.take() else { return; };
+                panel.orderOut(None);
+                let result = finish_choice(&panel, response);
+                if sender.send(result).is_err() {
+                    eprintln!("configuration directory selection no longer has a receiver");
+                }
+            }
+        });
+        panel.beginWithCompletionHandler(&completion);
+        Ok(receiver)
+    }
+
+    fn finish_choice(panel: &NSOpenPanel, response: isize) -> io::Result<bool> {
         if response != NSModalResponseOK { return Ok(false); }
         let url = panel.URL().ok_or_else(|| error(io::ErrorKind::Other, Text::resource("ConfigDirectoryPickerEmpty", "The directory picker did not return a directory.")))?;
         let sandboxed = crate::file_access::sandboxed();

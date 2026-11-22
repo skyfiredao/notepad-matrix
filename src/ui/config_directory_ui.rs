@@ -7,11 +7,12 @@ pub(super) struct ConfigDirectoryState {
     open: bool,
     cursor: usize,
     error: Option<io::Error>,
+    selection: Option<gpui::Task<()>>,
 }
 
 impl ConfigDirectoryState {
     pub(super) fn new(cx: &mut App) -> Self {
-        Self { focus: cx.focus_handle().tab_index(0), open: false, cursor: 0, error: None }
+        Self { focus: cx.focus_handle().tab_index(0), open: false, cursor: 0, error: None, selection: None }
     }
 
     pub(super) fn close(&mut self) -> bool {
@@ -21,13 +22,28 @@ impl ConfigDirectoryState {
 
 impl MatrixWindow {
     fn apply_config_directory_selection(&mut self, index: usize, cx: &mut Context<Self>) {
+        if self.config_directory.selection.is_some() { return; }
         self.config_directory.open = false;
-        let result = if index == 0 {
-            crate::config_directory::select_automatic()
+        self.config_directory.error = None;
+        if index == 0 {
+            self.config_directory.error = crate::config_directory::select_automatic().err();
         } else {
-            crate::config_directory::choose_custom_directory(&self.native_locale()).map(|_| ())
-        };
-        self.config_directory.error = result.err();
+            match crate::config_directory::choose_custom_directory(&self.native_locale()) {
+                Ok(selection) => {
+                    self.config_directory.selection = Some(cx.spawn(async move |view, cx| {
+                        let result = selection.await.unwrap_or_else(|error| Err(io::Error::other(format!("configuration directory selection disconnected: {error}"))));
+                        if let Err(error) = view.update(cx, |view, cx| {
+                            view.config_directory.selection = None;
+                            view.config_directory.error = result.err();
+                            cx.notify();
+                        }) {
+                            eprintln!("configuration directory selection lost its window: {error}");
+                        }
+                    }));
+                }
+                Err(error) => self.config_directory.error = Some(error),
+            }
+        }
         cx.notify();
     }
 
@@ -50,13 +66,13 @@ impl MatrixWindow {
             _ => automatic_label,
         };
         let paths = match &snapshot {
-            Ok(snapshot) => vec![
-                path_text("ConfigDirectoryPathDefault", "Automatic: $PATH$", &snapshot.default_root),
-                path_text("ConfigDirectoryPathCurrent", "Current: $PATH$", &snapshot.active_root),
-                path_text("ConfigDirectoryPathNext", "Next launch: $PATH$", snapshot.pending_root()),
-                path_text("ConfigDirectoryBackupCurrent", "Current backup: $PATH$", &snapshot.active_root.join("backup")),
-                path_text("ConfigDirectoryBackupNext", "Next launch backup: $PATH$", &snapshot.pending_root().join("backup")),
-            ],
+            Ok(snapshot) => {
+                let mut paths = vec![path_text("ConfigDirectoryPathCurrent", "Current: $PATH$", &snapshot.active_root)];
+                if snapshot.pending_root() != snapshot.active_root {
+                    paths.push(path_text("ConfigDirectoryPathNext", "Next launch: $PATH$", snapshot.pending_root()));
+                }
+                paths
+            },
             Err(error) => vec![crate::localization::Text::resource("ConfigDirectoryReadFailed", "Could not read the configuration directory: $ERROR$")
                 .replace("$ERROR$", crate::config_directory::error_text(error, &locale)).render(&locale)],
         };
@@ -76,12 +92,14 @@ impl MatrixWindow {
                 .child(div().min_w(px(0.)).text_ellipsis().child(label)).child("⌄")
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(cx.listener(move |view, _, window, cx| {
+                    if view.config_directory.selection.is_some() { return; }
                     view.config_directory.open = !view.config_directory.open;
                     view.config_directory.cursor = selected_index;
                     view.config_directory.focus.focus(window, cx);
                     cx.notify();
                 }))
                 .on_key_down(cx.listener(move |view, event: &gpui::KeyDownEvent, _, cx| {
+                    if view.config_directory.selection.is_some() { return; }
                     match event.keystroke.key.as_str() {
                         "space" | "enter" if view.config_directory.open => {
                             view.apply_config_directory_selection(view.config_directory.cursor, cx);
@@ -117,11 +135,12 @@ impl MatrixWindow {
         let failure = self.config_directory.error.as_ref().map(|error|
             crate::localization::Text::resource("ConfigDirectorySetFailed", "Could not set the configuration directory: $ERROR$")
                 .replace("$ERROR$", crate::config_directory::error_text(error, &locale)).render(&locale));
-        let note = failure.clone().unwrap_or_else(|| text("ConfigDirectoryRestartShort", "Restart required; no automatic migration.").to_owned());
-        let note_details = failure.unwrap_or_else(|| text("ConfigDirectoryRestartDetails", "Restart the application to apply this change. Existing configuration will not be moved.").to_owned());
+        let changed = snapshot.as_ref().is_ok_and(|snapshot| snapshot.pending_root() != snapshot.active_root);
+        let note = failure.clone().unwrap_or_else(|| if changed { text("ConfigDirectoryRestartShort", "Restart to apply; no migration.").to_owned() } else { String::new() });
+        let note_details = failure.unwrap_or_default();
         content = content.child(div().id("config-directory-restart-note").w_full().min_w(px(0.)).h(px(14.)).flex_shrink_0()
             .text_ellipsis().when(self.config_directory.error.is_some(), |element| element.role(Role::Alert))
-            .tooltip(move |_, cx| icon_tooltip::view(note_details.clone(), palette.dark, cx)).child(note));
+            .when(self.config_directory.error.is_some(), |element| element.tooltip(move |_, cx| icon_tooltip::view(note_details.clone(), palette.dark, cx))).child(note));
         content.into_any_element()
     }
 }

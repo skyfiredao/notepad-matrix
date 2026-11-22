@@ -852,7 +852,7 @@ impl MatrixWindow {
             }
         };
         let details = if value == current { value.clone() } else {
-            crate::localization::Text::resource("ConfigDirectoryBackupRestartDetails", "Current backup: $CURRENT$\nBackup after restart: $NEXT$\nRestart required. Existing backups will not be moved.")
+            crate::localization::Text::resource("ConfigDirectoryBackupRestartDetails", "Current: $CURRENT$\nAfter restart: $NEXT$")
                 .replace("$CURRENT$", current).replace("$NEXT$", value.clone()).render(&self.native_locale())
         };
         let dark = self.dark;
@@ -1070,8 +1070,15 @@ impl MatrixWindow {
                 let custom = enabled && self.pref_bool("backup_use_directory",false);
                 group!("",26.,166.,192.,27.);
                 check!("pref-backup-directory","自定义备份目录","backup_use_directory",false,false,enabled,26.,154.,192.);
-                label_right_enabled!(6803,"Directory:",custom,34.,178.,52.);
-                input!("backup_directory",custom,92.,176.,101.);
+                let directory_label = crate::localization::current_preference_control(6803).unwrap_or("Directory:");
+                let directory_label_width = (dialog_font::logical(window.text_system().shape_line(directory_label.to_owned().into(),px(12.),&[gpui::TextRun {
+                    len: directory_label.len(),font: gpui::font(dialog_font::font_family()),color: rgb(palette.control_text(custom)).into(),background_color: None,underline: None,strikethrough: None,
+                }],None).width()) / preferences_surface::horizontal(1.75)).ceil() + 3.;
+                let directory_input_x = 34. + directory_label_width + 6.;
+                body = body.child(at(34.,178.,directory_label_width,8.).whitespace_nowrap()
+                    .when(crate::localization::current_preference_rtl(),|element| element.text_right())
+                    .text_color(rgb(palette.control_text(custom))).child(directory_label));
+                input!("backup_directory",custom,directory_input_x,176.,(193. - directory_input_x).max(1.));
                 button!("pref-backup-browse","...",custom,202.,175.,16.,Self::preferences_browse_backup_directory);
                 group!(crate::localization::current_preference_control(6830).unwrap_or("备份保留期限"),234.,106.,208.,95.);
                 let retention = self.pref_bool("backup_retention.enabled",true);

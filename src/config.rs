@@ -150,7 +150,7 @@ impl ConfigStore {
                 "save_all_confirm": true,
                 "function_list_sort_default": false,
                 "docPeekOnTab": false,
-                "tabCompactLabelLen": 0,
+                "tabCompactLabelLen": 20,
                 "recent_files_limit": 10,
                 "whiteSpaceShow": false,
                 "eolShow": false,
