@@ -123,7 +123,6 @@ impl RepeatTracker {
     }
 }
 
-/// Recorded editing messages, not document snapshots or OS keystrokes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MacroStep {
     ReplaceSelection(Arc<str>),

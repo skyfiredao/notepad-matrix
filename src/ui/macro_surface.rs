@@ -34,7 +34,6 @@ impl MatrixWindow {
             return;
         }
         if text == "\r" || text == "\n" {
-            // NppNotification.cpp:538–573 collapses a CRLF notification pair.
             if text == "\n"
                 && self.editor().line_ending() == crate::input::LineEnding::CrLf
                 && matches!(self.macro_steps.last(), Some(MacroStep::Newline))

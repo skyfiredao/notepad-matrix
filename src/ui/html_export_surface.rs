@@ -17,7 +17,6 @@ impl MatrixWindow {
             );
             return;
         }
-        // The source captures the entire styled document before opening Save,
         let text = self.editor().committed_text();
         let language = self.workspace.active().language();
         let profile = self.editor_style_profile();
@@ -77,8 +76,6 @@ impl MatrixWindow {
                 Ok(Some(path)) => {
                     executor
                         .spawn(async move {
-                            // Existing-path replacement was confirmed by the native Save
-                            // chooser. Reuse the same atomic/raw-baseline guarded writer.
                             crate::files::DiskFile::save_as_unicode(
                                 &path,
                                 &snapshot,
@@ -101,8 +98,6 @@ impl MatrixWindow {
                         view.notify_editor_error(format!("HTML export failed: {error}"), cx)
                     }
                 }
-                // Export never acknowledges a Workspace savepoint or retargets a
-                // document. The generated snapshot/file belong only to the export.
                 view.editor_focus.focus(window, cx);
                 cx.notify();
             }) {

@@ -110,6 +110,8 @@ pub(super) use chrome::{GUTTER_LEFT, SCROLLBAR_SIZE};
 
 #[derive(Default)]
 pub(super) struct EditorChrome {
+    paint_view: Option<Entity<EditorPaintView>>,
+    caret_view: Option<Entity<EditorCaretView>>,
     text_system: Option<Rc<gpui::WindowTextSystem>>,
     buffer: Option<crate::workspace::BufferId>,
     positions: std::collections::BTreeMap<crate::workspace::BufferId, (usize, Pixels, Pixels)>,
@@ -147,6 +149,11 @@ struct BraceHighlight {
 }
 
 impl EditorChrome {
+    pub(super) fn repaint_caret(&self, cx: &mut Context<MatrixWindow>) {
+        if let Some(view) = &self.caret_view {
+            view.update(cx, |_, cx| cx.notify());
+        }
+    }
     pub(super) fn p_width(&self) -> f32 {
         self.p_width.max(1.)
     }
@@ -3441,6 +3448,13 @@ impl MatrixWindow {
                 }
             }
         }
+        let paint_view = self.editor_chrome.paint_view.get_or_insert_with(|| {
+            let owner = cx.entity();
+            cx.new(|cx| EditorPaintView {
+                owner: owner.downgrade(), pane,
+                _owner_changes: cx.observe(&owner, |_, _, cx| cx.notify()),
+            })
+        }).clone();
         div()
             .id(if pane == crate::workspace::ViewId::Primary {
                 "matrix-editor"
@@ -3463,6 +3477,12 @@ impl MatrixWindow {
                     cx.stop_propagation();
                 },
             ))
+            .on_drop(cx.listener(move |view, paths: &gpui::ExternalPaths, window, cx| {
+                view.focus_editor_pane(pane, window, cx);
+                view.preferences_drop_paths(paths.paths().to_vec(), window, cx);
+                window.activate_window();
+                cx.stop_propagation();
+            }))
             .aria_value(value)
             .track_focus(&self.editor_focus)
             .key_context("MatrixEditor")
@@ -3843,10 +3863,7 @@ impl MatrixWindow {
                     }
                 }),
             )
-            .child(EditorElement {
-                view: cx.entity(),
-                pane,
-            })
+            .child(paint_view.cached(gpui::StyleRefinement::default().size(gpui::relative(1.))))
             .child(
                 div()
                     .id("editor-scrollbar-vertical")
@@ -3960,7 +3977,6 @@ impl MatrixWindow {
 
 impl EntityInputHandler for MatrixWindow {
     fn accepts_text_input(&self, window: &mut Window, _: &mut Context<Self>) -> bool {
-        // Alt is the Windows menu modifier, not macOS Option character insertion.
         !self.file_busy
             && !self.editor().document().is_read_only()
             && !window.modifiers().alt
@@ -4034,9 +4050,6 @@ impl EntityInputHandler for MatrixWindow {
         window: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<Range<usize>> {
-        // GPUI routes marked input to AppKit before key bindings. Suspend that
-        // priority for Windows-style Ctrl commands without changing the model;
-        // the command itself decides whether to cancel or retain composition.
         if window.modifiers().control {
             return None;
         }
@@ -4160,6 +4173,103 @@ impl EntityInputHandler for MatrixWindow {
             return None;
         }
         Some(text.byte_to_utf16_idx(byte.0))
+    }
+}
+
+#[derive(Clone)]
+struct EditorCaretMark {
+    bounds: Bounds<Pixels>,
+    clip: Bounds<Pixels>,
+    color: gpui::Rgba,
+    inverse: Option<(Arc<EditorShapedLine>, gpui::Point<Pixels>, Pixels, u32)>,
+}
+
+impl MatrixWindow {
+    pub(super) fn render_editor_carets(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let previous = self.pane;
+        let mut layers = Vec::new();
+        for pane in [crate::workspace::ViewId::Primary, crate::workspace::ViewId::Secondary] {
+            if self.workspace.view_buffer_ids(pane).is_empty() || !self.scope_editor_pane(pane) { continue; }
+            let layer = self.editor_chrome.caret_view.get_or_insert_with(|| {
+                let owner = cx.entity();
+                let focus = self.editor_focus.clone();
+                cx.new(|cx| EditorCaretView {
+                    owner: owner.downgrade(), focus, marks: Vec::new(), after: Vec::new(),
+                    _owner_changes: cx.observe(&owner, |_, _, cx| cx.notify()),
+                })
+            }).clone();
+            layers.push(layer.cached(gpui::StyleRefinement::default().absolute().top(px(0.)).left(px(0.)).size(gpui::relative(1.))).into_any_element());
+        }
+        self.scope_editor_pane(previous);
+        layers
+    }
+}
+
+#[derive(Clone)]
+enum EditorCaretAfter {
+    Frame { bounds: Bounds<Pixels>, width: Pixels, color: u32, clip: Bounds<Pixels> },
+    Drop { bounds: Bounds<Pixels>, color: gpui::Rgba, clip: Bounds<Pixels> },
+}
+
+struct EditorCaretView {
+    owner: gpui::WeakEntity<MatrixWindow>,
+    focus: FocusHandle,
+    marks: Vec<EditorCaretMark>,
+    after: Vec<EditorCaretAfter>,
+    _owner_changes: gpui::Subscription,
+}
+
+impl Render for EditorCaretView {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let layer = cx.weak_entity();
+        gpui::canvas(|_, _, _| (), move |_, _, window, cx| {
+            let Some(layer) = layer.upgrade() else { return; };
+            let (owner, focus, marks, after) = {
+                let layer = layer.read(cx);
+                (layer.owner.clone(), layer.focus.clone(), layer.marks.clone(), layer.after.clone())
+            };
+            let Some(owner) = owner.upgrade() else { return; };
+            if !focus.is_focused(window) || !owner.read(cx).appearance_caret_visible() { return; }
+            let mut failure = None;
+            for mark in marks {
+                window.with_content_mask(Some(ContentMask { bounds: mark.clip }), |window| {
+                    window.paint_quad(fill(mark.bounds, mark.color));
+                    if let Some((shape, origin, height, color)) = mark.inverse {
+                        window.with_content_mask(Some(ContentMask { bounds: mark.bounds }), |window| {
+                            if let Err(error) = shape.paint_recolored(origin, height, color, window, cx) {
+                                failure = Some(error);
+                            }
+                        });
+                    }
+                });
+            }
+            for overlay in after {
+                match overlay {
+                    EditorCaretAfter::Frame { bounds, width, color, clip } => {
+                        window.with_content_mask(Some(ContentMask { bounds: clip }), |window| paint_current_line_frame(bounds, width, color, window));
+                    }
+                    EditorCaretAfter::Drop { bounds, color, clip } => {
+                        window.with_content_mask(Some(ContentMask { bounds: clip }), |window| window.paint_quad(fill(bounds, color)));
+                    }
+                }
+            }
+            if let Some(error) = failure { owner.update(cx, |view, cx| view.notify_editor_error(error, cx)); }
+        }).size_full()
+    }
+}
+
+struct EditorPaintView {
+    owner: gpui::WeakEntity<MatrixWindow>,
+    pane: crate::workspace::ViewId,
+    _owner_changes: gpui::Subscription,
+}
+
+impl Render for EditorPaintView {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        match self.owner.upgrade() {
+            Some(view) => EditorElement { view, pane: self.pane }.into_any_element(),
+            None => div().into_any_element(),
+        }
     }
 }
 
@@ -4500,6 +4610,8 @@ impl Element for EditorElement {
             let previous = view.pane;
             view.scope_editor_pane(self.pane);
             let focus = view.editor_focus.clone();
+            let mut caret_marks = Vec::new();
+            let mut caret_after = Vec::new();
             let selection = view.editor().display_selection();
             let hovered_link = if view.workspace.clickable_links_allowed() && view.preferences.files.links.enabled() {
                 view.editor_chrome.hovered_link.as_ref().and_then(|range| {
@@ -4909,7 +5021,7 @@ impl Element for EditorElement {
                                 failure = Some(error);
                             }
                         });
-                        if focused && view.appearance_caret_visible() {
+                        if focused {
                             let caret_top_extension = (line_height - line.shape.baseline() * 2. + caret_cap_height).max(px(0.)).round();
                             let caret_height = line_height + caret_top_extension;
                             let caret_trim = caret_height * 0.05;
@@ -4970,8 +5082,7 @@ impl Element for EditorElement {
                                         } else {
                                             px(caret_width as f32)
                                         };
-                                        window.paint_quad(fill(
-                                            Bounds::new(
+                                        let bounds = Bounds::new(
                                                 point(
                                                     line.origin.x + px(x),
                                                     if overwrite {
@@ -4992,41 +5103,29 @@ impl Element for EditorElement {
                                                         line_height
                                                     },
                                                 ),
-                                            ),
-                                            if index == selections.primary_index() {
+                                            );
+                                        let color = if index == selections.primary_index() {
                                                 caret_colour
                                             } else {
                                                 additional_caret_colour
-                                            },
-                                        ));
-                                        if caret_width >= 4 && !overwrite {
-                                            let caret_bounds = Bounds::new(
-                                                point(line.origin.x + px(x), line.origin.y),
-                                                size(width, line_height),
-                                            );
-                                            let inverse = view.editor_style_profile().background;
-                                            window.with_content_mask(
-                                                Some(ContentMask {
-                                                    bounds: caret_bounds,
-                                                }),
-                                                |window| {
-                                                    if let Err(error) = line.shape.paint_recolored(
-                                                        line.origin,
-                                                        line_height,
-                                                        inverse,
-                                                        window,
-                                                        cx,
-                                                    ) {
-                                                        failure = Some(error);
-                                                    }
-                                                },
-                                            );
-                                        }
+                                            };
+                                        caret_marks.push(EditorCaretMark {
+                                            bounds, clip: window.content_mask().bounds, color,
+                                            inverse: (caret_width >= 4 && !overwrite).then(|| (
+                                                line.shape.clone(), line.origin, line_height, view.editor_style_profile().background,
+                                            )),
+                                        });
                                     }
                                 }
                             });
                         }
                         if caret_logical == line.logical_line && indicator_mode == 2 {
+                            caret_after.push(EditorCaretAfter::Frame {
+                                bounds: Bounds::new(point(text_bounds.left(), line.origin.y), size(text_bounds.size.width, line_height)),
+                                width: px(view.pref_int("ScintillaPrimaryView.currentLineFrameWidth", 1) as f32),
+                                color: view.style_colour("Current line background colour", "bgColor", if dark { 0x101010 } else { 0xfbfcd9 }),
+                                clip: window.content_mask().bounds,
+                            });
                             paint_current_line_frame(
                                 Bounds::new(
                                     point(text_bounds.left(), line.origin.y),
@@ -5052,6 +5151,10 @@ impl Element for EditorElement {
                         && let Some(line) =
                             prepaint.lines.iter().find(|line| line.owns_caret(target))
                     {
+                        caret_after.push(EditorCaretAfter::Drop {
+                            bounds: Bounds::new(point(line.origin.x + line.x_for_byte(target), line.origin.y), size(px(2.), line_height)),
+                            color: caret_colour, clip: window.content_mask().bounds,
+                        });
                         window.paint_quad(fill(
                             Bounds::new(
                                 point(line.origin.x + line.x_for_byte(target), line.origin.y),
@@ -5063,6 +5166,9 @@ impl Element for EditorElement {
                 },
             );
             let height = (f32::from(bounds.size.height) - SCROLLBAR_SIZE).max(0.);
+            if let Some(layer) = &view.editor_chrome.caret_view {
+                layer.update(cx, |layer, _| { layer.marks = caret_marks; layer.after = caret_after; });
+            }
             let width = (f32::from(bounds.size.width) - SCROLLBAR_SIZE).max(0.);
             let bars = EditorScrollbars::new(
                 bounds,

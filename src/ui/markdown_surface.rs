@@ -948,8 +948,6 @@ impl MatrixWindow {
             let position =
                 ((f32::from(event.position.y - bounds.top()) - grab) / travel).clamp(0., 1.);
             if position >= 1. {
-                // Height estimates can grow as off-screen diagrams are measured.
-                // The track endpoint must still reach the actual final row.
                 list.scroll_to_end();
             } else {
                 list.set_offset_from_scrollbar(gpui::point(
@@ -1100,8 +1098,6 @@ impl MatrixWindow {
                     move |bounds, _, window, _| {
                         let width = list.viewport_bounds().size.width;
                         if hint_width.get() != Some(width) {
-                            // GPUI invalidates all height hints during a width change.
-                            // Seed them after layout, without measuring off-screen rows.
                             list.clone().with_uniform_item_height(px(36.));
                             hint_width.set(Some(width));
                             window.on_next_frame(|window, _| window.refresh());
@@ -1222,7 +1218,6 @@ impl MatrixWindow {
         if let Destination::Local(path) =
             crate::markdown::resolve_destination(&media.destination, owner.base.as_deref())
         {
-            // Keep the loaded image inside the same viewport measured by the list.
             image = image.child(
                 div()
                     .w_full()

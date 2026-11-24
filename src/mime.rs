@@ -43,8 +43,6 @@ fn encode(input: &[u8], padding: bool) -> String {
     result
 }
 
-/// MIME Tools' default decoder preserves illegal separator bytes and ignores
-/// only TAB/LF/CR/SPACE and padding. It is not the stricter RFC decoder mode.
 pub fn decode_base64(input: &[u8]) -> Vec<u8> {
     let mut result = Vec::new();
     let mut index = 0;

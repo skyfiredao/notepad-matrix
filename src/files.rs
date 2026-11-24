@@ -232,8 +232,6 @@ impl UnicodeFormat {
         if bytes.starts_with(UTF16_BE_BOM) {
             Self::Utf16BeBom
         } else if bytes.starts_with(UTF16_LE_BOM) {
-            // Same priority as Notepad++: a following NUL is not evidence that
-            // this valid UTF-16 prefix should instead be interpreted as UTF-32.
             Self::Utf16LeBom
         } else if bytes.starts_with(UTF8_BOM) {
             Self::Utf8(Utf8Format::Bom)
@@ -522,7 +520,6 @@ impl DiskFile {
         }
     }
 
-    /// Save a new explicit UTF-8 document; an existing path is never overwritten here.
     pub fn create_utf8(path: &Path, snapshot: &SaveSnapshot) -> io::Result<Self> {
         Self::create_unicode(path, snapshot, UnicodeFormat::Utf8(Utf8Format::Plain))
     }
@@ -572,7 +569,6 @@ impl DiskFile {
         })
     }
 
-    /// Load explicit UTF-8 only. No locale/ANSI inference and no malformed-byte replacement.
     pub fn load_utf8(path: &Path) -> io::Result<(Self, String)> {
         let file = Self::capture(path)?;
         if !matches!(file.format, UnicodeFormat::Utf8(_)) {
@@ -585,7 +581,6 @@ impl DiskFile {
         Ok((file, text))
     }
 
-    /// BOM-signalled Unicode, or strict UTF-8 when absent. No ANSI or UTF-32 inference.
     pub fn load_unicode(path: &Path) -> io::Result<(Self, String)> {
         let file = Self::capture(path)?;
         let text = file.decode_text()?;
@@ -748,7 +743,6 @@ impl DiskFile {
         self.save_with_format(snapshot, self.format)
     }
 
-    /// Write a selected format while preserving this handle's raw conflict baseline.
     pub fn save_with_format(
         &self,
         snapshot: &SaveSnapshot,

@@ -1,5 +1,5 @@
 use gpui::{App, AvailableSpace, Bounds, DecorationRun, Element, ElementId, GlobalElementId, IntoElement, LayoutId, LineLayout, Pixels, Point, ShapedLine, ShapedRun, TextAlign, TextRun, Window, fill, point, px, size};
-use std::{cell::RefCell, collections::VecDeque, ffi::c_void, ops::Range, ptr::NonNull, rc::Rc};
+use std::{cell::RefCell, collections::VecDeque, ops::Range, rc::Rc};
 
 pub(super) type Runs = Vec<(TextRun, Pixels)>;
 
@@ -51,74 +51,36 @@ pub(super) struct Hit {
     pub(super) trailing: bool,
 }
 
-#[link(name = "icucore")]
-unsafe extern "C" {
-    fn ubidi_open() -> *mut c_void;
-    fn ubidi_close(bidi: *mut c_void);
-    #[link_name = "ubidi_setPara"]
-    fn ubidi_set_para(bidi: *mut c_void, text: *const u16, length: i32, level: u8, embeddings: *mut u8, error: *mut i32);
-    #[link_name = "ubidi_setLine"]
-    fn ubidi_set_line(paragraph: *const c_void, start: i32, limit: i32, line: *mut c_void, error: *mut i32);
-    #[link_name = "ubidi_getParagraph"]
-    fn ubidi_get_paragraph(bidi: *const c_void, index: i32, start: *mut i32, limit: *mut i32, level: *mut u8, error: *mut i32) -> i32;
-    #[link_name = "ubidi_countRuns"]
-    fn ubidi_count_runs(bidi: *mut c_void, error: *mut i32) -> i32;
-    #[link_name = "ubidi_getVisualRun"]
-    fn ubidi_get_visual_run(bidi: *mut c_void, index: i32, start: *mut i32, length: *mut i32) -> i32;
-}
+struct ParagraphBidi<'text>(unicode_bidi::utf16::BidiInfo<'text>);
 
-struct NativeBidi(NonNull<c_void>);
-
-impl NativeBidi {
-    fn new() -> Result<Self, String> {
-        NonNull::new(unsafe { ubidi_open() }).map(Self).ok_or_else(|| "Finder bidi allocation failed".to_owned())
-    }
-}
-
-impl Drop for NativeBidi {
-    fn drop(&mut self) {
-        unsafe { ubidi_close(self.0.as_ptr()); }
-    }
-}
-
-struct ParagraphBidi {
-    line: NativeBidi,
-    paragraph: NativeBidi,
-    text: Vec<u16>,
-}
-
-impl ParagraphBidi {
-    fn new(text: &str) -> Result<Self, String> {
-        let bidi = Self { line: NativeBidi::new()?, paragraph: NativeBidi::new()?, text: text.encode_utf16().collect() };
-        let length = i32::try_from(bidi.text.len()).map_err(|error| error.to_string())?;
-        let mut error = 0;
-        unsafe { ubidi_set_para(bidi.paragraph.0.as_ptr(), bidi.text.as_ptr(), length, 0, std::ptr::null_mut(), &mut error); }
-        if error > 0 { return Err(format!("Finder bidi paragraph failed: {error}")); }
-        Ok(bidi)
+impl<'text> ParagraphBidi<'text> {
+    fn new(text: &'text [u16]) -> Self {
+        Self(unicode_bidi::utf16::BidiInfo::new(text, Some(unicode_bidi::Level::ltr())))
     }
 
-    fn visual_runs(&mut self, range: Range<usize>) -> Result<Vec<(Range<usize>, bool)>, String> {
-        let mut start = i32::try_from(range.start).map_err(|error| error.to_string())?;
-        let end = i32::try_from(range.end).map_err(|error| error.to_string())?;
-        let mut error = 0;
+    fn visual_runs(&self, range: Range<usize>) -> Result<Vec<(Range<usize>, bool)>, String> {
+        if range.start > range.end || range.end > self.0.text.len() {
+            return Err("Finder bidi line range is invalid".to_owned());
+        }
+        let mut start = range.start;
         let mut runs = Vec::new();
-        while start < end {
-            let mut limit = end;
-            unsafe { ubidi_get_paragraph(self.paragraph.0.as_ptr(), start, std::ptr::null_mut(), &mut limit, std::ptr::null_mut(), &mut error); }
-            if error > 0 || limit <= start { return Err(format!("Finder bidi paragraph range failed: {error}")); }
-            let limit = limit.min(end);
-            unsafe { ubidi_set_line(self.paragraph.0.as_ptr(), start, limit, self.line.0.as_ptr(), &mut error); }
-            if error > 0 { return Err(format!("Finder bidi line failed: {error}")); }
-            let count = unsafe { ubidi_count_runs(self.line.0.as_ptr(), &mut error) };
-            if error > 0 { return Err(format!("Finder bidi runs failed: {error}")); }
-            let base = usize::try_from(start).map_err(|error| error.to_string())?;
-            for index in 0..count {
-                let mut offset = 0;
-                let mut length = 0;
-                let direction = unsafe { ubidi_get_visual_run(self.line.0.as_ptr(), index, &mut offset, &mut length) };
-                let offset = usize::try_from(offset).map_err(|error| error.to_string())?;
-                let length = usize::try_from(length).map_err(|error| error.to_string())?;
-                runs.push((base + offset..base + offset + length, direction == 1));
+        while start < range.end {
+            let index = self.0.paragraphs.partition_point(|paragraph| paragraph.range.end <= start);
+            let paragraph = self.0.paragraphs.get(index)
+                .filter(|paragraph| paragraph.range.contains(&start))
+                .ok_or_else(|| "Finder bidi paragraph range is invalid".to_owned())?;
+            let limit = paragraph.range.end.min(range.end);
+            let line = unicode_bidi::utf16::BidiInfo {
+                text: &self.0.text[start..limit],
+                original_classes: self.0.original_classes[start..limit].to_vec(),
+                levels: self.0.levels[start..limit].to_vec(),
+                paragraphs: Vec::new(),
+            };
+            let paragraph = unicode_bidi::ParagraphInfo { range: 0..limit - start, level: paragraph.level };
+            let (levels, visual) = line.visual_runs(&paragraph, 0..limit - start);
+            for run in visual {
+                let rtl = levels[run.start].is_rtl();
+                runs.push((start + run.start..start + run.end, rtl));
             }
             start = limit;
         }
@@ -378,7 +340,8 @@ impl FinderLayout {
             if clusters.is_empty() {
                 layout.lines.push(VisualLine { range: paragraph_start..paragraph_end, parts: Vec::new(), logical: Vec::new(), width: px(0.) });
             } else {
-                let mut bidi = ParagraphBidi::new(paragraph)?;
+                let text: Vec<u16> = paragraph.encode_utf16().collect();
+                let bidi = ParagraphBidi::new(&text);
                 let mut clusters: Vec<_> = clusters.into_iter().map(Some).collect();
                 for range in ranges {
                     let first = clusters[range.start].as_ref().ok_or_else(|| "Finder cluster was already placed".to_owned())?;

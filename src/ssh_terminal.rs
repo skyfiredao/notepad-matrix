@@ -398,6 +398,7 @@ enum Command {
 
 pub struct Session {
     pub events: mpsc::Receiver<Event>,
+    notification: Arc<tokio::sync::Notify>,
     commands: async_mpsc::Sender<Command>,
     trust: async_mpsc::Sender<bool>,
     closed: watch::Sender<bool>,
@@ -405,6 +406,10 @@ pub struct Session {
 }
 
 impl Session {
+    pub fn notification(&self) -> Arc<tokio::sync::Notify> {
+        self.notification.clone()
+    }
+
     pub fn input(&self, data: Vec<u8>) -> io::Result<()> {
         if data.len() > 65_536 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH input must be split into chunks of at most 65536 bytes"));
@@ -470,6 +475,7 @@ async fn cancelled(closed: &mut watch::Receiver<bool>) {
 #[derive(Clone)]
 struct Events {
     sender: mpsc::SyncSender<Event>,
+    notification: Arc<tokio::sync::Notify>,
     closed: watch::Receiver<bool>,
 }
 
@@ -481,7 +487,7 @@ impl Events {
                 return Err(io::Error::new(io::ErrorKind::Interrupted, "SSH session was closed"));
             }
             match self.sender.try_send(event) {
-                Ok(()) => return Ok(()),
+                Ok(()) => { self.notification.notify_one(); return Ok(()); }
                 Err(mpsc::TrySendError::Disconnected(_)) => return Err(io::Error::new(io::ErrorKind::BrokenPipe, "SSH event receiver is closed")),
                 Err(mpsc::TrySendError::Full(pending)) => event = pending,
             }
@@ -631,6 +637,8 @@ pub fn connect(profile: Profile, password: Option<String>, columns: u16, rows: u
         Authentication::Key => { drop(password); None }
     };
     let (sender, events) = mpsc::sync_channel(64);
+    let notification = Arc::new(tokio::sync::Notify::new());
+    let thread_notification = notification.clone();
     let (commands, command_receiver) = async_mpsc::channel(32);
     let (trust, trust_receiver) = async_mpsc::channel(1);
     let (closed, closed_receiver) = watch::channel(false);
@@ -641,7 +649,7 @@ pub fn connect(profile: Profile, password: Option<String>, columns: u16, rows: u
         let result = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
             Ok(runtime) => {
                 let result = runtime.block_on(async {
-                    let delivery = Events { sender: sender.clone(), closed: closed_receiver.clone() };
+                    let delivery = Events { sender: sender.clone(), notification: thread_notification.clone(), closed: closed_receiver.clone() };
                     let mut cancel = closed_receiver.clone();
                     tokio::select! {
                         biased;
@@ -661,12 +669,14 @@ pub fn connect(profile: Profile, password: Option<String>, columns: u16, rows: u
                 eprintln!("SSH error receiver is closed");
                 return;
             }
+            thread_notification.notify_one();
         }
         if sender.send(Event::Closed).is_err() {
             eprintln!("SSH close receiver is closed");
         }
+        thread_notification.notify_one();
     })?;
-    Ok(Session { events, commands, trust, closed, host_waiting })
+    Ok(Session { events, notification, commands, trust, closed, host_waiting })
 }
 
 async fn request_reply(channel: &mut Channel<client::Msg>, events: &Events, request: &str) -> io::Result<()> {
@@ -779,8 +789,10 @@ async fn run(
     request_reply(&mut channel, &events, "shell request").await?;
     events.send(Event::Connected).await?;
     let (mut reader, writer) = channel.split();
+    let command_notification = events.notification.clone();
     let mut writing = tokio::spawn(async move {
         while let Some(command) = commands.recv().await {
+            command_notification.notify_one();
             match command {
                 Command::Input(data) => writer.data_bytes(data).await.map_err(failed)?,
                 Command::Resize(columns, rows) => writer.window_change(u32::from(columns), u32::from(rows), 0, 0).await.map_err(failed)?,

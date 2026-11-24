@@ -21,6 +21,14 @@ SANDBOX_ENTITLEMENTS = {
 }
 
 
+def validate_public_apis(binary):
+    symbols = subprocess.check_output(['/usr/bin/nm', '-u', str(binary)])
+    rejected = sorted(set(re.findall(rb'_?(?:ubidi_|CVDisplayLink)[A-Za-z0-9_]+', symbols + b'\n' + binary.read_bytes())))
+    if rejected:
+        raise ValueError('Non-public or deprecated API references: ' + ', '.join(value.decode('ascii') for value in rejected))
+    print('Rejected API references (ICU bidi / CVDisplayLink): 0', flush=True)
+
+
 def document_types(output):
     source = (ROOT / 'src/ui/preferences_files_surface.rs').read_text(encoding='utf-8')
     start = source.index('pub(super) const ASSOCIATION_GROUPS:')
@@ -182,6 +190,7 @@ def package(binary, output, sign_identity='-', sandbox=False, entitlements=None)
         data = stream.read(8)
     if len(data) != 8 or struct.unpack('<II', data) != (0xfeedfacf, 0x100000c):
         raise ValueError('Expected an ARM64 Mach-O executable')
+    validate_public_apis(binary)
     if output == ROOT or output in ROOT.parents:
         raise ValueError('Output must not be the source root or an ancestor')
     output.mkdir(parents=True, exist_ok=True)
@@ -240,10 +249,14 @@ def package(binary, output, sign_identity='-', sandbox=False, entitlements=None)
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--binary', type=Path, required=True)
+    parser.add_argument('--check-only', action='store_true', help='Reject known non-public or deprecated API references without packaging')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--sign-identity', default='-', help='codesign identity; default: ad-hoc (-)')
     parser.add_argument('--sandbox', action='store_true', help='Create an App Sandbox development package')
     parser.add_argument('--entitlements', type=Path, help='Explicit entitlement overrides/additions; requires --sandbox')
     args = parser.parse_args()
     output = args.output if args.output is not None else ROOT / ('dist-sandbox' if args.sandbox else 'dist')
-    package(args.binary, output, args.sign_identity, args.sandbox, args.entitlements)
+    if args.check_only:
+        validate_public_apis(args.binary)
+    else:
+        package(args.binary, output, args.sign_identity, args.sandbox, args.entitlements)

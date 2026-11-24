@@ -26,7 +26,6 @@ pub(crate) use word_navigation::{
     selection_in_snapshot as word_selection_in_snapshot,
 };
 
-/// Visible logical rows after keeping the caret in view (without line wrapping).
 pub fn visible_rows(first: usize, capacity: usize, caret: usize, total: usize) -> Range<usize> {
     if total == 0 {
         return 0..0;
@@ -146,8 +145,6 @@ impl MarkerOp {
     }
 }
 
-/// Line-vector changes are replayed on text Undo/Redo; marker toggles themselves
-/// are not part of text snapshots, matching the source per-line marker storage.
 #[derive(Clone, Default)]
 pub(crate) struct LineEdits {
     line_operations: Vec<(MarkerOp, MarkerOp)>,
@@ -443,7 +440,6 @@ struct DocumentCore {
 impl DocumentCore {
     pub(crate) fn from_recovery(text: &str) -> Self {
         let mut document = Self::new(text);
-        // A loaded backup is dirty even when its bytes happen to match disk.
         document.current.version = 1;
         document.next_version = 2;
         document.buffer_dirty = true;

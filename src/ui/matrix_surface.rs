@@ -12,14 +12,86 @@ pub(super) fn locked() -> bool {
 #[derive(Default)]
 pub(super) struct State {
     active: bool,
-    rain: Option<matrix_rain::Rain>,
-    terminal: Option<matrix_terminal::Terminal>,
+    animation: Option<gpui::Entity<Animation>>,
     about_timer: Option<gpui::Task<()>>,
     about_generation: u64,
     about_seconds: Option<u8>,
     authentication: Option<matrix_auth::Authentication>,
     generation: u64,
     hidden: Vec<gpui::AnyWindowHandle>,
+}
+
+struct Animation {
+    rain: Option<matrix_rain::Rain>,
+    terminal: Option<matrix_terminal::Terminal>,
+    _activation: gpui::Subscription,
+    _visibility: gpui::Subscription,
+}
+
+pub(super) fn animation_running(window: &Window, cx: &App) -> bool {
+    window.is_visible() && !cx.reduce_motion()
+        && MainThreadMarker::new().is_some_and(|main_thread|
+            objc2_app_kit::NSApplication::sharedApplication(main_thread).isActive())
+}
+
+pub(super) fn paint_animation_line(line: &gpui::ShapedLine, origin: gpui::Point<gpui::Pixels>, height: gpui::Pixels,
+    foreground: gpui::Hsla, prefix: Option<(usize, gpui::Hsla)>, window: &mut Window) -> io::Result<()> {
+    let baseline = (height - line.ascent - line.descent) / 2. + line.ascent;
+    for run in &line.runs {
+        for glyph in &run.glyphs {
+            let position = origin + gpui::point(glyph.position.x, baseline + glyph.position.y);
+            let color = prefix.filter(|(end, _)| glyph.index < *end).map_or(foreground, |(_, color)| color);
+            let result = if glyph.is_emoji {
+                window.paint_emoji(position, run.font_id, glyph.id, line.font_size)
+            } else {
+                window.paint_glyph(position, run.font_id, glyph.id, line.font_size, color)
+            };
+            result.map_err(|error| io::Error::other(error.to_string()))?;
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn schedule_animation_frame(last_tick: Option<std::time::Instant>, interval: std::time::Duration,
+    task: &mut Option<gpui::Task<()>>, running: bool, window: &Window, cx: &App) {
+    *task = None;
+    if !running { return; }
+    let now = std::time::Instant::now();
+    let deadline = last_tick.unwrap_or(now) + interval;
+    let delay = deadline.saturating_duration_since(now).max(std::time::Duration::from_millis(1));
+    let target = window.current_view();
+    let executor = cx.background_executor().clone();
+    *task = Some(window.spawn(cx, async move |cx| {
+        executor.timer(delay).await;
+        if let Err(error) = cx.update(|window, cx| {
+            if animation_running(window, cx) { cx.notify(target); }
+        }) { eprintln!("Matrix animation frame unavailable: {error}"); }
+    }));
+}
+
+impl Animation {
+    fn new(style: &str, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let activation = cx.observe_window_activation(window, |_, _, cx| cx.notify());
+        let visibility = cx.observe_window_visibility(window, |_, _, _, cx| cx.notify());
+        Self {
+            rain: (style != "terminal").then(matrix_rain::Rain::new),
+            terminal: (style == "terminal").then(matrix_terminal::Terminal::new),
+            _activation: activation,
+            _visibility: visibility,
+        }
+    }
+}
+
+impl Render for Animation {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        match &mut self.terminal {
+            Some(terminal) => terminal.render(window),
+            None => match &mut self.rain {
+                Some(rain) => rain.render(window),
+                None => div().into_any_element(),
+            },
+        }
+    }
 }
 
 fn native_visibility(window: &Window, visible: bool) -> io::Result<bool> {
@@ -79,13 +151,8 @@ impl MatrixWindow {
         self.matrix.about_timer = None;
         self.matrix.about_seconds = None;
         self.matrix.about_generation = self.matrix.about_generation.wrapping_add(1);
-        if self.matrix_style() == "terminal" {
-            self.matrix.rain = None;
-            self.matrix.terminal = Some(matrix_terminal::Terminal::new());
-        } else {
-            self.matrix.terminal = None;
-            self.matrix.rain = Some(matrix_rain::Rain::new());
-        }
+        let style = self.matrix_style();
+        self.matrix.animation = Some(cx.new(|cx| Animation::new(style, window, cx)));
         self.focus.focus(window, cx);
         if protect {
             self.matrix.generation = self.matrix.generation.wrapping_add(1);
@@ -133,8 +200,7 @@ impl MatrixWindow {
 
     fn finish_matrix(&mut self, cx: &mut Context<Self>) {
         self.matrix.active = false;
-        self.matrix.rain = None;
-        self.matrix.terminal = None;
+        self.matrix.animation = None;
         self.matrix.about_timer = None;
         self.matrix.about_seconds = None;
         self.matrix.about_generation = self.matrix.about_generation.wrapping_add(1);
@@ -237,11 +303,8 @@ impl MatrixWindow {
 
     pub(super) fn render_matrix(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         window_caption::update_title(window, "Matrix - Notepad Matrix");
-        let animation = if let Some(terminal) = &mut self.matrix.terminal {
-            terminal.render(window)
-        } else {
-            self.matrix.rain.get_or_insert_with(matrix_rain::Rain::new).render(window)
-        };
+        let style = self.matrix_style();
+        let animation = self.matrix.animation.get_or_insert_with(|| cx.new(|cx| Animation::new(style, window, cx))).clone();
         div().id("matrix-rain-page").debug_selector(|| "matrix-rain-page".into())
             .role(Role::Application).aria_label("Matrix").track_focus(&self.focus)
             .key_context("MatrixAuxiliary")
@@ -250,7 +313,8 @@ impl MatrixWindow {
             .on_click(cx.listener(|view, _, window, cx| {
                 if locked() { view.authenticate_matrix(window, cx); }
             }))
-            .size_full().overflow_hidden().bg(rgb(0x000000)).child(animation)
+            .size_full().overflow_hidden().bg(rgb(0x000000))
+            .child(animation.cached(gpui::StyleRefinement::default().size(gpui::relative(1.))))
             .into_any_element()
     }
 }

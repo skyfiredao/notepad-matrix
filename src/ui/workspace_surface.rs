@@ -605,6 +605,12 @@ impl MatrixWindow {
             .on_drop(cx.listener(move |view, drag: &TabDrag, window, cx| {
                 view.drop_document_tab(drag, pane, None, false, window, cx);
                 cx.stop_propagation();
+            }))
+            .on_drop(cx.listener(move |view, paths: &gpui::ExternalPaths, window, cx| {
+                view.focus_editor_pane(pane, window, cx);
+                view.preferences_drop_paths(paths.paths().to_vec(), window, cx);
+                window.activate_window();
+                cx.stop_propagation();
             }));
         let rendered_tabs: Vec<_> = self
             .workspace

@@ -16,6 +16,7 @@ struct CellPoint {
     column: u16,
 }
 
+#[derive(Clone)]
 struct VisibleGrid {
     cells: Vec<(CellPoint, vt100::Cell)>,
     rows: u16,
@@ -98,6 +99,9 @@ pub(super) struct State {
     resize_drag: Option<(gpui::Pixels, f32)>,
     generation: u64,
     window_transparent: bool,
+    surface: Option<Entity<TerminalSurface>>,
+    grid: Option<Entity<TerminalGrid>>,
+    caret: Option<Entity<TerminalCaret>>,
 }
 
 pub(super) struct ConnectionState {
@@ -174,6 +178,9 @@ impl State {
             resize_drag: None,
             generation: 0,
             window_transparent: false,
+            surface: None,
+            grid: None,
+            caret: None,
         }
     }
 
@@ -245,6 +252,19 @@ impl State {
         if let Some(profile) = settings.profile(self.profile_id) { self.active.set_appearance(profile); }
         for (id, connection) in &mut self.parked {
             if let Some(profile) = settings.profile(*id) { connection.set_appearance(profile); }
+        }
+    }
+
+    fn repaint(&self, cx: &mut Context<MatrixWindow>) {
+        if let Some(grid) = &self.grid {
+            grid.update(cx, |_, cx| cx.notify());
+        }
+        self.repaint_caret(cx);
+    }
+
+    fn repaint_caret(&self, cx: &mut Context<MatrixWindow>) {
+        if let Some(caret) = &self.caret {
+            caret.update(cx, |_, cx| cx.notify());
         }
     }
 
@@ -683,23 +703,45 @@ impl MatrixWindow {
         let generation = self.ssh_terminal.generation;
         let executor = cx.background_executor().clone();
         self.ssh_terminal.task = Some(cx.spawn_in(window, async move |view, cx| {
-            let mut ticks = 0usize;
+            let mut last_poll = std::time::Instant::now();
+            let mut blink_deadline = last_poll + Duration::from_millis(480);
             loop {
-                executor.timer(Duration::from_millis(16)).await;
-                ticks += 1;
+                let notifications = view.update_in(cx, |view, _, _| {
+                    if view.ssh_terminal.generation != generation { return Vec::new(); }
+                    view.ssh_terminal.active.session.iter().chain(view.ssh_terminal.parked.values().filter_map(|connection| connection.session.as_ref()))
+                        .map(|session| Box::pin(session.notification().notified_owned())).collect::<Vec<_>>()
+                });
+                let Ok(notifications) = notifications else { break; };
+                if notifications.is_empty() { break; }
+                futures::future::select(
+                    futures::future::select_all(notifications),
+                    Box::pin(executor.timer(blink_deadline.saturating_duration_since(std::time::Instant::now()))),
+                ).await;
+                let delay = (last_poll + Duration::from_millis(16)).saturating_duration_since(std::time::Instant::now());
+                if !delay.is_zero() { executor.timer(delay).await; }
+                last_poll = std::time::Instant::now();
+                let blink = last_poll >= blink_deadline;
+                if blink { blink_deadline = last_poll + Duration::from_millis(480); }
                 let active = view.update_in(cx, |view, window, cx| {
                     if view.ssh_terminal.generation != generation { return false; }
-                    let (mut changed, host_key, dismissed_host) = view.ssh_terminal.active.poll();
+                    let (changed, host_key, dismissed_host) = view.ssh_terminal.active.poll();
                     for connection in view.ssh_terminal.parked.values_mut() {
                         connection.poll();
                     }
                     if dismissed_host { view.dismiss_floating(floating_windows::DialogKind::TerminalHostKey, window, cx); }
                     if host_key { view.show_terminal_host_key(window, cx); }
-                    if ticks.is_multiple_of(30) {
+                    if blink {
                         view.ssh_terminal.blink = !view.ssh_terminal.blink;
-                        changed |= view.ssh_terminal.focus.is_focused(window);
+                        if window.is_window_active() && view.ssh_terminal.focus.is_focused(window)
+                            && !view.matrix_active() && view.ssh_terminal.visible {
+                            let screen = view.ssh_terminal.parser.screen();
+                            if !screen.hide_cursor() && screen.scrollback() == 0
+                                && matches!(screen.cursor_style(), vt100::CursorStyle::Default | vt100::CursorStyle::BlinkBlock | vt100::CursorStyle::BlinkUnderline | vt100::CursorStyle::BlinkVerticalBar) {
+                                view.ssh_terminal.repaint_caret(cx);
+                            }
+                        }
                     }
-                    if changed { cx.notify(); }
+                    if changed && view.ssh_terminal.visible && !view.matrix_active() { view.ssh_terminal.repaint(cx); }
                     view.ssh_terminal.session.is_some() || view.ssh_terminal.parked.values().any(|connection| connection.session.is_some())
                 });
                 if !matches!(active, Ok(true)) { break; }
@@ -741,6 +783,38 @@ impl MatrixWindow {
 
     pub(super) fn render_ssh_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !self.ssh_terminal.visible { return None; }
+        if self.ssh_terminal.grid.is_none() {
+            let owner = cx.entity();
+            self.ssh_terminal.grid = Some(cx.new(|cx| TerminalGrid {
+                owner: owner.downgrade(), _owner_changes: cx.observe(&owner, |_, _, cx| cx.notify()),
+            }));
+        }
+        let surface = self.ssh_terminal.surface.get_or_insert_with(|| {
+            let owner = cx.entity();
+            cx.new(|cx| TerminalSurface {
+                owner: owner.downgrade(),
+                _owner_changes: cx.observe(&owner, |_, _, cx| cx.notify()),
+            })
+        }).clone();
+        Some(if window.is_a11y_active() { surface.into_any_element() }
+            else { surface.cached(gpui::StyleRefinement::default().w_full().h(px(self.ssh_terminal.height)).flex_shrink_0()).into_any_element() })
+    }
+
+    pub(super) fn render_ssh_caret(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.ssh_terminal.visible { return None; }
+        let caret = self.ssh_terminal.caret.get_or_insert_with(|| {
+            let owner = cx.entity();
+            cx.new(|cx| TerminalCaret {
+                owner: owner.downgrade(), data: None,
+                _owner_changes: cx.observe(&owner, |_, _, cx| cx.notify()),
+            })
+        }).clone();
+        Some(caret.cached(gpui::StyleRefinement::default().absolute().top(px(0.)).left(px(0.)).size(gpui::relative(1.))).into_any_element())
+    }
+
+    fn render_ssh_terminal_surface(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.ssh_terminal.visible { return None; }
+        let grid = self.ssh_terminal.grid.clone()?;
         if self.ssh_terminal.reveal_tab.is_some() {
             let owner = cx.weak_entity();
             window.on_next_frame(move |_, cx| {
@@ -756,8 +830,6 @@ impl MatrixWindow {
                 }
             });
         }
-        let entity = cx.entity();
-        let paint_entity = entity.clone();
         let dark = self.dark;
         let reduce = self.pref_bool("TabBar.reduce", true);
         let extra_height = if reduce { 0. } else { 8. };
@@ -775,8 +847,6 @@ impl MatrixWindow {
         let tab_font = window.text_system().resolve_font(&gpui::font("Helvetica"));
         let text_descent = f32::from(window.text_system().descent(tab_font, tab_text_size)).ceil() as i32;
         let hover_background = workspace_surface::tab_colour(tab_inactive, dark, false, true);
-        let font_size = self.ssh_terminal.font_size();
-        let line_height = self.ssh_terminal.line_height();
         let tabs = self.ssh_terminal.tabs.iter().filter_map(|id| {
             let connection = if *id == self.ssh_terminal.profile_id { Some(&self.ssh_terminal.active) }
                 else { self.ssh_terminal.parked.get(id) }?;
@@ -843,7 +913,7 @@ impl MatrixWindow {
                     .child(self.ssh_toolbar_button(2, self.terminal_label("重新连接", "Reconnect"), window, cx))
                     .child(self.ssh_toolbar_button(3, self.terminal_label("关闭", "Close"), window, cx))))
             .child(div().id("ssh-terminal-grid").role(Role::MultilineTextInput).aria_label(self.terminal_label("SSH 终端", "SSH terminal"))
-                .track_focus(&self.ssh_terminal.focus).key_context("SshTerminal").flex_1().min_h(px(0.)).w_full().overflow_hidden().cursor(gpui::CursorStyle::IBeam)
+                .track_focus(&self.ssh_terminal.focus).key_context("SshTerminal").relative().flex_1().min_h(px(0.)).w_full().overflow_hidden().cursor(gpui::CursorStyle::IBeam)
                 .on_modifiers_changed(cx.listener(|view, _, window, cx| {
                     if view.ssh_terminal.focus.is_focused(window) { cx.stop_propagation(); }
                 }))
@@ -879,7 +949,17 @@ impl MatrixWindow {
                     let rows = if delta < 0. { delta.floor() } else { delta.ceil() } as isize;
                     view.ssh_terminal.scroll(rows); cx.notify(); cx.stop_propagation();
                 }))
-                .child(gpui::canvas(move |bounds, window, cx| {
+                .child(grid.cached(gpui::StyleRefinement::default().size(gpui::relative(1.)))))
+            .into_any_element())
+    }
+
+    fn render_ssh_grid(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let entity = cx.entity();
+        let paint_entity = entity.clone();
+        let font_size = self.ssh_terminal.font_size();
+        let line_height = self.ssh_terminal.line_height();
+        let dark = self.dark;
+        gpui::canvas(move |bounds, window, cx| {
                     let run = TextRun { len: 1, font: gpui::font("Menlo"), color: rgb(FOREGROUND).into(), background_color: None, underline: None, strikethrough: None };
                     let width = f32::from(window.text_system().shape_line("M".into(), px(font_size), &[run], None).width()).max(1.);
                     entity.update(cx, |view, cx| {
@@ -900,21 +980,25 @@ impl MatrixWindow {
                         VisibleGrid::new(terminal.parser.screen(), terminal.history_base)
                     })
                 }, move |bounds, screen, window, cx| {
-                    let (focus, input, selection, width, connected, blink, background_color, transparency) = {
+                    let (focus, input, selection, width, background_color, transparency) = {
                         let terminal = &paint_entity.read(cx).ssh_terminal;
                         (terminal.focus.clone(), terminal.input.clone(), terminal.selection,
-                            terminal.cell_width, terminal.session.is_some(), terminal.blink, terminal.background_color, terminal.transparency)
+                            terminal.cell_width, terminal.background_color, terminal.transparency)
                     };
-                    let blinking = matches!(screen.cursor_style, vt100::CursorStyle::Default | vt100::CursorStyle::BlinkBlock | vt100::CursorStyle::BlinkUnderline | vt100::CursorStyle::BlinkVerticalBar);
-                    let cursor_visible = connected && focus.is_focused(window) && (!blinking || blink);
                     let viewport = Bounds::new(bounds.origin, size((bounds.size.width - px(editor_surface::SCROLLBAR_SIZE)).max(px(1.)), bounds.size.height));
                     let (row, column) = screen.cursor;
                     let caret = Bounds::new(point(bounds.left() + px(width * f32::from(column)), bounds.top() + px(line_height * f32::from(row))), size(px(width), px(line_height)));
                     let marked = { input.read(cx).marked.clone() };
                     input.update(cx, |input, _| input.caret = Some(caret));
                     window.handle_input(&focus, ElementInputHandler::new(viewport, input), cx);
+                    paint_entity.update(cx, |view, cx| {
+                        if let Some(layer) = &view.ssh_terminal.caret {
+                            let data = TerminalCaretData::new(&screen, selection, width, font_size, line_height, viewport, background_color, transparency, marked.clone());
+                            layer.update(cx, |layer, _| layer.data = Some(data));
+                        }
+                    });
                     window.with_content_mask(Some(ContentMask { bounds: viewport }), |window| {
-                        paint_screen(&screen, selection, cursor_visible, width, font_size, line_height, viewport, background_color, transparency, marked.is_some(), window, cx);
+                        paint_screen(&screen, selection, false, width, font_size, line_height, viewport, background_color, transparency, marked.is_some(), window, cx);
                         if let Some(marked) = marked {
                             paint_text(&marked, caret.origin, rgb(FOREGROUND).into(), false, false, true, font_size, line_height, window, cx);
                         }
@@ -975,8 +1059,104 @@ impl MatrixWindow {
                             }
                         }
                     });
-                }).size_full()))
-            .into_any_element())
+                }).size_full().into_any_element()
+    }
+}
+
+struct TerminalGrid {
+    owner: WeakEntity<MatrixWindow>,
+    _owner_changes: gpui::Subscription,
+}
+
+impl Render for TerminalGrid {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        match self.owner.upgrade() {
+            Some(owner) => owner.update(cx, |view, cx| view.render_ssh_grid(cx)),
+            None => div().into_any_element(),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct TerminalCaretData {
+    screen: VisibleGrid,
+    selection: Option<(CellPoint, CellPoint)>,
+    width: f32,
+    font_size: f32,
+    line_height: f32,
+    viewport: Bounds<gpui::Pixels>,
+    background: u32,
+    transparency: u8,
+    marked: Option<String>,
+}
+
+impl TerminalCaretData {
+    fn new(screen: &VisibleGrid, selection: Option<(CellPoint, CellPoint)>, width: f32, font_size: f32,
+        line_height: f32, viewport: Bounds<gpui::Pixels>, background: u32, transparency: u8, marked: Option<String>) -> Self {
+        let cursor = CellPoint { row: screen.first_row.saturating_add(usize::from(screen.cursor.0)), column: screen.cursor.1 };
+        let cells = screen.cells.iter().find(|(point, _)| *point == cursor).cloned().into_iter().collect();
+        Self {
+            screen: VisibleGrid { cells, rows: screen.rows, columns: screen.columns, cursor: screen.cursor,
+                cursor_style: screen.cursor_style, hide_cursor: screen.hide_cursor, history: screen.history,
+                scrollback: screen.scrollback, first_row: screen.first_row },
+            selection, width, font_size, line_height, viewport, background, transparency, marked,
+        }
+    }
+}
+
+struct TerminalCaret {
+    owner: WeakEntity<MatrixWindow>,
+    data: Option<TerminalCaretData>,
+    _owner_changes: gpui::Subscription,
+}
+
+impl Render for TerminalCaret {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let layer = cx.weak_entity();
+        gpui::canvas(|_, _, _| (), move |_, _, window, cx| {
+            let Some(layer) = layer.upgrade() else { return; };
+            let (owner, data) = { let layer = layer.read(cx); (layer.owner.clone(), layer.data.clone()) };
+            let (Some(owner), Some(data)) = (owner.upgrade(), data) else { return; };
+            let blinking = matches!(data.screen.cursor_style, vt100::CursorStyle::Default | vt100::CursorStyle::BlinkBlock | vt100::CursorStyle::BlinkUnderline | vt100::CursorStyle::BlinkVerticalBar);
+            let visible = {
+                let terminal = &owner.read(cx).ssh_terminal;
+                terminal.session.is_some() && terminal.focus.is_focused(window) && (!blinking || terminal.blink)
+            };
+            if !visible || data.screen.hide_cursor || data.screen.scrollback != 0 { return; }
+            let Some((_, cell)) = data.screen.cells.first() else { return; };
+            let (row, column) = data.screen.cursor;
+            let origin = point(data.viewport.left() + px(data.width * f32::from(column)), data.viewport.top() + px(data.line_height * f32::from(row)));
+            let width = px(data.width * if cell.is_wide() { 2. } else { 1. });
+            let block = matches!(data.screen.cursor_style, vt100::CursorStyle::Default | vt100::CursorStyle::BlinkBlock | vt100::CursorStyle::SteadyBlock);
+            let bounds = if block { Bounds::new(origin, size(width, px(data.line_height))) }
+                else if matches!(data.screen.cursor_style, vt100::CursorStyle::BlinkUnderline | vt100::CursorStyle::SteadyUnderline) {
+                    Bounds::new(point(origin.x, origin.y + px(data.line_height - 2.)), size(width, px(2.)))
+                } else { Bounds::new(origin, size(px(2.), px(data.line_height))) };
+            window.with_content_mask(Some(ContentMask { bounds: data.viewport.intersect(&bounds) }), |window| {
+                if block {
+                    paint_screen(&data.screen, data.selection, true, data.width, data.font_size, data.line_height,
+                        data.viewport, data.background, data.transparency, data.marked.is_some(), window, cx);
+                } else { window.paint_quad(fill(bounds, rgb(FOREGROUND))); }
+                if let Some(marked) = &data.marked {
+                    paint_text(marked, origin, rgb(FOREGROUND).into(), false, false, true, data.font_size, data.line_height, window, cx);
+                }
+            });
+        }).size_full()
+    }
+}
+
+struct TerminalSurface {
+    owner: WeakEntity<MatrixWindow>,
+    _owner_changes: gpui::Subscription,
+}
+
+impl Render for TerminalSurface {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        match self.owner.upgrade() {
+            Some(owner) => owner.update(cx, |view, cx| view.render_ssh_terminal_surface(window, cx))
+                .unwrap_or_else(|| div().into_any_element()),
+            None => div().into_any_element(),
+        }
     }
 }
 

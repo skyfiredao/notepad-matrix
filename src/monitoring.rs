@@ -299,13 +299,13 @@ pub struct AutoDetectionOptions {
 }
 
 impl Default for AutoDetectionOptions {
-    fn default() -> Self { Self { mode: 2,update_silently: false,go_to_end: false } }
+    fn default() -> Self { Self { mode: 0,update_silently: false,go_to_end: false } }
 }
 
 impl AutoDetectionOptions {
     pub fn from_settings(settings: &serde_json::Value) -> io::Result<Self> {
         let value = match settings.get("FileAutoDetection") {
-            None => 2,
+            None => 0,
             Some(value) => value.as_u64().filter(|value| *value <= 15).ok_or_else(|| io::Error::other("FileAutoDetection must be a bitmask from 0 to 15"))?,
         };
         Ok(Self { mode: if value & 1 != 0 { 1 } else if value & 2 != 0 { 2 } else { 0 },update_silently: value & 4 != 0,go_to_end: value & 8 != 0 })

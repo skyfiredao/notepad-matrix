@@ -74,7 +74,6 @@ impl Renderer {
         let allocated = MermaidMessageHandler::alloc(mtm).set_ivars(MessageState {
             sender: RefCell::new(Some(sender)),
         });
-        // SAFETY: NSObject initialization and typed WebKit configuration execute on the main thread.
         let renderer = unsafe {
             let handler: Retained<MermaidMessageHandler> = msg_send![super(allocated), init];
             let controller = WKUserContentController::new(mtm);
@@ -111,7 +110,6 @@ impl Renderer {
 
 impl Drop for Renderer {
     fn drop(&mut self) {
-        // SAFETY: The preview owns this renderer and releases it on the GPUI main thread.
         unsafe {
             self.view.stopLoading();
             self.controller

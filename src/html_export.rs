@@ -1,5 +1,3 @@
-// HTML behavior follows NppExport 0.4.0 HTMLExporter.cpp at
-// ff15bcd1697d896bb8f825a0bdcb15078de1b6cb. No original exporter engine is linked.
 use crate::syntax::{JsonStyle, Language, StyleAppearance};
 use std::fmt;
 
@@ -37,8 +35,6 @@ struct ExportSpan {
     style: u16,
 }
 
-/// Existing plain-style entry point; all implemented language modes share the
-/// same source escaping, byte-column tabs and style-switch serialization.
 pub fn serialize_plain_html(
     text: &str,
     dark: bool,

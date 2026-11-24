@@ -625,7 +625,13 @@ impl MatrixWindow {
                     executor
                         .timer(std::time::Duration::from_millis(period as u64))
                         .await;
-                    if view.update_in(cx, |_, _, cx| cx.notify()).is_err() {
+                    if view.update_in(cx, |view, window, cx| {
+                        if !view.matrix_active() && !matrix_surface::locked()
+                            && window.is_visible() && window.is_window_active() && view.editor_focus.is_focused(window)
+                            && view.pref_int("Caret.width", 2) > 0 {
+                            view.editor_chrome.repaint_caret(cx);
+                        }
+                    }).is_err() {
                         break;
                     }
                 }

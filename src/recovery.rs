@@ -1,6 +1,3 @@
-//! Committed-buffer snapshots for the session/periodic-backup workflow.
-//! Persistence does not acknowledge the document's formal savepoint.
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::borrow::Cow;
 use std::fs::{self, File};
@@ -281,8 +278,6 @@ pub struct RecoverySnapshot {
     raw: Option<Vec<u8>>,
 }
 
-/// One process-owned recovery session. Holding its lease is required for writes
-/// or restoration; another live instance must never consume this session.
 pub struct RecoverySession {
     store: ConfigStore,
     key: String,
@@ -659,7 +654,6 @@ impl RecoverySession {
             .read(true)
             .write(true)
             .open(&lock_path)?;
-        // Detect replacement between checking the directory entry and opening it.
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;

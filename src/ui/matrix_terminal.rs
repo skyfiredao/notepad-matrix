@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::{VecDeque, hash_map::RandomState}, hash::BuildHasher, rc::Rc, time::{Duration, Instant}};
 
-use gpui::{AnyElement, App, Bounds, ContentMask, IntoElement, Pixels, ShapedLine, Styled, TextAlign, TextRun, Window, canvas, fill, font, point, px, rgb};
+use gpui::{AnyElement, App, Bounds, ContentMask, IntoElement, Pixels, ShapedLine, Styled, TextRun, Window, canvas, fill, font, point, px, rgb};
 
 const MAX_LINES: usize = 128;
 const MAX_LINE_CHARS: usize = 1024;
@@ -26,6 +26,7 @@ impl Terminal {
             step: 0,
             percent: 0,
             last_tick: None,
+            frame_task: None,
             random: seed.max(1),
             ticks: 0,
         };
@@ -36,7 +37,10 @@ impl Terminal {
     pub(super) fn render(&mut self, _: &mut Window) -> AnyElement {
         let state = self.state.clone();
         canvas(|_, _, _| (), move |bounds, _, window, cx| {
-            state.borrow_mut().paint(bounds, window, cx);
+            let weak = Rc::downgrade(&state);
+            let mut state = state.borrow_mut();
+            state.paint(bounds, window, cx);
+            state.schedule(weak, window, cx);
         }).size_full().into_any_element()
     }
 }
@@ -164,6 +168,7 @@ impl Scene {
 
 struct Line {
     text: String,
+    characters: usize,
     prefix: usize,
     columns: usize,
     shaped: Vec<ShapedLine>,
@@ -171,7 +176,7 @@ struct Line {
 
 impl Line {
     fn row_count(&self, columns: usize) -> usize {
-        self.text.chars().count().max(1).div_ceil(columns)
+        self.characters.max(1).div_ceil(columns)
     }
 
     fn shape(&mut self, columns: usize, window: &Window) {
@@ -202,6 +207,7 @@ struct State {
     step: usize,
     percent: u32,
     last_tick: Option<Instant>,
+    frame_task: Option<gpui::Task<()>>,
     random: u32,
     ticks: u32,
 }
@@ -213,8 +219,9 @@ impl State {
 
     fn push(&mut self, prefix: &str, body: String) {
         if self.lines.len() == MAX_LINES { self.lines.pop_front(); }
-        let text = format!("{prefix}{body}").chars().take(MAX_LINE_CHARS).collect();
-        self.lines.push_back(Line { text, prefix: prefix.len(), columns: 0, shaped: Vec::new() });
+        let text: String = format!("{prefix}{body}").chars().take(MAX_LINE_CHARS).collect();
+        let characters = text.chars().count();
+        self.lines.push_back(Line { text, characters, prefix: prefix.len(), columns: 0, shaped: Vec::new() });
     }
 
     fn next(&mut self, upper: u32) -> u32 {
@@ -224,13 +231,13 @@ impl State {
         self.random % upper
     }
 
-    fn advance(&mut self, now: Instant, running: bool) {
-        if !running { self.last_tick = None; return; }
-        let Some(last) = self.last_tick else { self.last_tick = Some(now); return; };
+    fn advance(&mut self, now: Instant, running: bool) -> bool {
+        if !running { self.last_tick = None; return false; }
+        let Some(last) = self.last_tick else { self.last_tick = Some(now); return false; };
         let elapsed = now.saturating_duration_since(last);
-        if elapsed < Duration::from_millis(120) { return; }
+        if elapsed < Duration::from_millis(120) { return false; }
         self.last_tick = Some(now);
-        if elapsed > Duration::from_millis(500) { return; }
+        if elapsed > Duration::from_millis(500) { return false; }
         self.ticks = self.ticks.wrapping_add(1);
         let Some(step) = self.scene.steps().get(self.step).copied() else {
             if self.ticks % 12 == 0 {
@@ -239,8 +246,9 @@ impl State {
                 self.percent = 0;
                 self.push("", String::new());
                 self.push_command();
+                return true;
             }
-            return;
+            return false;
         };
         match step {
             Step::Progress(prefix, label, unit) => {
@@ -260,18 +268,48 @@ impl State {
                 self.push(prefix, body.into());
                 self.step += 1;
             }
-            _ => {},
+            _ => return false,
         }
+        true
+    }
+
+    fn schedule(&mut self, state: std::rc::Weak<RefCell<Self>>, window: &Window, cx: &App) {
+        if self.last_tick.is_none() || !super::matrix_surface::animation_running(window, cx) {
+            self.frame_task = None;
+            return;
+        }
+        if self.frame_task.is_some() { return; }
+        let target = window.current_view();
+        let executor = cx.background_executor().clone();
+        self.frame_task = Some(window.spawn(cx, async move |cx| {
+            loop {
+                let delay = {
+                    let Some(state) = state.upgrade() else { break; };
+                    let last = state.borrow().last_tick.unwrap_or_else(Instant::now);
+                    (last + Duration::from_millis(120)).saturating_duration_since(Instant::now()).max(Duration::from_millis(1))
+                };
+                executor.timer(delay).await;
+                let active = cx.update(|window, cx| {
+                    let Some(state) = state.upgrade() else { return false; };
+                    let mut state = state.borrow_mut();
+                    let running = super::matrix_surface::animation_running(window, cx);
+                    if state.advance(Instant::now(), running) { cx.notify(target); }
+                    if !running { state.frame_task = None; }
+                    running
+                });
+                if !matches!(active, Ok(true)) { break; }
+            }
+        }));
     }
 
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
         let visible = bounds.intersect(&window.content_mask().bounds).intersect(&window.fully_visible_bounds());
         if visible.size.width <= px(0.) || visible.size.height <= px(0.) || !window.is_visible() {
             self.last_tick = None;
+            self.frame_task = None;
             return;
         }
-        let running = objc2::MainThreadMarker::new().is_some_and(|main_thread|
-            objc2_app_kit::NSApplication::sharedApplication(main_thread).isActive()) && !cx.reduce_motion();
+        let running = super::matrix_surface::animation_running(window, cx);
         self.advance(Instant::now(), running);
         let columns = ((f32::from(bounds.size.width) - 24.) / 8.).floor().clamp(1., 180.) as usize;
         let rows = ((f32::from(bounds.size.height) - 24.) / 18.).floor().clamp(1., 96.) as usize;
@@ -287,18 +325,21 @@ impl State {
                     continue;
                 }
                 line.shape(columns, window);
+                let mut offset = 0;
                 for part in &line.shaped {
                     if row >= skip {
                         let origin = bounds.origin + point(px(12.), px(12. + (row - skip) as f32 * 18.));
-                        if let Err(error) = part.paint(origin, px(18.), TextAlign::Left, None, window, cx) {
+                        let prefix = line.prefix.saturating_sub(offset).min(part.text.len());
+                        if let Err(error) = super::matrix_surface::paint_animation_line(part, origin, px(18.),
+                            rgb(0xd8d8d8).into(), Some((prefix, rgb(0x33d17a).into())), window) {
                             eprintln!("Terminal animation paint failed: {error}");
                             return;
                         }
                     }
+                    offset += part.text.len();
                     row += 1;
                 }
             }
-            if running { window.request_animation_frame(); }
         });
     }
 }

@@ -6,7 +6,7 @@ use std::{
 
 use gpui::{
     AnyElement, App, Bounds, ContentMask, IntoElement, Pixels, ShapedLine, Styled,
-    TextAlign, TextRun, Window, canvas, fill, font, point, px, rgb,
+    TextRun, Window, canvas, fill, font, point, px, rgb,
 };
 
 const MAX_COLUMNS: usize = 256;
@@ -34,9 +34,12 @@ impl Rain {
                 random: VisualRandom(0x4d41_5452),
                 streams: Vec::new(),
                 rows: Vec::new(),
+                glyphs: vec![None; ALPHABET.len() * 3],
+                blank: None,
                 columns: 0,
                 scale: 1.,
                 last_tick: None,
+                frame_task: None,
             })),
         }
     }
@@ -58,9 +61,12 @@ struct State {
     random: VisualRandom,
     streams: Vec<[Stream; 2]>,
     rows: Vec<CachedRow>,
+    glyphs: Vec<Option<ShapedLine>>,
+    blank: Option<ShapedLine>,
     columns: usize,
     scale: f32,
     last_tick: Option<Instant>,
+    frame_task: Option<gpui::Task<()>>,
 }
 
 struct Stream {
@@ -89,7 +95,7 @@ impl Stream {
         let value = (value ^ (value >> 16)).wrapping_mul(0x85eb_ca6b);
         let value = value ^ (value >> 13);
         Cell {
-            glyph: ALPHABET[value as usize % ALPHABET.len()],
+            glyph: value as usize % ALPHABET.len(),
             tone: if distance == 0 {
                 3
             } else if distance <= 2 || value % 11 == 0 {
@@ -103,17 +109,16 @@ impl Stream {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Cell {
-    glyph: char,
+    glyph: usize,
     tone: u8,
 }
 
 impl Cell {
-    const EMPTY: Self = Self { glyph: ' ', tone: 0 };
+    const EMPTY: Self = Self { glyph: 0, tone: 0 };
 }
 
 struct CachedRow {
     cells: Vec<Cell>,
-    line: Option<ShapedLine>,
     dirty: bool,
 }
 
@@ -155,15 +160,14 @@ impl State {
             self.rows = (0..rows)
                 .map(|_| CachedRow {
                     cells: vec![Cell::EMPTY; columns],
-                    line: None,
                     dirty: true,
                 })
                 .collect();
             self.last_tick = None;
-        } else if self.scale != scale {
-            for row in &mut self.rows {
-                row.line = None;
-            }
+        }
+        if self.scale != scale {
+            self.blank = None;
+            self.glyphs.fill(None);
         }
         self.scale = scale;
         resized
@@ -198,13 +202,12 @@ impl State {
         true
     }
 
-    fn shape_row(&mut self, index: usize, window: &Window) {
+    fn update_row(&mut self, index: usize) {
         let row = &mut self.rows[index];
-        if !row.dirty && row.line.is_some() {
+        if !row.dirty {
             return;
         }
         row.dirty = false;
-        let mut changed = row.line.is_none();
         for (column, cell) in row.cells.iter_mut().enumerate() {
             let mut next = Cell::EMPTY;
             if column % 2 == 0 {
@@ -215,42 +218,18 @@ impl State {
                     }
                 }
             }
-            changed |= *cell != next;
             *cell = next;
         }
-        if !changed {
-            return;
-        }
-        let mut text = String::with_capacity(self.columns * 3);
-        let mut runs: Vec<TextRun> = Vec::with_capacity(self.columns);
-        let mut previous_tone = None;
-        let rain_font = font("Menlo");
-        for cell in &row.cells {
-            text.push(cell.glyph);
-            if previous_tone == Some(cell.tone) {
-                if let Some(run) = runs.last_mut() {
-                    run.len += cell.glyph.len_utf8();
-                }
-            } else {
-                runs.push(TextRun {
-                    len: cell.glyph.len_utf8(),
-                    font: rain_font.clone(),
-                    color: rgb(match cell.tone {
-                        3 => 0xffffff,
-                        2 => 0x00ff00,
-                        1 => 0x00aa00,
-                        _ => 0x000000,
-                    }).into(),
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                });
-                previous_tone = Some(cell.tone);
-            }
-        }
-        row.line = Some(window.text_system().shape_line(
-            text.into(), px(13. * self.scale), &runs, Some(px(8. * self.scale)),
-        ));
+    }
+
+    fn shape_glyph(&self, glyph: char, tone: u8, window: &Window) -> ShapedLine {
+        let text = glyph.to_string();
+        let run = TextRun {
+            len: text.len(), font: font("Menlo"),
+            color: rgb(match tone { 3 => 0xffffff, 2 => 0x00ff00, 1 => 0x00aa00, _ => 0x000000 }).into(),
+            background_color: None, underline: None, strikethrough: None,
+        };
+        window.text_system().shape_line(text.into(), px(13. * self.scale), &[run], Some(px(8. * self.scale)))
     }
 
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
@@ -260,11 +239,11 @@ impl State {
             || !window.is_visible()
         {
             self.last_tick = None;
+            self.frame_task = None;
             return;
         }
         let resized = self.resize(bounds);
-        let running = objc2::MainThreadMarker::new().is_some_and(|main_thread|
-            objc2_app_kit::NSApplication::sharedApplication(main_thread).isActive()) && !cx.reduce_motion();
+        let running = super::matrix_surface::animation_running(window, cx);
         let update = self.advance(Instant::now(), running) || resized;
         if update {
             for row in &mut self.rows {
@@ -276,22 +255,43 @@ impl State {
             .floor().max(0.) as usize;
         let end = ((f32::from(visible.bottom() - bounds.top()) / f32::from(line_height))
             .ceil() as usize).min(self.rows.len());
+        if self.blank.is_none() { self.blank = Some(self.shape_glyph(' ', 0, window)); }
         window.with_content_mask(Some(ContentMask { bounds: visible }), |window| {
             window.paint_quad(fill(visible, rgb(0x000000)));
             for index in first..end {
-                self.shape_row(index, window);
-                if let Some(line) = &self.rows[index].line {
-                    let origin = point(bounds.left(), bounds.top() + line_height * index as f32);
-                    if let Err(error) = line.paint(origin, line_height, TextAlign::Left, None, window, cx) {
+                self.update_row(index);
+                let Some(blank) = &self.blank else { continue; };
+                let (mut ascent, mut descent) = (blank.ascent, blank.descent);
+                for column in 0..self.columns {
+                    let cell = self.rows[index].cells[column];
+                    if cell.tone == 0 { continue; }
+                    let key = cell.glyph * 3 + usize::from(cell.tone - 1);
+                    if self.glyphs[key].is_none() {
+                        self.glyphs[key] = Some(self.shape_glyph(ALPHABET[cell.glyph], cell.tone, window));
+                    }
+                    if let Some(line) = &self.glyphs[key] {
+                        ascent = ascent.max(line.ascent);
+                        descent = descent.max(line.descent);
+                    }
+                }
+                let baseline = (line_height - ascent - descent) / 2. + ascent;
+                for (column, cell) in self.rows[index].cells.iter().enumerate() {
+                    if cell.tone == 0 { continue; }
+                    let key = cell.glyph * 3 + usize::from(cell.tone - 1);
+                    let Some(line) = &self.glyphs[key] else { continue; };
+                    let glyph_baseline = (line_height - line.ascent - line.descent) / 2. + line.ascent;
+                    let origin = point(bounds.left() + px(8. * self.scale * column as f32),
+                        bounds.top() + line_height * index as f32 + baseline - glyph_baseline);
+                    let color = rgb(match cell.tone { 3 => 0xffffff, 2 => 0x00ff00, _ => 0x00aa00 }).into();
+                    if let Err(error) = super::matrix_surface::paint_animation_line(line, origin, line_height, color, None, window) {
                         eprintln!("Matrix rain paint failed: {error}");
                         self.last_tick = None;
                         return;
                     }
                 }
             }
-            if running {
-                window.request_animation_frame();
-            }
         });
+        super::matrix_surface::schedule_animation_frame(self.last_tick, Duration::from_millis(33),
+            &mut self.frame_task, running, window, cx);
     }
 }

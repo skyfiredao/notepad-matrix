@@ -28,7 +28,6 @@ impl LineEnding {
     }
 }
 
-/// Identity of displayed text; selection-only changes retain this identity.
 #[derive(Clone, Debug)]
 pub struct DisplayRevision(Arc<()>, Arc<()>, bool);
 
@@ -598,8 +597,6 @@ impl EditorSession {
         self.insert_text(text)
     }
 
-    /// Converter issues the same two edit messages but selects the entire result,
-    /// preserves embedded NUL, and may validly replace selected text with nothing.
     pub fn replace_converter_selection(&mut self, text: &str) -> Result<(), EditError> {
         if self.has_composition() {
             return Err(EditError::UnsupportedComposition);
@@ -634,7 +631,6 @@ impl EditorSession {
         Ok(session)
     }
 
-    /// Delete only the committed main-caret line, preserving source deletion affinity.
     pub fn delete_current_line(&mut self) -> Result<(), EditError> {
         if self.has_composition() {
             return Err(EditError::UnsupportedComposition);
@@ -686,8 +682,6 @@ impl EditorSession {
         crate::text_transforms::session::apply_duplicate(self, for_line, tab_size).map_err(EditError::Storage)
     }
 
-    /// Normalize committed CR/LF terminators in one undoable transaction. The
-    /// separate Enter mode intentionally persists when text conversion is undone.
     pub fn convert_line_endings(&mut self, target: LineEnding) -> Result<(), EditError> {
         if self.document.is_read_only() {
             return Err(EditError::ReadOnly);
@@ -1399,7 +1393,6 @@ impl EditorSession {
         })
     }
 
-    /// Default Home/End behavior without wrapping: smart indentation Home and EOL-excluding End.
     pub fn move_to_line_edge(&mut self, end: bool, extend: bool) -> Result<(), EditError> {
         let text = self.display_snapshot();
         let selected = self.display_selection();

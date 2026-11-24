@@ -41,10 +41,6 @@ impl HashAlgorithm {
     }
 }
 
-/// NppCommands.cpp:3598–3617,3677–3729 hashes one nonempty selection using
-/// strlen over the internal bytes, then copies lowercase hex. This reproduces
-/// its first-NUL contract rather than hashing the document's disk encoding.
-/// MD5/SHA-1 are compatibility checksum tools, not authentication primitives.
 pub fn selection_digest(text: &str, algorithm: HashAlgorithm) -> Option<String> {
     if text.is_empty() {
         return None;

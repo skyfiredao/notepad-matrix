@@ -608,7 +608,7 @@ mod native {
         })
     }
 
-    fn restored(requested: &Path) -> io::Result<Vec<Grant>> {
+    fn restored(requested: &Path, directory: bool) -> io::Result<Vec<Grant>> {
         let canonical = fs::canonicalize(requested).ok();
         let relevant = |path: &Path, directory: bool| {
             requested == path || (directory && requested.starts_with(path))
@@ -640,6 +640,9 @@ mod native {
                 Err(error) => return Err(error),
             }
         }
+        if covered(requested, directory, &grants)?.is_some() {
+            return Ok(grants);
+        }
         for record in load()?.into_iter().filter(|record| relevant(&record.path, record.directory)) {
             let (grant, stale) = match resolve(&record, true) {
                 Ok(resolved) => resolved,
@@ -663,6 +666,7 @@ mod native {
                 };
                 persist(Some(&record), &refreshed)?;
             }
+            remember(grant.clone())?;
             grants.push(grant);
         }
         Ok(grants)
@@ -908,7 +912,7 @@ mod native {
             if !directory { fs::metadata(&path)?; }
             return Ok(AccessGuard { path, _scopes: Vec::new() });
         }
-        let mut grants = restored(&path)?;
+        let mut grants = restored(&path, directory)?;
         if let Some(canonical) = covered(&path, directory, &grants)? {
             if !directory {
                 fs::metadata(&canonical)?;

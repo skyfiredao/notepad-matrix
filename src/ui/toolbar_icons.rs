@@ -371,7 +371,7 @@ impl ToolbarIcon {
                 static IMAGE: OnceLock<Arc<Image>> = OnceLock::new();
                 IMAGE.get_or_init(|| Arc::new(Image::from_bytes(
                     ImageFormat::Png,
-                    include_bytes!("../../assets/notepad-matrix.icns")[16..].to_vec(),
+                    include_bytes!(concat!(env!("OUT_DIR"), "/application-icon.png")).to_vec(),
                 ))).clone()
             }
         }

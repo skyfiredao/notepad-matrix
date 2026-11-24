@@ -1576,7 +1576,6 @@ impl MatrixWindow {
                                 }
                             }
                             let result = if needs_path {
-                                // The native save chooser confirms replacement before returning an existing path.
                                 DiskFile::save_as_with_byte_format(
                                     &path,
                                     &writing,

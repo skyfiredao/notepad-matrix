@@ -1,8 +1,4 @@
 use crate::input::LineEnding;
-// Behavior rewritten in Rust from Converter v4.7, commit
-// d3837f3e0d18d10436401499c6fb3b89b19cd08b, source/PluginDefinition.cpp.
-// Upstream Copyright (C)2022 Don HO <don.h@free.fr>.
-// SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::{fmt, fs, io, io::Write, path::{Path, PathBuf}};
 

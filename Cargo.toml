@@ -8,7 +8,7 @@ repository = "https://github.com/skyfiredao/notepad-matrix"
 
 [features]
 default = ["native-ui"]
-native-ui = ["dep:gpui", "dep:gpui-platform", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-web-kit", "dep:objc2-core-foundation", "dep:objc2-core-text", "dep:futures", "dep:raw-window-handle", "dep:unicode-linebreak", "dep:block2", "dep:flate2", "dep:russh", "dep:tokio", "dep:vt100", "dep:getrandom", "dep:zeroize", "dep:libc"]
+native-ui = ["dep:gpui", "dep:gpui-platform", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation", "dep:objc2-web-kit", "dep:objc2-core-foundation", "dep:objc2-core-text", "dep:futures", "dep:raw-window-handle", "dep:unicode-linebreak", "dep:unicode-bidi", "dep:block2", "dep:flate2", "dep:russh", "dep:tokio", "dep:vt100", "dep:getrandom", "dep:zeroize", "dep:libc"]
 
 [[bin]]
 name = "notepad-matrix"
@@ -35,6 +35,7 @@ libc = { version = "=0.2.191", optional = true }
 russh = { version = "=0.65.4", default-features = false, features = ["ring"], optional = true }
 tokio = { version = "=1.54.1", features = ["rt", "net", "sync", "time", "macros"], optional = true }
 vt100 = { version = "=0.18.1", optional = true }
+unicode-bidi = { version = "=0.3.18", optional = true }
 flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"], optional = true }
 gpui = { package = "gpui-pre", version = "=0.3.11", default-features = false, optional = true }
 gpui-platform = { package = "gpui-pre-platform", version = "=0.3.11", default-features = false, features = ["font-kit", "runtime_shaders"], optional = true }
@@ -58,3 +59,6 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
+
+[patch.crates-io]
+gpui-pre-macos = { path = "vendor/gpui-pre-macos" }

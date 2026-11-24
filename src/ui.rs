@@ -275,6 +275,7 @@ actions!(
 );
 
 struct MatrixWindow {
+    content_view: Option<gpui::Entity<MatrixContent>>,
     document_window: gpui::AnyWindowHandle,
     floating_windows: std::collections::BTreeMap<
         floating_windows::DialogKind,
@@ -583,6 +584,7 @@ impl MatrixWindow {
             editor_focus,
             editor_lines: Vec::new(),
             editor_chrome: editor_surface::EditorChrome::default(),
+            content_view: None,
             editor_bounds: None,
             editor_dragging: false,
             editor_error: None,
@@ -1193,6 +1195,47 @@ impl MatrixWindow {
 
 impl Render for MatrixWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.matrix_active() || matrix_surface::locked() {
+            return self.render_content(window, cx);
+        }
+        let content = self.content_view.get_or_insert_with(|| {
+            let owner = cx.entity();
+            cx.new(|cx| MatrixContent {
+                owner: owner.downgrade(),
+                _owner_changes: cx.observe(&owner, |_, _, cx| cx.notify()),
+            })
+        }).clone();
+        let carets = self.render_editor_carets(cx);
+        let terminal_caret = self.render_ssh_caret(cx);
+        let content = if window.is_a11y_active() {
+            content.into_any_element()
+        } else {
+            content.cached(gpui::StyleRefinement::default().size(gpui::relative(1.))).into_any_element()
+        };
+        div().size_full().relative()
+            .child(content)
+            .children(carets)
+            .children(terminal_caret)
+            .into_any_element()
+    }
+}
+
+struct MatrixContent {
+    owner: gpui::WeakEntity<MatrixWindow>,
+    _owner_changes: gpui::Subscription,
+}
+
+impl Render for MatrixContent {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        match self.owner.upgrade() {
+            Some(owner) => owner.update(cx, |view, cx| view.render_content(window, cx)),
+            None => div().into_any_element(),
+        }
+    }
+}
+
+impl MatrixWindow {
+    fn render_content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let terminal_hidden = self.matrix_active() || matrix_surface::locked();
         let terminal_transparent = self.ssh_terminal.sync_window_background(window, terminal_hidden);
         if let Err(error) = window_caption::update_native_buttons(window,
@@ -1297,6 +1340,10 @@ impl Render for MatrixWindow {
                 "Light color scheme"
             })
             .track_focus(&self.focus)
+            .on_drop(cx.listener(|view, paths: &gpui::ExternalPaths, window, cx| {
+                view.preferences_drop_paths(paths.paths().to_vec(), window, cx);
+                window.activate_window();
+            }))
             .on_action(cx.listener(Self::apply_shortcut_action))
             .on_action(cx.listener(|view, _: &CompleteWord, window, cx| {
                 view.complete_word(window, cx);
@@ -2090,7 +2137,6 @@ fn discard_host_composition(window: &Window) -> io::Result<bool> {
     let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
         return Err(io::Error::other("expected a macOS AppKit window"));
     };
-    // The GPUI borrow keeps this NSView alive during the main-thread input-context call.
     let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
     if let Some(context) = view.inputContext() {
         context.discardMarkedText();

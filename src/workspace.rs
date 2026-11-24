@@ -452,7 +452,6 @@ impl fmt::Display for WorkspaceError {
 impl std::error::Error for WorkspaceError {}
 
 pub struct Workspace {
-    // Only this type can mutate membership/active index; there is always at least one buffer.
     buffers: Vec<Buffer>,
     active: usize,
     next_id: u64,

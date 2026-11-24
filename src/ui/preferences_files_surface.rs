@@ -1149,7 +1149,7 @@ impl MatrixWindow {
             }
             Page::Miscellaneous => {
                 group!("自动检测文件状态",12.,4.,214.,68.);
-                let value = self.pref_int("FileAutoDetection",2);
+                let value = self.pref_int("FileAutoDetection",0);
                 let detection = if value & 1 != 0 { 1 } else if value & 2 != 0 { 2 } else { 0 };
                 let silent = *self.preferences.files.detection_silent.get_or_insert(value & 4 != 0);
                 let end = *self.preferences.files.detection_end.get_or_insert(value & 8 != 0);
@@ -1260,7 +1260,7 @@ impl MatrixWindow {
     }
 
     fn preferences_toggle_detection(&mut self,flag: i64,checked: bool,window: &mut Window,cx: &mut Context<Self>) {
-        let value = self.pref_int("FileAutoDetection",2);
+        let value = self.pref_int("FileAutoDetection",0);
         if self.set_preference("FileAutoDetection",json!(if checked { value & !flag } else { value | flag }),window,cx) {
             if flag == 4 { self.preferences.files.detection_silent = Some(!checked); }
             else { self.preferences.files.detection_end = Some(!checked); }

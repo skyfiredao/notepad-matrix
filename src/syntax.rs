@@ -1,22 +1,3 @@
-//! JSON lexical states ported from the frozen Lexilla LexJSON.cxx, not linked to
-//! Lexilla. Npp setJsonLexer enables escapes, disables comments for JSON, and
-//! supplies the keyword lists below (langs.model.xml).
-// Original lexer author: nkmathew. Lexilla license:
-// Copyright 1998-2021 by Neil Hodgson <neilh@scintilla.org>
-// All Rights Reserved
-// Permission to use, copy, modify, and distribute this software and its
-// documentation for any purpose and without fee is hereby granted,
-// provided that the above copyright notice appear in all copies and that
-// both that copyright notice and this permission notice appear in
-// supporting documentation.
-// NEIL HODGSON DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
-// INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO
-// EVENT SHALL NEIL HODGSON BE LIABLE FOR ANY SPECIAL, INDIRECT OR
-// CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
-// USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
-// OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-// PERFORMANCE OF THIS SOFTWARE.
-
 use std::ops::Range;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -235,7 +216,6 @@ pub enum JsonStyle {
 }
 
 impl JsonStyle {
-    /// Original stylers.model.xml and DarkModeDefault.xml JSON styles.
     pub fn appearance(self, dark: bool) -> (u32, u32, bool) {
         let foreground = if dark {
             [
@@ -405,9 +385,6 @@ fn new_escape(next: char, digits: &mut i32) -> bool {
     "\\\"tnbfru/".contains(next)
 }
 
-/// Full-document JSON token styles for the source's default JSON configuration.
-/// This is lexical styling, not a JSON validity parser; source lookahead limits
-/// and ERROR-until-line-end recovery are deliberately retained.
 pub fn json_styles(text: &str) -> Vec<StyleSpan> {
     use JsonStyle::*;
     let mut cx = JsonContext {
@@ -422,8 +399,6 @@ pub fn json_styles(text: &str) -> Vec<StyleSpan> {
     let mut digits = 0;
     let mut iri_colons = 0;
     let mut iri_invalid = false;
-    // StyleContext processes one virtual NUL at EOF, allowing an unterminated
-    // final string segment to become STRINGEOL even without a trailing newline.
     while cx.pos <= text.len() {
         match cx.state {
             BlockComment => {

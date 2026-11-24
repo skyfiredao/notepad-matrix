@@ -11,6 +11,9 @@ Corresponding source and build scripts: https://github.com/skyfiredao/notepad-ma
 | Component | Source | Shared terms | Copyright and additional notices |
 |---|---|---|---|
 | Boost.Regex Rust adaptations | [Source](https://github.com/notepad-plus-plus/notepad-plus-plus/tree/d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e) | [bsl-1.0](#bsl-1.0) | [notice-20](#notice-20) |
+| Converter v4.7, `src/converter.rs` | `source/PluginDefinition.cpp`, commit `d3837f3e0d18d10436401499c6fb3b89b19cd08b` | [gpl-3.0](#gpl-3.0), SPDX-License-Identifier: GPL-3.0-or-later | [notice-186](#notice-186) |
+| JSON lexer, `src/syntax.rs` | [LexJSON.cxx](https://github.com/notepad-plus-plus/notepad-plus-plus/tree/d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e) | [scintilla](#scintilla) | [notice-162](#notice-162), [notice-184](#notice-184) |
+| Modified GPUI macOS frame source, 2026-11-24 | [Local changes and upstream revision](vendor/gpui-pre-macos/README.md) | [apache-2.0](#apache-2.0) | Upstream copyright and license retained in `vendor/gpui-pre-macos/LICENSE-APACHE`. |
 | Language and theme data | [Source](https://github.com/notepad-plus-plus/notepad-plus-plus/tree/d87f8bd8db9baebbfd38b580eb22c7eb05cd2b7e) | [gpl-3.0](#gpl-3.0) | [notice-16](#notice-16) |
 | Markdown parser | [Source](https://github.com/pulldown-cmark/pulldown-cmark/tree/v0.13.6) | [mit](#mit) | [notice-150](#notice-150) |
 | Markdown user-defined languages | [Source](https://github.com/Edditoria/markdown-plus-plus) | [mit](#mit) | [notice-24](#notice-24) |

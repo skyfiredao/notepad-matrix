@@ -85,7 +85,7 @@ Notepad Matrix brings classic Windows Notepad++ editing habits to macOS. It is a
 - Browse a folder tree, open files, and refresh it as directories change; drop files to open them, or drop folders to add them to the workspace or open their files, according to preferences.
 - Organize projects, groups, and files in three project panels; edit names and paths, reorder entries, find entries, and save, load, or export workspaces.
 - Dock, resize, or float panels, and save their layout and floating-window positions.
-- Monitor disk changes, reload content, and follow the file tail for logs that keep growing.
+- Monitor disk changes, reload content, and follow the file tail for logs that keep growing. Automatic file-state detection is disabled by default.
 
 ### Sessions and backups
 
